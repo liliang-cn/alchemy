@@ -104,6 +104,13 @@ func TestAChangedKeyIsAMiss(t *testing.T) {
 	const ontologyID = "sds@3"
 	text := "SuperAI is a cluster in eu."
 
+	// The control asks the run for the address it will look up rather than
+	// rebuilding one here. A hand-built control is a second implementation of
+	// the key, and when the two drift the control stops controlling anything —
+	// it silently becomes a fourth miss, and the three real misses below prove
+	// nothing. The variations stay hand-built, because their point is to differ.
+	runKey := keyFor(testChunks(text)[0], testOptions(&fakeLLM{name: model}))
+
 	cases := []struct {
 		name    string
 		planted cache.Key
@@ -112,23 +119,23 @@ func TestAChangedKeyIsAMiss(t *testing.T) {
 	}{
 		{
 			name:    "the address the run will compute",
-			planted: cache.Key{Chunk: text, Model: model, Ontology: ontologyID, Prompt: PromptVersion},
+			planted: runKey,
 			wantHit: true,
 			why:     "the control: if this does not hit, the misses below prove nothing",
 		},
 		{
 			name:    "another prompt version",
-			planted: cache.Key{Chunk: text, Model: model, Ontology: ontologyID, Prompt: "extract/0"},
+			planted: vary(runKey, func(k *cache.Key) { k.Prompt = "extract/0" }),
 			why:     "a cache that survives a prompt change returns the old prompt's opinion",
 		},
 		{
 			name:    "another ontology version",
-			planted: cache.Key{Chunk: text, Model: model, Ontology: "sds@2", Prompt: PromptVersion},
+			planted: vary(runKey, func(k *cache.Key) { k.Ontology = "sds@2" }),
 			why:     "the vocabulary constrains the extraction, so it constrains the answer",
 		},
 		{
 			name:    "another model",
-			planted: cache.Key{Chunk: text, Model: "gemini-3.6-pro", Ontology: ontologyID, Prompt: PromptVersion},
+			planted: vary(runKey, func(k *cache.Key) { k.Model = "gemini-3.6-pro" }),
 			why:     "another model answers differently, and provenance records which",
 		},
 	}
@@ -154,6 +161,13 @@ func TestAChangedKeyIsAMiss(t *testing.T) {
 			}
 		})
 	}
+}
+
+// vary is the run's own key with exactly one field changed, so a miss below is
+// attributable to that field and not to a second hand-built key drifting.
+func vary(k cache.Key, change func(*cache.Key)) cache.Key {
+	change(&k)
+	return k
 }
 
 // brokenCache is the shared store of §8.3 with the network gone: every call
@@ -327,15 +341,24 @@ func TestACachedRelationResolvesItsEndsInTheJobItIsUsedIn(t *testing.T) {
 // TestACachedChunkIsCitedToTheDocumentItWasReadIn.
 //
 // The address is a hash of the text (§8.2), so one paragraph that appears in
-// two documents — a boilerplate section, a spec quoted in a report, the same
-// file uploaded twice under two names — is one entry. What the model said about
-// it is the same in both. Where it was read is not, and §5b promises every
-// entity can name the source and the chunk it came from.
+// §5b promises every entity can name the source and the chunk it came from, and
+// a cache is where that promise is easiest to break: what the model said is
+// stored, and if the citation is stored with it, the second reader of an entry
+// is handed a citation that points at a real chunk and the wrong one — worse
+// than no citation, because it is checkable and it checks out.
 //
-// Returning the stored provenance would answer that promise with a citation
-// pointing at a real document and the wrong one, which is worse than no
-// citation: it is checkable, and it checks out. So the model's opinion is what
-// the cache keeps and the provenance is restated for the chunk in hand.
+// So the cache keeps the model's opinion — the types, the names, the attributes,
+// the confidence — and the provenance is restated for the chunk in hand.
+//
+// The scenario is narrower than it once was and the narrowing is the point. The
+// address now covers the whole prompt, which carries the source and the chunk
+// index, so a hit can only come from the same passage of the same document.
+// What can still differ is what the prompt does not carry: the chunking
+// strategy. A one-paragraph document cut as `whole` and cut as `paragraph`
+// asks an identical question and must be cited to the strategy that actually
+// ran, because §7.1 makes the chunking part of the provenance — a graph
+// re-extracted under a different strategy is a different graph, and a reader
+// comparing two runs needs to know which one they are looking at.
 func TestACachedChunkIsCitedToTheDocumentItWasReadIn(t *testing.T) {
 	const model = "gemini-3.6-flash-high"
 	const shared = "SuperAI is a cluster in eu."
@@ -352,9 +375,9 @@ func TestACachedChunkIsCitedToTheDocumentItWasReadIn(t *testing.T) {
 		t.Fatalf("first document: %v", err)
 	}
 
-	// The same paragraph, in another document, cut by another strategy, at
-	// another index. Nothing here may reach the model.
-	inB := []alchemy.Chunk{{Index: 3, Text: shared, Source: "doc-b.md", Strategy: "paragraph"}}
+	// The same passage of the same document, cut by another strategy. The
+	// question is identical, so nothing here may reach the model.
+	inB := []alchemy.Chunk{{Index: 0, Text: shared, Source: "doc-a.md", Strategy: "paragraph"}}
 	second := testOptions(&refusingLLM{name: model, t: t})
 	second.Cache = c
 	got, err := Extract(context.Background(), inB, second)
@@ -363,8 +386,8 @@ func TestACachedChunkIsCitedToTheDocumentItWasReadIn(t *testing.T) {
 	}
 
 	want := alchemy.Provenance{
-		Source:   "doc-b.md",
-		Chunk:    3,
+		Source:   "doc-a.md",
+		Chunk:    0,
 		Producer: alchemy.ProducerLLMExtract,
 		Model:    model,
 		Ontology: "sds@3",

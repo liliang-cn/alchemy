@@ -122,15 +122,20 @@ func TestAddressIsNotForgeableByConcatenation(t *testing.T) {
 // the bill goes up and nothing breaks.
 //
 // The constant below was computed outside Go, from the encoding documented on
-// Address: SHA-256 over, for each of the domain tag and the four fields, an
-// eight-byte big-endian length followed by the bytes. That it matches is the
+// Address: SHA-256 over, for each of the domain tag and the five fields, an
+// eight-byte big-endian length followed by the bytes. The pinned key leaves
+// Question empty, so it contributes a zero length and no bytes — pinning that
+// too, since "an absent field contributes nothing" is the part of a framing
+// most easily broken by accident. That it matches is the
 // evidence the address is a property of the specification rather than of this
 // process — a Go map hash or maphash (seeded per process), a pointer, or the
 // iteration order of a map would all pass a same-process test and fail this
 // one. A change to this value is a cache-wide invalidation and must be made by
 // bumping addressDomain, not by editing the constant.
 func TestAddressIsStableAcrossProcessesAndArchitectures(t *testing.T) {
-	const golden = "623ee7f0b5aec37c049347485ee1b2721164047ee55deec6e61848019305096d"
+	// Changed once, with addressDomain 1 -> 2, when Question was added: the
+	// old addresses were computed without a field that changes the answer.
+	const golden = "9af906a1dc0e352737d5a6e777b7220b8c6579a1e94572de94ff2d6a59852927"
 	if got := base().Address(); got != golden {
 		t.Fatalf("address of the pinned key = %s, want %s (an encoding change invalidates every shared entry; bump addressDomain instead)", got, golden)
 	}

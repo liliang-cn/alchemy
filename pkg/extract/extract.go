@@ -220,11 +220,26 @@ func cachedOutcome(ctx context.Context, c alchemy.Chunk, sys string, opts Option
 // is an ontology that was reversioned, and an ontology that was not
 // reversioned is one whose rules did not move.
 func keyFor(c alchemy.Chunk, opts Options) cache.Key {
+	// The address covers the whole question, not a summary of it. An ontology
+	// ID names a version, and one version has as many vocabularies as it has
+	// parts — so two jobs under sds@3, one extracting prose and one extracting
+	// schema, would otherwise compute one address over one chunk and the second
+	// would be handed an extraction performed under a vocabulary it never asked
+	// for. The user prompt is in for the same reason one level down: it carries
+	// the source, the chunk index and the heading, so two identical paragraphs
+	// under different headings are two different questions.
+	//
+	// The cost is that a paragraph repeated across two documents is bought
+	// twice. That is the right trade: §8.2 asks for a resumed job not to re-buy
+	// what it already has, which is served exactly, and cross-document sharing
+	// was only ever a side effect — one that returned an answer to a question
+	// nobody had asked.
 	return cache.Key{
-		Chunk:    c.Text,
+		Chunk:    userPrompt(c),
 		Model:    opts.LLM.Name(),
 		Ontology: opts.OntologyID,
 		Prompt:   PromptVersion,
+		Question: systemPrompt(opts.Vocabulary),
 	}
 }
 

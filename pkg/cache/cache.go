@@ -4,8 +4,9 @@
 // does not cross: "Declining to use a cheaper model is a product position;
 // paying twice for the identical call after a crash is a bug." So an extraction
 // result is addressed by everything that would change it — the chunk text, the
-// model, the ontology version and the prompt version — and a job resumed after
-// a lease expiry (§8.3) re-buys only the chunks that had not finished.
+// model, the ontology version, the prompt version and the rest of what the
+// model is shown — and a job resumed after a lease expiry (§8.3) re-buys only
+// the chunks that had not finished.
 package cache
 
 import (
@@ -31,6 +32,23 @@ type Key struct {
 	Ontology string
 	// Prompt is the prompt version, e.g. extract.PromptVersion.
 	Prompt string
+	// Question is the rest of what the model is shown — for extraction, the
+	// system prompt built from the vocabulary and the framing around the chunk.
+	//
+	// It was added after a real collision, and the collision is instructive.
+	// Ontology named the vocabulary's *version*, which was enough only while
+	// every job under one version used one vocabulary. The moment a job could
+	// say which part of an ontology it was extracted under, two jobs sharing an
+	// ontology ID — one under the prose vocabulary, one under the schema
+	// vocabulary — computed the same address over the same chunk, and the
+	// second was served an extraction performed under a vocabulary it never
+	// asked for and would have rejected. The heading and source in the framing
+	// are the same problem one level down: they are in the prompt, so they
+	// change the answer.
+	//
+	// The rule this field restores is the one at the top of the struct: the
+	// address covers what the model is shown, not a summary of it.
+	Question string
 }
 
 // addressDomain prefixes every address so that a digest computed here can
@@ -38,7 +56,12 @@ type Key struct {
 // hash the same bytes, and so that a future encoding change can be told from
 // this one by bumping the number rather than by silently returning different
 // addresses under the same name.
-const addressDomain = "alchemy/cache/key/1"
+//
+// It is at 2 because Question was added: every address changes, which is a
+// cache-wide miss and exactly what should happen — the version-1 addresses were
+// computed without a field that changes the answer, so serving them would be
+// serving answers to questions nobody asked.
+const addressDomain = "alchemy/cache/key/2"
 
 // Address is the content address of the key: SHA-256 over a length-prefixed
 // encoding of the fields, hex-encoded.
@@ -66,7 +89,7 @@ func (k Key) Address() string {
 	h := sha256.New()
 	// The domain tag is written framed too, so it cannot be absorbed into the
 	// first field by a Chunk that begins with the same text.
-	for _, field := range []string{addressDomain, k.Chunk, k.Model, k.Ontology, k.Prompt} {
+	for _, field := range []string{addressDomain, k.Chunk, k.Model, k.Ontology, k.Prompt, k.Question} {
 		var n [8]byte
 		binary.BigEndian.PutUint64(n[:], uint64(len(field)))
 		h.Write(n[:])
