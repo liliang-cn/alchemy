@@ -252,8 +252,86 @@ vocabulary checking catches that. What is promised is that a wrong edge is
 **attributable** — you can see it was inferred, by which model, from which
 chunk of which file — and therefore checkable, correctable, and excludable.
 
+Attributable is what makes correction possible, which is why §5c exists: a
+person can review what the models proposed. That is the only mechanism here
+that produces correctness, and it is optional because most imports do not need
+it.
+
 An agent that says "SuperAI uses CortexDB, per architecture.pdf page 4,
 extracted rather than declared" is doing something a confident sentence cannot.
+
+---
+
+## 5c. Review: the machine proposes, a person decides
+
+**Decision: extraction output can be reviewed and corrected by a human before
+it is accepted. The review step is optional.**
+
+This is what closes the gap §5b is careful to leave open. Provenance makes a
+wrong edge attributable; review is how it gets fixed. Together they are a
+different claim from either alone: not "the model was right", but "the model
+proposed, and what you have was checked."
+
+### Why it is optional
+
+Most imports do not deserve a person. A DDL import is deterministic — there is
+nothing to review, and putting a queue in front of it would be ceremony. A
+nightly re-import of a table whose mapping was approved last month should not
+ask again.
+
+So review is a mode, not a stage everything passes through. The default is off,
+and a caller that never turns it on gets exactly the service described above.
+
+### What is worth reviewing is already computed
+
+The review queue is not a new analysis. §5b already produces the ranking:
+
+| First | `violations` | An edge whose type is not in the ontology. Something is wrong: the ontology, the extractor, or the document. |
+| Then | `guesses` | An inferred field mapping. One wrong guess misaligns a whole table (§2.1). |
+| Then | low-confidence `inferred` | The model was unsure and said so. |
+| Never | `deterministic` | A `CREATE TABLE` said it. Asking a person to confirm what the schema states is how you teach them to click Approve without reading. |
+
+That last row matters. A queue that includes the obvious is a queue people stop
+reading, and then the review is worse than none — it launders unchecked output
+as reviewed.
+
+### What a reviewer can do
+
+Per item: **accept**, **reject**, **edit** (retype an entity, redirect an edge,
+rename), or **always** — accept this and stop asking about ones like it.
+
+`always` is the one that earns its keep. Reviewing a thousand extractions one
+at a time is not a workflow anybody sustains; reviewing the twelve *kinds* of
+mistake in them is. A rule is recorded with the decision that produced it, so
+a later reader can see why the rule exists.
+
+### What this costs the design
+
+**It makes the service stateful, which §4 said it was not.**
+
+That contradiction is real and is resolved by scope rather than by pretending:
+a job under review is held until it is accepted or expires, and what is held is
+the pending result and the decisions made on it — never a knowledge base. The
+service still stores no graph. It holds work in progress, the way a print queue
+holds a document without becoming a filesystem.
+
+Two consequences to design for rather than discover:
+
+- **A held job needs a lifetime.** Un-reviewed work expires; the expiry is
+  configurable and reported in the job state. Otherwise the "stateless" service
+  quietly grows a database of abandoned reviews.
+- **Decisions are part of the result.** An accepted graph carries who accepted
+  what, so the provenance of a reviewed edge says `llm-extract, reviewed by X`
+  rather than losing the fact that a model proposed it. Review adds to
+  provenance; it does not overwrite it.
+
+### Where the embedding model sits in this
+
+Vectors are not reviewable and should not be in the queue — nobody can eyeball
+a 768-dimensional vector. They are recomputed for whatever text survives
+review, which is the only sensible ordering: embedding rejected content wastes
+the call, and embedding before edits means the vectors describe text that has
+since changed.
 
 ---
 
@@ -265,6 +343,11 @@ POST /v1/jobs                 multipart: file + job spec (models, ontology, hint
 GET  /v1/jobs/{id}            → { state, progress, stage, counts }
 GET  /v1/jobs/{id}/result     → Result
 DELETE /v1/jobs/{id}          → forget it (see §4 — nothing is kept anyway)
+
+# review mode (§5c), only when the job asked for it
+GET  /v1/jobs/{id}/review     → items ranked violations → guesses → low-confidence
+POST /v1/jobs/{id}/review     → decisions: accept | reject | edit | always
+POST /v1/jobs/{id}/accept     → finish: embed what survived, return the Result
 ```
 
 Async because a PDF with OCR is minutes, not milliseconds, and a synchronous
