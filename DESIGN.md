@@ -112,16 +112,27 @@ plausible, and wrong in ways nobody notices until they act on it.
                       │
                       ▼
               ┌───────────────┐
-              │   Verifier    │ ── every edge checked against the ontology
-              └───────────────┘
+              │   Verifier    │ ── every edge checked against the ontology;
+              └───────────────┘    sources that disagree become conflicts
+                      │
+                      ▼
+              ┌───────────────┐
+              │ Review (HITL) │ ── optional. conflicts first, then violations,
+              └───────────────┘    then guesses. Never the deterministic.
+                      │
+                      ▼
+              ┌───────────────┐
+              │   Embedder    │ ── after review, so vectors describe the text
+              └───────────────┘    that survived it
                       │
                       ▼
     Result { entities, relations, chunks, vectors,
-             guesses[], violations[], provenance }
+             conflicts[], violations[], guesses[], provenance }
 ```
 
-The Verifier is a stage, not a flag. An extraction nobody checked is an
-extraction nobody should act on.
+The Verifier is a stage, not a flag: an extraction nobody checked is an
+extraction nobody should act on. Review is a flag, and off by default — most
+imports do not deserve a person (§5c).
 
 ---
 
@@ -291,6 +302,25 @@ The review queue is not a new analysis. §5b already produces the ranking:
 | Then | low-confidence `inferred` | The model was unsure and said so. |
 | Never | `deterministic` | A `CREATE TABLE` said it. Asking a person to confirm what the schema states is how you teach them to click Approve without reading. |
 
+**Conflicts rank above all of them.** Two sources that disagree are the one
+thing no amount of per-source checking can resolve, and the one thing a person
+is genuinely better at than the machine:
+
+- the same entity arriving from a CSV and a contract PDF with different
+  attributes — is it one customer or two? (this is open question §7.2, and
+  review is the answer to it: report the collision, let a person decide)
+- the same relation asserted in one direction by a schema and the other by
+  prose — a foreign key says orders→customer, a document says the customer owns
+  the orders
+- a deterministic edge contradicted by an inferred one — which is worth surfacing
+  precisely *because* the deterministic side almost always wins, and the
+  exception is where the interesting bug lives
+
+A conflict is never resolved silently, and never by precedence alone. The
+result carries `conflicts[]` whether or not review is on, so a caller running
+unattended still learns that its sources disagree rather than receiving
+whichever edge happened to be written last.
+
 That last row matters. A queue that includes the obvious is a queue people stop
 reading, and then the review is worse than none — it launders unchecked output
 as reviewed.
@@ -335,27 +365,55 @@ since changed.
 
 ---
 
-## 6. API sketch
+## 6. Interface
 
+**Decision: gRPC is the service. Anything else is a gateway in front of it.**
+
+Three reasons, in order of weight:
+
+**Review is a conversation, not a poll.** A person working a queue wants items
+as they are found and wants their decisions to take effect on work still
+running — an extractor that has already learned "this is not an entity" should
+stop proposing it in the next chunk. That is a bidirectional stream. Modelled
+over HTTP it becomes polling plus a submit endpoint, which is the same thing
+with latency and more state on both sides.
+
+**Progress on a long job is a stream.** A PDF corpus with OCR is minutes.
+Server-streaming says so natively; over HTTP it is either polling or SSE, and
+SSE is a stream pretending to be a response.
+
+**It matches what it will sit beside.** CortexDB is already gRPC, and a buyer
+integrating both should not learn two transport styles for one pipeline.
+
+```protobuf
+service Alchemy {
+  // Unary for things that are one question.
+  rpc CreateJob(CreateJobRequest) returns (Job);
+  rpc GetJob(GetJobRequest) returns (Job);
+  rpc GetResult(GetResultRequest) returns (Result);
+  rpc DeleteJob(DeleteJobRequest) returns (google.protobuf.Empty);
+
+  // Upload is client-streaming: a corpus is not a field in a message.
+  rpc UploadSource(stream SourceChunk) returns (Source);
+
+  // Progress is server-streaming: stages, counts, and conflicts as they are
+  // found rather than at the end.
+  rpc WatchJob(WatchJobRequest) returns (stream JobEvent);
+
+  // Review is bidirectional: items out, decisions in, on one connection, so a
+  // decision reaches an extraction that has not run yet.
+  rpc Review(stream ReviewDecision) returns (stream ReviewItem);
+}
 ```
-POST /v1/jobs                 multipart: file + job spec (models, ontology, hints)
-  → 202 { job_id }
-GET  /v1/jobs/{id}            → { state, progress, stage, counts }
-GET  /v1/jobs/{id}/result     → Result
-DELETE /v1/jobs/{id}          → forget it (see §4 — nothing is kept anyway)
 
-# review mode (§5c), only when the job asked for it
-GET  /v1/jobs/{id}/review     → items ranked violations → guesses → low-confidence
-POST /v1/jobs/{id}/review     → decisions: accept | reject | edit | always
-POST /v1/jobs/{id}/accept     → finish: embed what survived, return the Result
-```
-
-Async because a PDF with OCR is minutes, not milliseconds, and a synchronous
-API would push every caller into a timeout they have to work around.
+A REST/JSON gateway is generated from the same definitions, because a buyer
+evaluating the product should be able to curl it, and because browsers exist.
+The gateway is a translation, never a second source of truth about what the
+service does.
 
 Models are supplied per job, not configured globally: a buyer's LLM, embedding
-and OCR endpoints are their business, and a service that hardcodes them is one
-that only works in the environment it was built in.
+and OCR endpoints are their business, and a service that hardcodes them only
+works in the environment it was built in.
 
 ---
 
@@ -364,10 +422,13 @@ that only works in the environment it was built in.
 1. **Chunking is not neutral.** Chunk boundaries decide what an extractor can
    see at once, and a relation whose two ends land in different chunks is a
    relation nobody extracts. Needs a real answer before documents ship.
-2. **Entity resolution across sources.** The same customer arrives from a CSV
-   and from a contract PDF. CortexDB's ontology has `objectType + primaryKey`
-   for exactly this; whether alchemy resolves or merely reports the collision is
-   undecided.
+2. **Entity resolution across sources.** *Decided:* alchemy **reports**, and a
+   person decides — see the conflict ranking in §5c. Automatic merging needs a
+   rule about which source wins, and a wrong such rule silently fuses two real
+   customers into one, which is the kind of damage that is discovered late and
+   is expensive to undo. What remains open is the *unattended* case: with review
+   off, a conflict is returned in `conflicts[]` and both edges are kept, which
+   is safe but leaves the caller holding a graph that contradicts itself.
 3. **Cost.** Extraction over a large corpus is a lot of model calls. Whether the
    service estimates before running, or streams a cost as it goes, is a product
    decision that affects the API.
