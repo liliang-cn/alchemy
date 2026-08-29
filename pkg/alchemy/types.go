@@ -26,6 +26,23 @@ const (
 	ProducerLLMExtract Producer = "llm-extract"
 )
 
+// Deterministic reports whether the producer read something that already
+// stated the fact, rather than inferring it. It is the split Counts reports and
+// the split §5c uses to decide what is worth a reviewer's time — a person asked
+// to confirm what a CREATE TABLE says is a person being taught to click Approve
+// without reading.
+//
+// The default is false on purpose: a producer added without a decision here
+// arrives marked as inferred, which is the safe direction to be wrong in.
+func (p Producer) Deterministic() bool {
+	switch p {
+	case ProducerDDL, ProducerGraphImport:
+		return true
+	default:
+		return false
+	}
+}
+
 // Provenance says where a fact came from and how it was produced. Every entity
 // and every relation carries one; §5b makes this a product guarantee rather
 // than a debugging aid.
