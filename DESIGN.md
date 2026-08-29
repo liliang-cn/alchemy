@@ -117,8 +117,10 @@ plausible, and wrong in ways nobody notices until they act on it.
                       │
                       ▼
               ┌───────────────┐
-              │ Review (HITL) │ ── optional. conflicts first, then violations,
-              └───────────────┘    then guesses. Never the deterministic.
+              │ Review (HITL) │ ── optional, EXCEPT for conflicts: a job that
+              └───────────────┘    finds one holds until a person decides (§7.3).
+                      │            Then violations, then guesses. Never the
+                      │            deterministic.
                       │
                       ▼
               ┌───────────────┐
@@ -283,7 +285,7 @@ wrong edge attributable; review is how it gets fixed. Together they are a
 different claim from either alone: not "the model was right", but "the model
 proposed, and what you have was checked."
 
-### Why it is optional
+### Why it is optional — and what is not
 
 Most imports do not deserve a person. A DDL import is deterministic — there is
 nothing to review, and putting a queue in front of it would be ceremony. A
@@ -292,6 +294,11 @@ ask again.
 
 So review is a mode, not a stage everything passes through. The default is off,
 and a caller that never turns it on gets exactly the service described above.
+
+**With one exception: a conflict always stops the job.** Two sources that
+disagree are a question, not a quality score, and a question has to be asked of
+someone. See §7.3 — it is the one place this design refuses to let a caller opt
+out of a person.
 
 ### What is worth reviewing is already computed
 
@@ -403,6 +410,9 @@ service Alchemy {
   // Review is bidirectional: items out, decisions in, on one connection, so a
   // decision reaches an extraction that has not run yet.
   rpc Review(stream ReviewDecision) returns (stream ReviewItem);
+  // A job can reach NEEDS_REVIEW without review mode being on: a conflict
+  // always requires a person (§7.3). Review is how it gets unblocked, which is
+  // why this rpc is not gated on the job having asked for review.
 }
 ```
 
@@ -470,11 +480,59 @@ Estimating before running was considered and rejected: an estimate over an
 unread corpus is a guess, and a wrong guess about money is worse than no number
 at all. Reporting the real one as it accrues is honest and is enough.
 
-### 7.3 Still open
-**Entity resolution when nobody is reviewing.** With review on, a collision is
-reported and a person decides (§5c). With review off, both edges are kept and
-returned in `conflicts[]` — safe, but it leaves the caller holding a graph that
-contradicts itself, and what they should do about that is not yet answered.
+### 7.3 A conflict always requires a person
+
+*Decided.* Review is optional. **Conflicts are not.**
+
+A job that finds a conflict does not finish. It reaches `NEEDS_REVIEW` and stays
+there until someone resolves it — whether or not the caller asked for review
+mode.
+
+The alternative was to return `conflicts[]` and let an unattended caller carry
+on. That is wrong, for the reason that is the whole thesis of this document: a
+graph that contradicts itself is worse than no graph, because an agent reading
+it will answer from whichever edge it happened to traverse — confidently, with a
+citation. The contradiction does not surface at the moment of harm. It surfaces
+months later as one wrong answer nobody can explain.
+
+So the split is:
+
+| | Review off | Review on |
+|---|---|---|
+| Deterministic edges | accepted | accepted |
+| Inferred edges | accepted, marked inferred | queued |
+| Violations | returned, graph delivered | queued |
+| **Conflicts** | **job holds — a person must decide** | queued |
+
+Violations are deliberately on the other side of that line. A violation is one
+source saying something the ontology does not allow: attributable, excludable,
+and the rest of the graph is usable without it. A conflict is two sources both
+claiming to be right, with nothing in the data to decide between them. That is
+not a quality metric; it is a question, and questions have to be asked of
+someone.
+
+**What this means for an unattended pipeline.** A nightly import that hits a
+conflict does not silently produce a bad graph, and does not silently produce
+nothing — it produces a held job and says so. The operator's options are the
+same as anyone's: resolve it, or tell the service how to resolve conflicts of
+that shape next time (§5c's `always`), which is how a pipeline that started
+attended becomes one that runs itself without ever having guessed.
+
+Two mechanics follow:
+
+- **A held job's expiry is longer than a reviewed one's.** Optional review work
+  can expire cheaply; a job blocked on a real question should outlive a long
+  weekend. It still expires — §5c on not growing a database of abandoned reviews
+  — but the timer respects that someone has to be found.
+- **`WatchJob` emits a conflict when it is found, not at the end.** An operator
+  watching a two-hour import should learn in minute three that it will need
+  them, not at minute one hundred and twenty.
+
+### 7.4 Still open
+
+Nothing blocking. The chunking defaults (§7.1) and the held-job expiry above are
+guesses that should be revisited once there is a real corpus, and a real
+operator to be annoyed by them.
 
 ---
 
