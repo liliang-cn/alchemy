@@ -10,6 +10,7 @@ package chunk
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 )
@@ -72,13 +73,36 @@ const NoOverlap = -1
 // strategy that actually ran: a chunk produced under Auto says "heading", never
 // "auto", because "auto" tells a reader comparing two runs nothing.
 func Split(ctx context.Context, source, text string, opts Options) ([]alchemy.Chunk, error) {
+	// Chunking a large corpus is cheap next to extracting it, but a cancelled
+	// job should not start work it has been told nobody wants.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	opts, err := opts.normalise()
 	if err != nil {
 		return nil, err
 	}
+	// Whitespace is not a chunk. Returning one would spend an extraction call
+	// on nothing and count towards Counts.ChunksEmpty as if the extractor had
+	// failed, which is the opposite of what happened.
+	if strings.TrimSpace(text) == "" {
+		return nil, nil
+	}
 	switch opts.Strategy {
+	case Auto:
+		return splitAuto(source, text, opts)
 	case Fixed:
 		return splitFixed(source, text, opts)
+	case Sentence:
+		return splitSentence(source, text, opts)
+	case Paragraph:
+		return splitParagraph(source, text, opts)
+	case Heading:
+		return splitHeading(source, text, opts)
+	case Semantic:
+		return splitSemantic(ctx, source, text, opts)
+	case Whole:
+		return splitWhole(source, text, opts)
 	default:
 		return nil, fmt.Errorf("chunk: unknown strategy %q", opts.Strategy)
 	}
@@ -97,6 +121,11 @@ func (o Options) normalise() (Options, error) {
 	switch {
 	case o.Overlap == 0:
 		o.Overlap = o.MaxTokens / DefaultOverlapDivisor
+		// A tenth of a small budget rounds to nothing, and a default overlap
+		// that quietly becomes zero is the one thing §7.1 says it must not be.
+		if o.Overlap == 0 && o.MaxTokens > 1 {
+			o.Overlap = 1
+		}
 	case o.Overlap < 0:
 		o.Overlap = 0
 	}
