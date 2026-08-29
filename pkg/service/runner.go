@@ -43,6 +43,21 @@ type Inbox interface {
 	// Decisions returns every decision recorded for this job so far, in
 	// arrival order, deduplicated by the service.
 	Decisions() []review.Decision
+	// Rules returns the `always` rules those decisions have produced so far
+	// (§5c), in the order they were made.
+	//
+	// It is a second method rather than something the runner derives from
+	// Decisions because a rule is a decision *and* the item it was made on:
+	// §5c records a rule with the decision that produced it, and the item —
+	// its shape, its kind, the sentence the reviewer was reading — is in the
+	// queue the service holds and not in the answer the reviewer sent. A
+	// runner deriving rules would need the queue too, which is the service's.
+	//
+	// These are the answers that can reach work that has not run yet. A
+	// decision about one record settles that record; a rule is the class, and
+	// a class is the only thing a chunk nobody has extracted can be measured
+	// against (§6).
+	Rules() []review.Rule
 }
 
 // Event is one thing worth telling a watcher about. §7.2 and §7.3 between them

@@ -47,7 +47,10 @@ func TestACacheThatSurvivesAPromptChangeReturnsTheOldPromptsOpinion(t *testing.T
 		},
 		{
 			name: "prompt version",
-			vary: func(k cache.Key) cache.Key { k.Prompt = "extract/2"; return k },
+			// The version before the current one, so this case keeps saying
+			// what it says whichever version is current: a literal that
+			// happens to equal extract.PromptVersion asserts nothing.
+			vary: func(k cache.Key) cache.Key { k.Prompt = "extract/1"; return k },
 			why:  "a cache that survives a prompt change returns the old prompt's opinion",
 		},
 	}
@@ -135,7 +138,14 @@ func TestAddressIsNotForgeableByConcatenation(t *testing.T) {
 func TestAddressIsStableAcrossProcessesAndArchitectures(t *testing.T) {
 	// Changed once, with addressDomain 1 -> 2, when Question was added: the
 	// old addresses were computed without a field that changes the answer.
-	const golden = "9af906a1dc0e352737d5a6e777b7220b8c6579a1e94572de94ff2d6a59852927"
+	//
+	// Changed again with extract.PromptVersion "extract/1" -> "extract/2",
+	// which the base key above takes from extract on purpose. That bump is
+	// itself a cache-wide invalidation and the intended one — the extraction
+	// prompt gained the standing-answers section — so this constant moves with
+	// it. It is still computed outside Go, from the encoding documented on
+	// Address, which is what the paragraph above is asserting.
+	const golden = "48989d7023553b65eab200ee50ce0f25882d910964efe291649e3a882333d667"
 	if got := base().Address(); got != golden {
 		t.Fatalf("address of the pinned key = %s, want %s (an encoding change invalidates every shared entry; bump addressDomain instead)", got, golden)
 	}

@@ -49,6 +49,14 @@ type Options struct {
 	// optimisation that has to be configured before the thing works is not
 	// optional at all. See cache.Fetch for what a nil one does.
 	Cache cache.Cache
+	// Standing is what a reviewer has already settled, asked once per chunk.
+	// Nil is a run with nobody reviewing it. See standing.go.
+	Standing Standing
+	// settled is the snapshot Standing gave for the chunk being worked on. It
+	// is unexported and set by run, so that every function below reads one
+	// reading of the conversation rather than each taking its own — see
+	// Settled for why that has to be one reading and not three.
+	settled Settled
 }
 
 // Result is what one extraction run produced, and the numbers needed to
@@ -170,6 +178,37 @@ func extractChunk(ctx context.Context, c alchemy.Chunk, sys string, opts Options
 	return out
 }
 
+// chunkWork is one chunk from end to end: the reviewer's answers as they stand
+// right now, the call made under them, and their verdict on what came back.
+//
+// The snapshot is taken here, per chunk, and not once for the run. That is the
+// sentence §6 chose a bidirectional stream for, made mechanical: chunk three
+// is asked the question nobody had answered yet, and chunk forty is asked the
+// one that has.
+//
+// The filter runs after the call rather than instead of it, and that ordering
+// is the honest one. A rule cannot un-ask a question the model was already
+// going to be asked — the prompt is a nudge and a model is free to ignore it —
+// so the guarantee is applied to the answer, on a call that was made and is
+// billed. What it buys is that the graph never contains a proposal a person
+// has already ruled on, whatever the model did with being told.
+func chunkWork(ctx context.Context, c alchemy.Chunk, vocab string, opts Options) chunkOutcome {
+	opts.settled = opts.inForce()
+	sys := vocab
+	if len(opts.settled.Told) > 0 {
+		sys = systemPrompt(opts.Vocabulary, opts.settled.Told)
+	}
+	out := cachedOutcome(ctx, c, sys, opts)
+	// A chunk nobody could read has no proposal to rule on, and a rule that
+	// "settled" an empty list would quietly turn an endpoint failure into a
+	// chunk a reviewer had dealt with.
+	if out.unread != nil {
+		return out
+	}
+	out.entities, out.relations = opts.settled.settle(c, out.entities, out.relations)
+	return out
+}
+
 // errNotBought is how the producer below tells cache.Fetch not to store what
 // it just returned. It never reaches a caller: Fetch returns a producer's
 // error unchanged, and cachedOutcome turns it back into the outcome the chunk
@@ -239,7 +278,13 @@ func keyFor(c alchemy.Chunk, opts Options) cache.Key {
 		Model:    opts.LLM.Name(),
 		Ontology: opts.OntologyID,
 		Prompt:   PromptVersion,
-		Question: systemPrompt(opts.Vocabulary),
+		// The standing answers are in because they are part of the question:
+		// a chunk asked under "stop proposing Widget" was asked something the
+		// same chunk asked yesterday was not, and serving yesterday's answer
+		// would be the cache returning the opinion of a prompt that no longer
+		// exists — the failure PromptVersion is in this key to prevent, one
+		// level finer.
+		Question: systemPrompt(opts.Vocabulary, opts.settled.Told),
 	}
 }
 
@@ -339,7 +384,11 @@ const defaultConcurrency = 4
 // makes the result independent of Concurrency: the workers decide when a reply
 // arrives, assemble decides where it goes, and the two decisions never meet.
 func run(ctx context.Context, chunks []alchemy.Chunk, opts Options) []chunkOutcome {
-	sys := systemPrompt(opts.Vocabulary)
+	// The vocabulary half of the system prompt is the same for every chunk and
+	// is built once. The standing-answers half is not, and is built per chunk
+	// inside chunkWork: that is the whole of §6's promise that a decision
+	// reaches an extraction that has not run yet.
+	sys := systemPrompt(opts.Vocabulary, nil)
 	out := make([]chunkOutcome, len(chunks))
 
 	n := opts.Concurrency
@@ -365,7 +414,7 @@ func run(ctx context.Context, chunks []alchemy.Chunk, opts Options) []chunkOutco
 				out[i] = chunkOutcome{chunk: c, unread: unreadChunk(c, err.Error())}
 				return
 			}
-			out[i] = cachedOutcome(ctx, c, sys, opts)
+			out[i] = chunkWork(ctx, c, sys, opts)
 		}(i, c)
 	}
 	wg.Wait()

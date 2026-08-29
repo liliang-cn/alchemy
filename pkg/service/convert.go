@@ -127,6 +127,7 @@ func provenanceToProto(p alchemy.Provenance) *alchemyv1.Provenance {
 		Chunking:   p.Chunking,
 		Confidence: p.Confidence,
 		ReviewedBy: p.ReviewedBy,
+		Rules:      p.Rules,
 	}
 }
 
@@ -143,6 +144,7 @@ func provenanceFromProto(p *alchemyv1.Provenance) alchemy.Provenance {
 		Chunking:   p.GetChunking(),
 		Confidence: p.GetConfidence(),
 		ReviewedBy: p.GetReviewedBy(),
+		Rules:      p.GetRules(),
 	}
 }
 

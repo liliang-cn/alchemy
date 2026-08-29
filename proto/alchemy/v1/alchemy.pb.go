@@ -1410,7 +1410,13 @@ type Provenance struct {
 	Confidence float64 `protobuf:"fixed64,7,opt,name=confidence,proto3" json:"confidence,omitempty"`
 	// §5c: review adds to provenance, it does not overwrite it — a reviewed edge
 	// still says a model proposed it.
-	ReviewedBy    string `protobuf:"bytes,8,opt,name=reviewed_by,json=reviewedBy,proto3" json:"reviewed_by,omitempty"`
+	ReviewedBy string `protobuf:"bytes,8,opt,name=reviewed_by,json=reviewedBy,proto3" json:"reviewed_by,omitempty"`
+	// The standing `always` rules (§5c) already in force when this record was
+	// extracted, by shape. Distinct from reviewed_by: a rule is applied to
+	// everything it covers at the end of the job, so reviewed_by lands on the
+	// chunk that ran before the rule existed too. This says the model that
+	// proposed *this* record had already been told.
+	Rules         string `protobuf:"bytes,9,opt,name=rules,proto3" json:"rules,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1497,6 +1503,13 @@ func (x *Provenance) GetConfidence() float64 {
 func (x *Provenance) GetReviewedBy() string {
 	if x != nil {
 		return x.ReviewedBy
+	}
+	return ""
+}
+
+func (x *Provenance) GetRules() string {
+	if x != nil {
+		return x.Rules
 	}
 	return ""
 }
@@ -3172,7 +3185,7 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x1d\n" +
 	"\n" +
-	"media_type\x18\x05 \x01(\tR\tmediaType\"\xfb\x01\n" +
+	"media_type\x18\x05 \x01(\tR\tmediaType\"\x91\x02\n" +
 	"\n" +
 	"Provenance\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
@@ -3185,7 +3198,8 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"confidence\x18\a \x01(\x01R\n" +
 	"confidence\x12\x1f\n" +
 	"\vreviewed_by\x18\b \x01(\tR\n" +
-	"reviewedBy\"\xb1\x01\n" +
+	"reviewedBy\x12\x14\n" +
+	"\x05rules\x18\t \x01(\tR\x05rules\"\xb1\x01\n" +
 	"\x06Entity\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +

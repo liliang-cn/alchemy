@@ -32,10 +32,9 @@ func buildRequest(spec service.JobSpec, in service.Inbox) (pipeline.Request, err
 
 		Reviewing:     spec.Review.Reviewing,
 		MinConfidence: spec.Review.MinConfidence,
-		Rules:         spec.Review.Rules,
-		// Read once, here, at the start of the run. See Run for what that
-		// costs and what it does not.
-		Decisions: decisionsOf(in),
+		// Not a snapshot. The pipeline asks this while it runs, which is how a
+		// decision reaches an extraction that has not started (§6). See inbox.
+		Inbox: inboxOf(spec.Review.Rules, in),
 	}, nil
 }
 
@@ -76,15 +75,49 @@ func chunkingOf(c service.Chunking) chunk.Options {
 	}
 }
 
-// decisionsOf takes the snapshot of what a person has already answered.
+// inboxOf joins the two places a standing answer can come from.
 //
-// A nil Inbox is a caller with nowhere for decisions to come from — the first
-// run of a job that has never been held — and is not a failure.
-func decisionsOf(in service.Inbox) []review.Decision {
+// The job's own rules were supplied when it was created: §4 says the service
+// holds no policy between jobs, so a caller that learned something last week
+// hands it back with this week's request, and those rules are in force before
+// the first chunk is read. The service's inbox is this job's conversation as
+// it happens. Both are `always` rules and both are answered the same way; what
+// differs is only when they were made, and by the time a chunk is measured
+// against one that no longer matters.
+//
+// A nil service inbox is a caller with nowhere for a decision to come from —
+// the first run of a job that has never been held, or an unattended import —
+// and is not a failure. It is still an inbox, because the job's own rules
+// still apply.
+func inboxOf(given []review.Rule, in service.Inbox) pipeline.Inbox {
 	if in == nil {
-		return nil
+		return pipeline.Answered(nil, given)
 	}
-	return in.Decisions()
+	return inbox{given: given, live: in}
+}
+
+// inbox is the service's live conversation with the job's own rules in front
+// of it.
+type inbox struct {
+	given []review.Rule
+	live  service.Inbox
+}
+
+func (i inbox) Decisions() []review.Decision { return i.live.Decisions() }
+
+// Rules puts the supplied rules first, and the order is not arbitrary:
+// review.ruleFor takes the first rule that covers an item, so a policy the
+// caller stated when they created the job is the one that gets named as
+// having answered it. Two rules covering one item are two people who wrote
+// down the same policy — pkg/review's words — and this decides which of them
+// the provenance credits.
+func (i inbox) Rules() []review.Rule {
+	live := i.live.Rules()
+	if len(i.given) == 0 {
+		return live
+	}
+	out := make([]review.Rule, 0, len(i.given)+len(live))
+	return append(append(out, i.given...), live...)
 }
 
 // ontologyOf parses the JSON document the caller supplied.

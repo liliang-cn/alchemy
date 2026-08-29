@@ -68,6 +68,25 @@ type Provenance struct {
 	// provenance, it does not overwrite it — a reviewed edge still says a model
 	// proposed it.
 	ReviewedBy string `json:"reviewed_by,omitempty"`
+	// Rules names the standing answers (§5c's `always`) that were already in
+	// force when this record was extracted, by shape, separated by "; ".
+	//
+	// It is a different fact from ReviewedBy and needs its own field for a
+	// reason that only shows up once decisions can arrive mid-run (§6). At the
+	// end of a job a rule is applied to everything it covers, so ReviewedBy
+	// ends up on the record extracted in minute two and on the one extracted
+	// in minute ninety alike — it says a person's decision reached this
+	// record, and by then it reached both. This says something ReviewedBy
+	// cannot: the model that proposed *this* record had already been told, and
+	// the model that proposed the other one had not. §7.1 puts Chunking here
+	// for the same reason and in almost the same words — a reader comparing
+	// two runs needs to know which one they are looking at, and "extracted
+	// under a rule the previous chunk was not" is exactly that kind of
+	// difference.
+	//
+	// Empty is the normal case and means what it says: nobody had decided
+	// anything by the time this record was proposed.
+	Rules string `json:"rules,omitempty"`
 }
 
 // Entity is a node of the returned graph.

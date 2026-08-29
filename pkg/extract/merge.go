@@ -50,6 +50,13 @@ func provenanceFor(c alchemy.Chunk, opts Options, confidence float64) alchemy.Pr
 		Ontology:   opts.OntologyID,
 		Chunking:   c.Strategy,
 		Confidence: confidence,
+		// §5c's standing answers as they stood when this chunk was asked. It
+		// is taken from the snapshot on Options rather than from a global,
+		// which is what keeps chunk three saying "nobody had decided anything"
+		// after chunk forty was extracted under a rule: the two chunks are
+		// carrying two different readings of the same conversation, and both
+		// are true.
+		Rules: opts.settled.Named,
 	}
 }
 

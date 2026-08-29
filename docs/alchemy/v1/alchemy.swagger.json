@@ -775,6 +775,10 @@
         "reviewed_by": {
           "type": "string",
           "description": "§5c: review adds to provenance, it does not overwrite it — a reviewed edge\nstill says a model proposed it."
+        },
+        "rules": {
+          "type": "string",
+          "description": "The standing `always` rules (§5c) already in force when this record was\nextracted, by shape. Distinct from reviewed_by: a rule is applied to\neverything it covers at the end of the job, so reviewed_by lands on the\nchunk that ran before the rule existed too. This says the model that\nproposed *this* record had already been told."
         }
       },
       "description": "Provenance says where a fact came from and how it was produced. Every entity\nand every relation carries one; §5b makes this a product guarantee rather\nthan a debugging aid."

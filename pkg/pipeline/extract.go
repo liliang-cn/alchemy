@@ -30,6 +30,10 @@ func (r *run) extract(ctx context.Context) error {
 			// cache is a miss rather than a failed job, so there is nothing
 			// for this package to decide about it.
 			Cache: r.req.Cache,
+			// §6's first reason for gRPC, reaching the one stage it is about.
+			// The extractor asks this per chunk, so a rule recorded while this
+			// source is being read applies to the rest of it. See standing.go.
+			Standing: r.standing(),
 		})
 		// The Result comes back whether or not the error did, and everything
 		// in it is kept for the same reason: a failed run's cost, the chunks

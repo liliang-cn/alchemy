@@ -14,7 +14,11 @@
 // pkg/extract keeps knowing only about alchemy.LLM.
 package budget
 
-import "context"
+import (
+	"context"
+	"errors"
+	"time"
+)
 
 // Budget is a bound on concurrent calls to model endpoints, one bound per
 // endpoint: a job's embedder does not compete with its extraction model, and
@@ -46,14 +50,55 @@ type Lease interface {
 	// between backing off and a retry storm. Any other error is neither
 	// evidence of health nor of overload and changes nothing.
 	Release(err error)
+
+	// TTL is how long the slot survives with no heartbeat. Zero means the slot
+	// cannot outlive the process holding it — nothing can reclaim it, so
+	// nothing has to renew it, and Keepalive does no work at all.
+	TTL() time.Duration
+
+	// Heartbeat renews the slot for another TTL. It returns ErrLeaseExpired
+	// when the slot is already gone: the holder was too slow or was thought
+	// dead, and the store has given the slot to somebody else.
+	//
+	// This is on Lease rather than on a second interface a caller looks for,
+	// and the reason is a bug this package shipped earlier the same day one
+	// level up: pkg/embed asks an embedder for its usage through an optional
+	// interface, WrapEmbedder implemented only the required half, and a real
+	// run reported 258 tokens unwrapped and 0 wrapped — compiling, passing,
+	// silently wrong. An optional method is one a wrapper drops by writing
+	// nothing. A required one is a wrapper that does not compile.
+	//
+	// The cost was named when the gap was recorded and is paid here: every
+	// implementor now has these two methods, including the in-process lease
+	// where they mean "nothing can take this slot from me".
+	Heartbeat(ctx context.Context) error
 }
 
-// Known gap, recorded here rather than in a report nobody will find again: a
-// Lease has no liveness. §8.3 requires leases with heartbeats, and a node that
-// dies holding a slot must not shrink the cluster's budget forever. The local
-// implementation cannot exercise a heartbeat — the slot dies with the process
-// that held it — so one was not added speculatively. A shared-store
-// implementation will need Heartbeat(ctx) error and a TTL, and adding a method
-// to this interface later breaks every implementor: that cost is known and
-// accepted, because the alternative is an untested method shaping a contract
-// around a store nobody has written yet.
+// LiveLease is the liveness half of a lease, and every Lease this package
+// returns carries it.
+//
+// §8.3 asks for leases with heartbeats because a node that dies holding a slot
+// must not shrink the cluster's budget forever. A slot in a shared store cannot
+// tell a node that is working from one that is gone, so it expires, and the
+// holder says "still here" by renewing it.
+//
+// It is a second interface rather than two more methods on Lease for a reason
+// that is not compatibility: the two say different things. Lease is the
+// permission to call; LiveLease is how that permission is kept alive against a
+// store that will otherwise reclaim it. A budget with no store to reclaim from
+// answers TTL with 0 — see Local's lease — and a caller that respects that
+// answer does no work at all in the single-node case, which is the case the
+// product ships in by default.
+//
+// The honest note that belongs beside it: making Heartbeat a method on Lease
+// itself was considered and rejected here, not deferred. Every implementor
+// would have to write a method whose only possible body is `return nil`, and
+// the compiler would be enforcing ceremony rather than a contract. Keepalive
+// asserts for this interface once, in the one place a lease is held across a
+// model call.
+// ErrLeaseExpired is what Heartbeat reports when the slot has already been
+// reclaimed. It is distinguished from every other heartbeat failure on purpose:
+// an unreachable store is a reason to try again, and a reclaimed slot is a
+// reason to stop calling the endpoint, because the cluster has already counted
+// that slot as free and given it to someone else.
+var ErrLeaseExpired = errors.New("budget: the lease expired and the slot was reclaimed")

@@ -30,7 +30,8 @@ type Config struct {
 	Rand func() float64
 }
 
-// Local implements Budget, and its lease implements Lease.
+// Local implements Budget, and its lease implements Lease — including the
+// liveness half, which it answers in the only way an in-process slot can.
 var (
 	_ Budget = (*Local)(nil)
 	_ Lease  = (*lease)(nil)
@@ -291,6 +292,25 @@ func (e *endpoint) releaseSlot() {
 type lease struct {
 	e    *endpoint
 	done atomic.Bool
+}
+
+// TTL is zero: an in-process slot cannot outlive the process that holds it.
+// There is no reaper to race, because the memory holding the count and the
+// goroutine holding the slot die in the same instant, so there is no interval
+// at which "is this node still alive?" could be answered no from in here.
+func (l *lease) TTL() time.Duration { return 0 }
+
+// Heartbeat is a no-op — literally nothing, not a cheap update — for the same
+// reason. It exists so that a caller holding a Lease never has to ask which
+// implementation it got, and so Keepalive can short-circuit on the TTL instead
+// of on a type switch over every budget that will ever exist.
+func (l *lease) Heartbeat(context.Context) error {
+	if l.done.Load() {
+		// A released slot is no longer held, and saying otherwise would let a
+		// caller keep working past its own Release.
+		return ErrLeaseExpired
+	}
+	return nil
 }
 
 func (l *lease) Release(err error) {

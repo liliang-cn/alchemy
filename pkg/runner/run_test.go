@@ -222,19 +222,29 @@ func TestRunKeepsCancellationRecognisable(t *testing.T) {
 }
 
 // §6's bidirectional stream exists so "a decision reaches an extraction that
-// has not run yet". What that means today is precise and worth pinning: the
-// inbox is read once, before the first stage, because pipeline.Run takes its
-// decisions as an input to the run and has no channel into a run in progress.
-// A decision made while the job is running therefore reaches pkg/service's hub
-// — where it is recorded and applied to the finished result — but not the
-// extractor, which will go on proposing the thing it was just told about. If
-// this count ever changes, the sentence above has to change with it.
-func TestRunReadsDecisionsOnceAtTheStart(t *testing.T) {
+// has not run yet", and this pins what that now means: the inbox is asked
+// while the job runs, not read once before it starts.
+//
+// The number asserted is a floor rather than the exact 1 this test used to
+// pin, and that change is the point. How many times the inbox is asked is a
+// fact about how a corpus happened to be chunked — once per chunk, plus once
+// when the review stage assembles the queue — so a test fixing it would fail
+// on a chunker default nobody meant to move. What must hold, and what §6
+// depends on, is that it is asked *after* work has started: an `always` rule
+// recorded while the first chunk is in flight reaches the second. The exact-1
+// version of this test was the assertion that it could not, which was true of
+// the code and false of the design.
+func TestRunAsksTheInboxWhileTheJobIsRunning(t *testing.T) {
 	r := newRunner(t)
 	in := &countingInbox{}
-	spec := service.JobSpec{Sources: []service.Source{
-		spool(t, alchemy.SourceDDL, "schema.sql", "CREATE TABLE users (id INT);"),
-	}}
+	spec := service.JobSpec{
+		Sources: []service.Source{
+			spool(t, alchemy.SourceDocument, "manual.md",
+				"# One\n\nA cluster is a set of nodes.\n\n# Two\n\nAnother cluster runs here.\n"),
+		},
+		Ontology: proseOntology,
+		Models:   service.Models{LLM: service.Model{Name: "gpt", Endpoint: "https://llm.example"}},
+	}
 
 	events, finish := collect(t)
 	if _, err := r.Run(context.Background(), "job-decisions", spec, events, in); err != nil {
@@ -242,14 +252,40 @@ func TestRunReadsDecisionsOnceAtTheStart(t *testing.T) {
 	}
 	finish()
 
-	if got := in.reads.Load(); got != 1 {
-		t.Fatalf("Decisions() called %d times, want exactly 1 (at the start of the run)", got)
+	if got := in.rules.Load(); got < 2 {
+		t.Fatalf("Rules() was asked %d times; a rule made after the first chunk could never reach a later one", got)
+	}
+	// Decisions are still read, for the review stage that carries a
+	// reviewer's name onto the graph. A run that stopped asking for them would
+	// take §5c's "decisions are part of the result" away.
+	if got := in.reads.Load(); got < 1 {
+		t.Fatalf("Decisions() was asked %d times; the review stage never read them", got)
 	}
 }
 
-type countingInbox struct{ reads atomic.Int64 }
+// A nil inbox is a job nobody is reviewing, and it must not become a job that
+// cannot run: the first run of a job that has never been held has nowhere for
+// a decision to come from.
+func TestRunAcceptsAJobWithNoInbox(t *testing.T) {
+	r := newRunner(t)
+	spec := service.JobSpec{Sources: []service.Source{
+		spool(t, alchemy.SourceDDL, "schema.sql", "CREATE TABLE users (id INT);"),
+	}}
+	events, finish := collect(t)
+	if _, err := r.Run(context.Background(), "job-no-inbox", spec, events, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	finish()
+}
+
+type countingInbox struct{ reads, rules atomic.Int64 }
 
 func (c *countingInbox) Decisions() []review.Decision {
 	c.reads.Add(1)
+	return nil
+}
+
+func (c *countingInbox) Rules() []review.Rule {
+	c.rules.Add(1)
 	return nil
 }

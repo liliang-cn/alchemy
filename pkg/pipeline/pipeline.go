@@ -84,14 +84,17 @@ type Request struct {
 	// Reviewing is review mode (§5c). It is off by default and it does not
 	// change what holds the job: a conflict holds it either way.
 	Reviewing bool
-	// Decisions are the answers a person already gave to a queue this corpus
-	// produced. §6 makes review a conversation across the job store rather
-	// than inside one call: a held job hands its queue back, a person answers,
-	// and the answers arrive here on the run that finishes the job.
-	Decisions []review.Decision
-	// Rules are the `always` rules already recorded (§5c). An item whose class
-	// one of them covers is answered rather than asked again.
-	Rules []review.Rule
+	// Inbox is this job's review conversation as it stands, asked repeatedly
+	// while the job runs rather than read once before it starts.
+	//
+	// It is an interface and not two slices because of §6's first reason for
+	// choosing gRPC: a person's decisions take effect on work still running,
+	// so an `always` rule made while the corpus is being read reaches the
+	// chunks that have not been extracted yet. See standing.go, and
+	// Answered for the caller that has a fixed set and no conversation.
+	//
+	// Nil is a job nobody is reviewing.
+	Inbox Inbox
 	// MinConfidence is the line below which an inferred edge is queued as
 	// low-confidence in review mode. Zero queues none: pkg/review refuses to
 	// invent a threshold on a caller's behalf, and so does this.
@@ -168,7 +171,7 @@ func Run(ctx context.Context, req Request, events chan<- Event) (alchemy.Result,
 	// rather than "are there conflicts" because a conflict a person has
 	// decided stays in the result, carrying their name, and a job that stayed
 	// stuck on an answered question would be a queue nobody could empty.
-	if open, unanswered := review.Held(res), openQuestions(queue, req.Decisions); len(open) > 0 || (req.Reviewing && len(unanswered) > 0) {
+	if open, unanswered := review.Held(res), openQuestions(queue, run.decided); len(open) > 0 || (req.Reviewing && len(unanswered) > 0) {
 		return alchemy.Result{}, &HeldError{Conflicts: open, Queue: unanswered, Pending: run.finish(res)}
 	}
 	res, err = run.embedSurvivors(ctx, res)
@@ -201,6 +204,12 @@ type run struct {
 	// extractor would settle their disagreement before the verifier — the one
 	// thing §8.1 says only the coordinator can notice — ever saw two claims.
 	docs []docSource
+
+	// decided is the decisions the review stage was run with. It is kept so
+	// that the hold below and the apply above are answering from one reading
+	// of the conversation: a decision that arrived between the two would
+	// otherwise resolve an item in the graph and leave the job held on it.
+	decided []review.Decision
 
 	unread     []alchemy.Unread
 	violations []alchemy.Violation

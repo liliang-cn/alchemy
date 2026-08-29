@@ -361,6 +361,12 @@ message Provenance {
   // §5c: review adds to provenance, it does not overwrite it — a reviewed edge
   // still says a model proposed it.
   string reviewed_by = 8;
+  // The standing `always` rules (§5c) already in force when this record was
+  // extracted, by shape. Distinct from reviewed_by: a rule is applied to
+  // everything it covers at the end of the job, so reviewed_by lands on the
+  // chunk that ran before the rule existed too. This says the model that
+  // proposed *this* record had already been told.
+  string rules = 9;
 }
 
 message Entity {

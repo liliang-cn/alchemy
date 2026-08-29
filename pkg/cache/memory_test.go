@@ -2,6 +2,7 @@ package cache_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
@@ -79,7 +80,10 @@ func assertEntryEqual(t *testing.T, got, want cache.Entry) {
 			t.Errorf("entity %d attributes = %v, want %v", i, g.Attributes, w.Attributes)
 		}
 		for key, wv := range w.Attributes {
-			if g.Attributes[key] != wv {
+			// DeepEqual rather than !=: an attribute value may be a list or a
+			// nested object (see the domain on ErrUnsupportedAttribute), and
+			// comparing those with == panics rather than failing.
+			if !reflect.DeepEqual(g.Attributes[key], wv) {
 				t.Errorf("entity %d attribute %q = %v, want %v", i, key, g.Attributes[key], wv)
 			}
 		}
@@ -96,7 +100,7 @@ func assertEntryEqual(t *testing.T, got, want cache.Entry) {
 			t.Errorf("relation %d provenance = %+v, want %+v", i, g.Provenance, w.Provenance)
 		}
 		for key, wv := range w.Attributes {
-			if g.Attributes[key] != wv {
+			if !reflect.DeepEqual(g.Attributes[key], wv) {
 				t.Errorf("relation %d attribute %q = %v, want %v", i, key, g.Attributes[key], wv)
 			}
 		}

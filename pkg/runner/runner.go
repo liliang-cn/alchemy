@@ -87,10 +87,12 @@ var _ service.Runner = (*Runner)(nil)
 // person would be reported as a defect. Every other error is a real failure and
 // is returned as one.
 //
-// Decisions are read once, before the first stage. That is what pipeline.Run
-// can accept today: Request.Decisions is an input to the run, and there is no
-// channel into a run in progress. See the package's run_test.go for what a
-// decision made mid-run does and does not reach.
+// The inbox is handed through, not drained. pipeline.Request takes a live
+// source rather than a slice, and the pipeline asks it per chunk, so an
+// `always` rule recorded while this job is running reaches the chunks it has
+// not extracted yet — §6's first reason for choosing gRPC, arriving at the one
+// stage it was about. See buildRequest's inboxOf, and run_test.go for the
+// contract that pins it.
 func (r *Runner) Run(ctx context.Context, jobID string, spec service.JobSpec, events chan<- service.Event, in service.Inbox) (alchemy.Result, error) {
 	req, err := buildRequest(spec, in)
 	if err != nil {

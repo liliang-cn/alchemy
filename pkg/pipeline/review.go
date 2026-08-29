@@ -11,13 +11,19 @@ import (
 // reviewJob ranks what is worth a person's time and carries onto the graph
 // whatever the caller already had answered.
 //
-// Run is one pass over a corpus and a person is not inside it, so the
-// conversation §6 describes — items out, decisions in — happens across runs:
+// The conversation §6 describes — items out, decisions in — outlives one call:
 // a job that has questions holds and hands back its queue, a person answers,
-// and the answers come back in Request.Decisions. That is why decisions are an
-// input rather than a callback: a callback would make Run block on a human,
-// and §5c is explicit that what is held between the question and the answer is
-// a job in a store, not a goroutine.
+// and the answers are read from Request.Inbox. That is why the inbox is asked
+// rather than blocked on: a callback would make Run wait on a human, and §5c
+// is explicit that what is held between the question and the answer is a job
+// in a store, not a goroutine.
+//
+// This is the end of the job, so it reads the conversation as it now stands —
+// including whatever arrived while the corpus was being extracted. Chunks
+// extracted before a rule existed are decided by it here, at the end, which is
+// where deciding has always happened; what the rule did to the chunks that ran
+// after it is in their provenance and not in the graph's shape. The two are
+// different facts and both are kept.
 //
 // The `always` rules the decisions produce are deliberately not returned. A
 // rule outlives the job it was made in — §5c records it so that a later reader
@@ -26,10 +32,11 @@ import (
 // the result is the other half of §5c's obligation, the reviewer's name in the
 // provenance of what they decided.
 func (r *run) reviewJob(rep verify.Report, res alchemy.Result) (alchemy.Result, []review.Item, error) {
+	r.decided = r.decisions()
 	items := review.Queue(rep, res, review.Options{
 		Reviewing:     r.req.Reviewing,
 		MinConfidence: r.req.MinConfidence,
-		Rules:         r.req.Rules,
+		Rules:         r.rules(),
 	})
 	if len(items) == 0 {
 		return res, nil, nil
@@ -42,7 +49,7 @@ func (r *run) reviewJob(rep verify.Report, res alchemy.Result) (alchemy.Result, 
 	// were thrown away" is distinguishable from "this chunk never produced
 	// any".
 	before := chunksWithRecords(res)
-	out, _, err := review.Apply(res, items, r.req.Decisions)
+	out, _, err := review.Apply(res, items, r.decided)
 	if err != nil {
 		return res, items, fmt.Errorf("pipeline: review: %w", err)
 	}

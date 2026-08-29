@@ -26,6 +26,13 @@ import (
 //   - The slot is released on every path out, including a panic. A model that
 //     panics is a bug that costs one call; a model that panics and leaks a slot
 //     is a budget that shrinks to zero and a node that stops working.
+//   - The slot is heartbeaten for as long as the call runs, and the call is
+//     given the context Keepalive returns. This is the only place in the
+//     product that holds a lease across a model call, so it is the only place
+//     that can keep one alive: without it a shared budget's TTL would be a
+//     timer that quietly kills long calls, which is a worse bug than the dead
+//     node it was bought to detect. For the in-process budget it costs nothing
+//     — see Keepalive.
 
 // WrapLLM returns an alchemy.LLM that holds a budget slot for the duration of
 // each Complete.
@@ -96,10 +103,13 @@ func (m *budgetedLLM) Complete(ctx context.Context, req alchemy.LLMRequest) (alc
 	// frame still frees the slot without being recorded as a healthy call —
 	// which would reset a backoff the endpoint never recovered from. It is a
 	// flag rather than a recover() so the caller's panic reaches them intact.
+	call, stop := Keepalive(ctx, lease)
 	outcome := errUnfinished
-	defer func() { lease.Release(outcome) }()
+	// stop before Release, and both on the panic path: a renewal that landed
+	// after the slot went back would hold a lease nobody owns for a whole TTL.
+	defer func() { stop(); lease.Release(outcome) }()
 
-	resp, err := m.inner.Complete(ctx, req)
+	resp, err := m.inner.Complete(call, req)
 	outcome = err
 	// The response is returned exactly as it came back, Tokens included.
 	return resp, err
@@ -117,10 +127,11 @@ func (m *budgetedEmbedder) Embed(ctx context.Context, texts []string) ([][]float
 	if err != nil {
 		return nil, err
 	}
+	call, stop := Keepalive(ctx, lease)
 	outcome := errUnfinished
-	defer func() { lease.Release(outcome) }()
+	defer func() { stop(); lease.Release(outcome) }()
 
-	vecs, err := m.inner.Embed(ctx, texts)
+	vecs, err := m.inner.Embed(call, texts)
 	outcome = err
 	return vecs, err
 }
@@ -137,10 +148,11 @@ func (m *budgetedUsageEmbedder) EmbedUsage(ctx context.Context, texts []string) 
 	if err != nil {
 		return nil, 0, err
 	}
+	call, stop := Keepalive(ctx, lease)
 	outcome := errUnfinished
-	defer func() { lease.Release(outcome) }()
+	defer func() { stop(); lease.Release(outcome) }()
 
-	vecs, tokens, err := m.inner.EmbedUsage(ctx, texts)
+	vecs, tokens, err := m.inner.EmbedUsage(call, texts)
 	outcome = err
 	// The tokens travel back even on the error path: a call that failed
 	// halfway still cost what the endpoint says it cost.
@@ -159,10 +171,11 @@ func (m *budgetedOCR) Recognize(ctx context.Context, page []byte, mediaType stri
 	if err != nil {
 		return "", err
 	}
+	call, stop := Keepalive(ctx, lease)
 	outcome := errUnfinished
-	defer func() { lease.Release(outcome) }()
+	defer func() { stop(); lease.Release(outcome) }()
 
-	text, err := m.inner.Recognize(ctx, page, mediaType)
+	text, err := m.inner.Recognize(call, page, mediaType)
 	outcome = err
 	return text, err
 }

@@ -75,6 +75,13 @@ func (m *memory) Get(ctx context.Context, k Key) (Entry, bool, error) {
 }
 
 func (m *memory) Put(ctx context.Context, k Key, e Entry) error {
+	// Checked even though this store never serialises anything. The domain is
+	// the Cache contract's, not the shared store's, and a domain that only the
+	// clustered deployment enforces is one a single-node run would teach every
+	// caller to violate — see ErrUnsupportedAttribute.
+	if err := validate(e); err != nil {
+		return err
+	}
 	if m.max <= 0 {
 		return nil
 	}

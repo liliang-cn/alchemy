@@ -671,12 +671,24 @@ What is real rather than claimed:
   transport decision in §6 turned out to be load-bearing rather than
   preferential.
 
-What is designed and not built: the shared job store, budget and cache of §8.3
-exist as interfaces with in-memory implementations; the Postgres ones do not.
-A lease has no heartbeat yet. A review decision reaches the result but not the
-extraction that is still running, so §6's "an extractor that has already
-learned this is not an entity should stop proposing it in the next chunk" is
-not true today; a test pins that so the day it changes, it is noticed.
+§8.3's clustered mode is built too: `job.PG`, `budget.Postgres` and
+`cache.Postgres`, all tested against a real database rather than a mock, with a
+conformance suite the in-memory stores pass as evidence the second
+implementation is faithful. The cluster-wide concurrency bound of §8.2 is
+measured across two nodes rather than asserted. Leases heartbeat, and liveness
+is part of the `Lease` interface rather than an optional one a wrapper can drop
+by writing nothing — a mistake this codebase made once, one level up, and paid
+for in a silently unreported bill.
+
+§6's first reason for gRPC is now true rather than aspirational: a decision
+taken while a job runs reaches the chunks that have not been extracted yet,
+both as a standing answer in the prompt and as a filter on what comes back. The
+cost is stated where it lands — a run during which a decision arrives is no
+longer reproducible from its inputs, so every record names the rules it was
+proposed under, and a run with no mid-run decisions is still byte-identical at
+every concurrency.
+
+What is still not built: a graph store of any kind, which is §4 and deliberate.
 
 The document this began as was written so the first line of code would answer
 to something. It did.

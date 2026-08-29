@@ -16,7 +16,12 @@ import (
 // by the service rather than here. A cache that survives a prompt change is a
 // cache that returns the old prompt's opinion, so the version has to be
 // reachable from outside this package or the guarantee is unkeepable.
-const PromptVersion = "extract/1"
+//
+// extract/2 added the standing-answers section (see standingAnswers): a chunk
+// asked under a reviewer's `always` rule is asked a different question from
+// the same chunk asked before anybody had decided anything, and a cache that
+// survived the change would answer the new question with the old opinion.
+const PromptVersion = "extract/2"
 
 // chunkMarker labels the chunk index in the user prompt.
 //
@@ -32,7 +37,7 @@ const chunkMarker = "Chunk index: "
 // never paraphrased here. That is §5b's third mechanism: the extractor and the
 // verifier read the same list, and a second wording of it in this package
 // would be a second ontology that nothing checks against the first.
-func systemPrompt(v ontology.Vocabulary) string {
+func systemPrompt(v ontology.Vocabulary, told []string) string {
 	var b strings.Builder
 	b.WriteString("You extract a knowledge graph from one chunk of a document, under a closed\n" +
 		"vocabulary. Extract only what the chunk itself states. Do not add what you know\n" +
@@ -70,6 +75,39 @@ func systemPrompt(v ontology.Vocabulary) string {
 		"- If the chunk states nothing this vocabulary can express, reply\n" +
 		`  {"entities": [], "relations": []}` + ". An empty answer is a correct answer\n" +
 		"  here. An invented one is not.\n")
+	b.WriteString(standingAnswers(told))
+	return b.String()
+}
+
+// standingAnswers is what a reviewer has already decided, put in front of the
+// model.
+//
+// §6's first reason for gRPC is that "an extractor that has already learned
+// 'this is not an entity' should stop proposing it in the next chunk", and
+// this is the half of that which reaches the model. It is deliberately last in
+// the prompt: it is the most specific instruction in it, it contradicts
+// nothing above it, and a model reading a closed vocabulary and then a list of
+// exceptions to how it has been applied is reading them in the order a person
+// would say them.
+//
+// It is a nudge and is documented as one. A model may propose the thing
+// anyway, which is why the same snapshot also carries a filter that the answer
+// is put through before it enters the graph (see Settled). Telling the model
+// is the cheap half; not believing it is the honest half.
+//
+// An empty list writes nothing at all rather than an empty heading. A prompt
+// that says "the reviewer has decided:" and then stops is an instruction to
+// wonder what was left out.
+func standingAnswers(told []string) string {
+	if len(told) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nA person reviewing this corpus has already settled the following, and their\n" +
+		"decisions stand. Do not propose again what they have ruled on:\n")
+	for _, line := range told {
+		fmt.Fprintf(&b, "- %s\n", line)
+	}
 	return b.String()
 }
 

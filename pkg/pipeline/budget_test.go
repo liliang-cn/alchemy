@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/budget"
 )
@@ -36,6 +37,13 @@ func (s *spyBudget) count(model string) int {
 type noopLease struct{}
 
 func (noopLease) Release(error) {}
+
+// A slot in this fake cannot be taken away, so it answers zero and renewing it
+// is a call that never happens. They are here because budget.Lease requires
+// liveness of every implementor rather than offering it as a second interface
+// a wrapper can quietly not forward.
+func (noopLease) TTL() time.Duration              { return 0 }
+func (noopLease) Heartbeat(context.Context) error { return nil }
 
 // §8.2 makes model concurrency a property of the endpoint rather than of a
 // worker, and pkg/budget's own doc comment says how that reaches a stage:

@@ -126,11 +126,22 @@ func TestRequestCarriesChunking(t *testing.T) {
 // A decision made before the run starts must reach the run, which is §6's whole
 // reason for a bidirectional stream: "a decision reaches an extraction that has
 // not run yet."
+//
+// It reads through the inbox rather than off the Request because the Request no
+// longer holds a copy: the two are asked for while the job runs, and asking is
+// the contract. What this pins is that both halves of the conversation arrive —
+// the rules the caller stated when the job was created and the answers the
+// service has since been given — and that the stated ones come first, which is
+// which of two rules covering one item gets the credit for it.
 func TestRequestCarriesReviewAndDecisions(t *testing.T) {
-	rule := review.Rule{Shape: "violation/entity_type/Cluster"}
-	in := fakeInbox{{ItemID: "conflict/entity_attributes/n1", Verb: review.VerbAccept, By: "ops"}}
+	stated := review.Rule{Shape: "violation/entity_type/Cluster"}
+	live := review.Rule{Shape: "violation/entity_type/Widget"}
+	in := fakeInbox{
+		decisions: []review.Decision{{ItemID: "conflict/entity_attributes/n1", Verb: review.VerbAccept, By: "ops"}},
+		rules:     []review.Rule{live},
+	}
 	req, err := buildRequest(service.JobSpec{
-		Review: review.Options{Reviewing: true, MinConfidence: 0.7, Rules: []review.Rule{rule}},
+		Review: review.Options{Reviewing: true, MinConfidence: 0.7, Rules: []review.Rule{stated}},
 	}, in)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
@@ -138,26 +149,38 @@ func TestRequestCarriesReviewAndDecisions(t *testing.T) {
 	if !req.Reviewing || req.MinConfidence != 0.7 {
 		t.Fatalf("review = %v/%v, want true/0.7", req.Reviewing, req.MinConfidence)
 	}
-	if len(req.Rules) != 1 || req.Rules[0].Shape != rule.Shape {
-		t.Fatalf("rules = %+v, want the one recorded rule", req.Rules)
+	rules := req.Inbox.Rules()
+	if len(rules) != 2 || rules[0].Shape != stated.Shape || rules[1].Shape != live.Shape {
+		t.Fatalf("rules = %+v, want the stated one and then the live one", rules)
 	}
-	if len(req.Decisions) != 1 || req.Decisions[0].ItemID != "conflict/entity_attributes/n1" {
-		t.Fatalf("decisions = %+v, want the one already in the inbox", req.Decisions)
+	decisions := req.Inbox.Decisions()
+	if len(decisions) != 1 || decisions[0].ItemID != "conflict/entity_attributes/n1" {
+		t.Fatalf("decisions = %+v, want the one already in the inbox", decisions)
 	}
 }
 
-// A nil Inbox is a caller with nowhere for decisions to come from, not a panic.
+// A nil Inbox is a caller with nowhere for decisions to come from, not a panic
+// — and not a job that loses the rules it was created with either.
 func TestRequestToleratesNoInbox(t *testing.T) {
-	req, err := buildRequest(service.JobSpec{}, nil)
+	stated := review.Rule{Shape: "violation/entity_type/Cluster"}
+	req, err := buildRequest(service.JobSpec{Review: review.Options{Rules: []review.Rule{stated}}}, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
-	if req.Decisions != nil {
-		t.Fatalf("decisions = %+v, want none", req.Decisions)
+	if req.Inbox.Decisions() != nil {
+		t.Fatalf("decisions = %+v, want none", req.Inbox.Decisions())
+	}
+	if rules := req.Inbox.Rules(); len(rules) != 1 || rules[0].Shape != stated.Shape {
+		t.Fatalf("rules = %+v, want the one the job was created with", rules)
 	}
 }
 
-// fakeInbox is a snapshot of decisions, which is exactly what service.Inbox is.
-type fakeInbox []review.Decision
+// fakeInbox is a snapshot of the review conversation, which is exactly what
+// service.Inbox is.
+type fakeInbox struct {
+	decisions []review.Decision
+	rules     []review.Rule
+}
 
-func (f fakeInbox) Decisions() []review.Decision { return f }
+func (f fakeInbox) Decisions() []review.Decision { return f.decisions }
+func (f fakeInbox) Rules() []review.Rule         { return f.rules }

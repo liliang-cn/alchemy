@@ -80,6 +80,46 @@ func (h *hub) Decisions() []review.Decision {
 	return out
 }
 
+// Rules implements Inbox: the `always` rules this job's answers have made so
+// far, in the order they were made.
+//
+// The hub is where this can be answered at all, and that is why the method is
+// here rather than in pkg/review or in the runner. §5c's rule is a decision
+// plus the item it was made on — the shape it generalises over, and the
+// sentence the reviewer was looking at — and the hub is the only thing holding
+// both halves while the job is still running. pkg/review assembles the same
+// pairing at the end of a job, from the same two halves; this is that pairing
+// asked for early, which is the whole of §6's "a decision reaches an
+// extraction that has not run yet".
+//
+// A decision on an item the hub has since forgotten produces no rule rather
+// than a rule with an empty shape. Rule.Covers is equality on the shape and
+// refuses an empty one, so such a rule would match nothing and would sit in
+// provenance claiming a chunk was extracted under a policy that never applied.
+func (h *hub) Rules() []review.Rule {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []review.Rule
+	seen := map[string]bool{}
+	for _, id := range h.order {
+		d := h.decided[id]
+		if d.Verb != review.VerbAlways {
+			continue
+		}
+		i, known := h.byID[id]
+		if !known {
+			continue
+		}
+		it := h.items[i]
+		if it.Shape == "" || seen[it.Shape] {
+			continue
+		}
+		seen[it.Shape] = true
+		out = append(out, review.Rule{Shape: it.Shape, Kind: it.Kind, From: d, Because: it.Summary})
+	}
+	return out
+}
+
 // watch subscribes to progress. The returned function unsubscribes and must be
 // called, which is what keeps a disconnected client from leaking a channel the
 // run would go on writing to.

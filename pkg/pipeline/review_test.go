@@ -65,7 +65,7 @@ func TestRejectedContentIsNotWhatGetsEmbedded(t *testing.T) {
 	decided := twoSectionsRequest(t)
 	decided.Reviewing = true
 	decided.Models.Embedder = emb
-	decided.Decisions = []review.Decision{{ItemID: violation.ID, Verb: review.VerbReject, By: "ana"}}
+	decided.Inbox = Answered([]review.Decision{{ItemID: violation.ID, Verb: review.VerbReject, By: "ana"}}, nil)
 	res, err := Run(context.Background(), decided, nil)
 	if err != nil {
 		t.Fatalf("Run(decided): %v", err)
@@ -98,11 +98,11 @@ func TestTheStagesRunInTheOrderTheDiagramGives(t *testing.T) {
 	req := twoSectionsRequest(t)
 	req.Reviewing = true
 	req.Models.Embedder = &fakeEmbedder{}
-	req.Decisions = nil
+	req.Inbox = nil
 	// Nothing is decided, so the queue holds. Run it once to learn the item
 	// ids, then again with them answered so the job reaches the far end.
 	held := heldQueue(t, req)
-	req.Decisions = acceptAll(held)
+	req.Inbox = Answered(acceptAll(held), nil)
 
 	if _, err := Run(context.Background(), req, events); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -161,7 +161,7 @@ func acceptAll(items []review.Item) []review.Decision {
 func TestAReviewedRecordKeepsItsProducerAndGainsItsReviewer(t *testing.T) {
 	req := twoSectionsRequest(t)
 	req.Reviewing = true
-	req.Decisions = acceptAll(heldQueue(t, req))
+	req.Inbox = Answered(acceptAll(heldQueue(t, req)), nil)
 
 	res, err := Run(context.Background(), req, nil)
 	if err != nil {
