@@ -413,25 +413,68 @@ service does.
 
 Models are supplied per job, not configured globally: a buyer's LLM, embedding
 and OCR endpoints are their business, and a service that hardcodes them only
-works in the environment it was built in.
+works in the environment it was built in. The chunking strategy (§7.1) is a job
+input for the same reason — the person who knows the corpus is the caller.
 
 ---
 
-## 7. Open questions
+## 7. Decisions that were open
 
-1. **Chunking is not neutral.** Chunk boundaries decide what an extractor can
-   see at once, and a relation whose two ends land in different chunks is a
-   relation nobody extracts. Needs a real answer before documents ship.
-2. **Entity resolution across sources.** *Decided:* alchemy **reports**, and a
-   person decides — see the conflict ranking in §5c. Automatic merging needs a
-   rule about which source wins, and a wrong such rule silently fuses two real
-   customers into one, which is the kind of damage that is discovered late and
-   is expensive to undo. What remains open is the *unattended* case: with review
-   off, a conflict is returned in `conflicts[]` and both edges are kept, which
-   is safe but leaves the caller holding a graph that contradicts itself.
-3. **Cost.** Extraction over a large corpus is a lot of model calls. Whether the
-   service estimates before running, or streams a cost as it goes, is a product
-   decision that affects the API.
+### 7.1 Chunking — offer the known strategies, let the caller choose
+
+*Decided.* Chunk boundaries decide what an extractor can see at once, and a
+relation whose two ends land in different chunks is a relation nobody extracts.
+That makes chunking a decision about the corpus, not a detail — and the person
+who knows the corpus is the caller, not us.
+
+So the strategies are named, their trade-offs are stated, and the caller picks:
+
+| Strategy | Splits on | Suits | Costs |
+|---|---|---|---|
+| `fixed` | N tokens, fixed overlap | anything; the predictable baseline | cuts mid-sentence and mid-fact |
+| `sentence` | sentence boundaries, packed to a budget | prose, reports | a fact spanning a paragraph can still split |
+| `paragraph` | blank lines | documents already written in units | wildly uneven chunk sizes |
+| `heading` | markdown/HTML headings, section as chunk | manuals, specs, wikis | a long section exceeds any context |
+| `semantic` | embedding distance between adjacent blocks | corpora with no reliable structure | costs an embedding pass before extraction |
+| `whole` | no split | short documents that fit | fails loudly, not silently, when they do not |
+
+Default is `heading` falling back to `paragraph` then `fixed`, because most of
+what people import has structure and ignoring it is the one choice that is
+wrong for every corpus rather than some.
+
+Two rules that hold whichever is chosen:
+
+- **Overlap is the cheap insurance against the split-relation problem** — a
+  relation cut in half by a boundary is recovered when the next chunk starts
+  before the previous one ended. Overlap is configurable and non-zero by default.
+- **The chunking used is part of the provenance.** A graph re-extracted under a
+  different strategy is a different graph, and a reader comparing two runs needs
+  to know which one they are looking at.
+
+### 7.2 Cost — not a constraint
+
+*Decided: cost is not optimised for.* Quality wins. The service does not
+degrade an extraction to save calls, does not silently sample a corpus, and
+does not pick a cheaper model than the one it was given.
+
+This is a real product position and it has a consequence worth stating rather
+than discovering: **a large corpus can be expensive, and the caller must not be
+surprised by it.** Not optimising for cost is not the same as hiding it. So:
+
+- the job reports how many model calls it made, by model and stage, in the
+  result
+- `WatchJob` streams a running count, so a job whose bill is growing faster than
+  expected can be cancelled while it runs rather than after it finishes
+
+Estimating before running was considered and rejected: an estimate over an
+unread corpus is a guess, and a wrong guess about money is worse than no number
+at all. Reporting the real one as it accrues is honest and is enough.
+
+### 7.3 Still open
+**Entity resolution when nobody is reviewing.** With review on, a collision is
+reported and a person decides (§5c). With review off, both edges are kept and
+returned in `conflicts[]` — safe, but it leaves the caller holding a graph that
+contradicts itself, and what they should do about that is not yet answered.
 
 ---
 
