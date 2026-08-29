@@ -22,7 +22,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v3.19.1
-// source: proto/alchemy/v1/alchemy.proto
+// source: alchemy/v1/alchemy.proto
 
 package alchemyv1
 
@@ -53,6 +53,21 @@ const (
 // AlchemyClient is the client API for Alchemy service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// The google.api.http options below are §6's last paragraph: "A REST/JSON
+// gateway is generated from the same definitions, because a buyer evaluating
+// the product should be able to curl it, and because browsers exist. The
+// gateway is a translation, never a second source of truth about what the
+// service does."
+//
+// They live on the RPCs rather than in a side-car YAML for exactly that
+// reason. A separate mapping file is a second document describing the same
+// service, and the day it drifts, the REST surface and the gRPC surface
+// disagree about what the product is — which is the failure the sentence above
+// is written to prevent. An annotation that cannot compile without the method
+// it annotates cannot drift from it.
+//
+// One RPC is deliberately unannotated. See Review.
 type AlchemyClient interface {
 	// Unary for things that are one question.
 	CreateJob(ctx context.Context, in *CreateJobRequest, opts ...grpc.CallOption) (*Job, error)
@@ -61,15 +76,50 @@ type AlchemyClient interface {
 	// A large result is not one message; see §8.4. gRPC's default limit is 4MB
 	// and a large import blows through it, so GetResult refuses a result that
 	// does not fit rather than truncating one, and points here.
+	//
+	// Over HTTP the refusal is kept even though HTTP has no such limit, because
+	// a gateway that quietly served what gRPC refused would be a second source
+	// of truth about what the service does. The custom verb rather than a query
+	// parameter is deliberate: paging and not-paging are two different response
+	// shapes, and a flag that changes the shape of a response is a route
+	// pretending to be one route.
 	StreamResult(ctx context.Context, in *GetResultRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ResultPage], error)
 	DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Upload is client-streaming: a corpus is not a field in a message.
+	//
+	// body:"*" is the only mapping grpc-gateway allows for a client stream, and
+	// it means the request body is a sequence of SourceChunk messages rather
+	// than one. That is what keeps §8.4 true over HTTP as well: the gateway
+	// decodes a frame at a time and forwards it, so a 10GB dump is never a
+	// 10GB buffer. The path carries no parameters because a client-streaming
+	// method cannot bind them; the first frame names the source, exactly as it
+	// does over gRPC.
 	UploadSource(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SourceChunk, Source], error)
 	// Progress is server-streaming: stages, counts, and conflicts as they are
 	// found rather than at the end.
+	//
+	// Over HTTP this is newline-delimited JSON by default and Server-Sent Events
+	// when the caller asks for them by Accept. Both are the same events in the
+	// same order; §6 called SSE "a stream pretending to be a response" and that
+	// is still true — it is offered because EventSource is what a browser has,
+	// and §6's own reason for a gateway is that browsers exist.
 	WatchJob(ctx context.Context, in *WatchJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[JobEvent], error)
 	// Review is bidirectional: items out, decisions in, on one connection, so a
 	// decision reaches an extraction that has not run yet.
+	//
+	// It carries no google.api.http option, and that absence is the design
+	// decision rather than an oversight. A bidirectional stream has no honest
+	// translation into a request and a response: a reviewer must be able to
+	// answer item three while item four is still arriving, and an HTTP/1.1 body
+	// must be finished before its response is read. grpc-gateway will generate a
+	// handler for a bidi method if asked, and that handler deadlocks or
+	// degrades into the polling-plus-submit shape §6 rejected — a route that
+	// looks like it works is worse than no route, because the first person to
+	// find out is a buyer with a queue of real decisions in it.
+	//
+	// So the gateway answers this path with 501 and a sentence naming the gRPC
+	// method, and the OpenAPI document says the same. Refusing is a translation
+	// of "this cannot be translated"; pretending is not.
 	Review(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ReviewDecision, ReviewItem], error)
 }
 
@@ -188,6 +238,21 @@ type Alchemy_ReviewClient = grpc.BidiStreamingClient[ReviewDecision, ReviewItem]
 // AlchemyServer is the server API for Alchemy service.
 // All implementations must embed UnimplementedAlchemyServer
 // for forward compatibility.
+//
+// The google.api.http options below are §6's last paragraph: "A REST/JSON
+// gateway is generated from the same definitions, because a buyer evaluating
+// the product should be able to curl it, and because browsers exist. The
+// gateway is a translation, never a second source of truth about what the
+// service does."
+//
+// They live on the RPCs rather than in a side-car YAML for exactly that
+// reason. A separate mapping file is a second document describing the same
+// service, and the day it drifts, the REST surface and the gRPC surface
+// disagree about what the product is — which is the failure the sentence above
+// is written to prevent. An annotation that cannot compile without the method
+// it annotates cannot drift from it.
+//
+// One RPC is deliberately unannotated. See Review.
 type AlchemyServer interface {
 	// Unary for things that are one question.
 	CreateJob(context.Context, *CreateJobRequest) (*Job, error)
@@ -196,15 +261,50 @@ type AlchemyServer interface {
 	// A large result is not one message; see §8.4. gRPC's default limit is 4MB
 	// and a large import blows through it, so GetResult refuses a result that
 	// does not fit rather than truncating one, and points here.
+	//
+	// Over HTTP the refusal is kept even though HTTP has no such limit, because
+	// a gateway that quietly served what gRPC refused would be a second source
+	// of truth about what the service does. The custom verb rather than a query
+	// parameter is deliberate: paging and not-paging are two different response
+	// shapes, and a flag that changes the shape of a response is a route
+	// pretending to be one route.
 	StreamResult(*GetResultRequest, grpc.ServerStreamingServer[ResultPage]) error
 	DeleteJob(context.Context, *DeleteJobRequest) (*emptypb.Empty, error)
 	// Upload is client-streaming: a corpus is not a field in a message.
+	//
+	// body:"*" is the only mapping grpc-gateway allows for a client stream, and
+	// it means the request body is a sequence of SourceChunk messages rather
+	// than one. That is what keeps §8.4 true over HTTP as well: the gateway
+	// decodes a frame at a time and forwards it, so a 10GB dump is never a
+	// 10GB buffer. The path carries no parameters because a client-streaming
+	// method cannot bind them; the first frame names the source, exactly as it
+	// does over gRPC.
 	UploadSource(grpc.ClientStreamingServer[SourceChunk, Source]) error
 	// Progress is server-streaming: stages, counts, and conflicts as they are
 	// found rather than at the end.
+	//
+	// Over HTTP this is newline-delimited JSON by default and Server-Sent Events
+	// when the caller asks for them by Accept. Both are the same events in the
+	// same order; §6 called SSE "a stream pretending to be a response" and that
+	// is still true — it is offered because EventSource is what a browser has,
+	// and §6's own reason for a gateway is that browsers exist.
 	WatchJob(*WatchJobRequest, grpc.ServerStreamingServer[JobEvent]) error
 	// Review is bidirectional: items out, decisions in, on one connection, so a
 	// decision reaches an extraction that has not run yet.
+	//
+	// It carries no google.api.http option, and that absence is the design
+	// decision rather than an oversight. A bidirectional stream has no honest
+	// translation into a request and a response: a reviewer must be able to
+	// answer item three while item four is still arriving, and an HTTP/1.1 body
+	// must be finished before its response is read. grpc-gateway will generate a
+	// handler for a bidi method if asked, and that handler deadlocks or
+	// degrades into the polling-plus-submit shape §6 rejected — a route that
+	// looks like it works is worse than no route, because the first person to
+	// find out is a buyer with a queue of real decisions in it.
+	//
+	// So the gateway answers this path with 501 and a sentence naming the gRPC
+	// method, and the OpenAPI document says the same. Refusing is a translation
+	// of "this cannot be translated"; pretending is not.
 	Review(grpc.BidiStreamingServer[ReviewDecision, ReviewItem]) error
 	mustEmbedUnimplementedAlchemyServer()
 }
@@ -416,5 +516,5 @@ var Alchemy_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "proto/alchemy/v1/alchemy.proto",
+	Metadata: "alchemy/v1/alchemy.proto",
 }

@@ -42,7 +42,14 @@ func (s *Server) WatchJob(req *alchemyv1.WatchJobRequest, stream grpc.ServerStre
 	// this one, and the channel is closed rather than left for the collector.
 	defer unsubscribe()
 
-	if err := stream.Send(eventToProto(j.State, Event{At: time.Now(), Stage: j.Stage})); err != nil {
+	// The greeting carries what has been spent so far, not a zero. A watcher
+	// that attaches to a job already running reads the first event as the
+	// truth about the bill — that is what §7.2 offers a stream for — and a
+	// greeting of zero is a job that appears to start over.
+	calls, byStage, counts := r.hub.spend()
+	if err := stream.Send(eventToProto(j.State, Event{
+		At: time.Now(), Stage: j.Stage, ModelCalls: calls, ByStage: byStage, Counts: counts,
+	})); err != nil {
 		return err
 	}
 
@@ -55,7 +62,7 @@ func (s *Server) WatchJob(req *alchemyv1.WatchJobRequest, stream grpc.ServerStre
 			return wireError(ctx.Err())
 		case e, ok := <-events:
 			if !ok {
-				return s.sendFinal(stream, id)
+				return s.sendFinal(stream, id, r)
 			}
 			if err := stream.Send(eventToProto(s.stateOf(id), e)); err != nil {
 				return err
@@ -66,14 +73,18 @@ func (s *Server) WatchJob(req *alchemyv1.WatchJobRequest, stream grpc.ServerStre
 
 // sendFinal reports where the job ended, because the last thing on the stream
 // is what a client that watched to the end will act on.
-func (s *Server) sendFinal(stream grpc.ServerStreamingServer[alchemyv1.JobEvent], id string) error {
+func (s *Server) sendFinal(stream grpc.ServerStreamingServer[alchemyv1.JobEvent], id string, r *jobRun) error {
 	j, err := s.store.Get(context.Background(), id)
 	if err != nil {
 		// The job was deleted while being watched. There is nothing left to
 		// report and nothing went wrong, so the stream simply ends.
 		return nil
 	}
-	return stream.Send(eventToProto(j.State, Event{At: time.Now(), Stage: j.Stage, Message: j.Error}))
+	calls, byStage, counts := r.hub.spend()
+	return stream.Send(eventToProto(j.State, Event{
+		At: time.Now(), Stage: j.Stage, Message: j.Error,
+		ModelCalls: calls, ByStage: byStage, Counts: counts,
+	}))
 }
 
 // stateOf is the job's state right now, for stamping onto an event the runner

@@ -111,6 +111,17 @@ func (h *hub) watch() (<-chan Event, func()) {
 	}
 }
 
+// spend is the running total as it stands, for a caller building an event the
+// hub did not produce. §7.2 makes the running cost the number an operator is
+// deciding on, and an event assembled elsewhere — the greeting a new watcher
+// gets, the last word after the hub closes — must not answer that question
+// with a zero it never measured.
+func (h *hub) spend() (int64, []alchemy.ModelCall, alchemy.Counts) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.latest.ModelCalls, h.latest.ByStage, h.latest.Counts
+}
+
 // publish sends an event to every watcher.
 //
 // A full subscriber loses its oldest event rather than blocking the caller.
@@ -123,6 +134,22 @@ func (h *hub) publish(e Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.remember(e)
+	// An event that says nothing about the spend means "unchanged", not "zero".
+	// The distinction is the whole value of the stream: §7.2 gives it the one
+	// job the result cannot do — report the bill while the job can still be
+	// cancelled — so a watcher reads the running total as the truth so far and
+	// keeps the last number it was sent. A terminal event that answered a
+	// different question with an implicit zero walked that total backwards, and
+	// a client that had simply kept the last value finished believing the job
+	// was free. Events are partial for good reason (see remember); this is the
+	// same merge, applied on the way out rather than only on the way in.
+	e.ModelCalls = h.latest.ModelCalls
+	if len(e.ByStage) == 0 {
+		e.ByStage = h.latest.ByStage
+	}
+	if e.Counts == (alchemy.Counts{}) {
+		e.Counts = h.latest.Counts
+	}
 	for ch := range h.watchers {
 		select {
 		case ch <- e:

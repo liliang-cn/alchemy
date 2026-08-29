@@ -37,7 +37,38 @@ func WrapLLM(inner alchemy.LLM, b Budget) alchemy.LLM {
 // duration of each Embed. Batching stays the implementation's business: the
 // budget bounds calls, and one Embed is one call however many texts it carries.
 func WrapEmbedder(inner alchemy.Embedder, b Budget) alchemy.Embedder {
-	return &budgetedEmbedder{inner: inner, budget: b}
+	m := &budgetedEmbedder{inner: inner, budget: b}
+	// An embedder may know what its calls cost, and says so by carrying a
+	// second method rather than by widening alchemy.Embedder — the usage a
+	// provider reports is optional, and a port that demanded it would make
+	// every silent provider lie about zero.
+	//
+	// That optionality is what makes this decorator dangerous. A wrapper that
+	// implements only alchemy.Embedder still satisfies every caller and still
+	// compiles, and the usage is simply gone: a real run against a gateway that
+	// reports tokens showed 258 unwrapped and 0 wrapped, and nothing in between
+	// could have noticed. §7.2 says cost is not optimised for and is never
+	// hidden; a decorator that quietly drops the number hides it more
+	// completely than any accounting bug, because the total still adds up.
+	//
+	// So the shape follows the inner model: a reporting embedder is wrapped in
+	// something that reports, a silent one in something that stays silent. Go
+	// has no conditional method set, which is why this is two types and a type
+	// assertion rather than one type and an if.
+	if u, ok := inner.(usageEmbedder); ok {
+		return &budgetedUsageEmbedder{budgetedEmbedder: m, inner: u}
+	}
+	return m
+}
+
+// usageEmbedder is the optional interface an embedder carries when it knows
+// what a call cost. It is declared here rather than imported because a budget
+// must not depend on the stage that spends it; Go interfaces are structural, so
+// an embedder satisfies both this and the stage's own declaration without
+// either package knowing about the other.
+type usageEmbedder interface {
+	alchemy.Embedder
+	EmbedUsage(ctx context.Context, texts []string) ([][]float32, int, error)
 }
 
 // WrapOCR returns an alchemy.OCR that holds a budget slot for the duration of
@@ -92,6 +123,28 @@ func (m *budgetedEmbedder) Embed(ctx context.Context, texts []string) ([][]float
 	vecs, err := m.inner.Embed(ctx, texts)
 	outcome = err
 	return vecs, err
+}
+
+// budgetedUsageEmbedder is budgetedEmbedder for an inner model that reports
+// usage. It exists only to carry the extra method; the pacing is inherited.
+type budgetedUsageEmbedder struct {
+	*budgetedEmbedder
+	inner usageEmbedder
+}
+
+func (m *budgetedUsageEmbedder) EmbedUsage(ctx context.Context, texts []string) ([][]float32, int, error) {
+	lease, err := m.budget.Acquire(ctx, m.inner.Name())
+	if err != nil {
+		return nil, 0, err
+	}
+	outcome := errUnfinished
+	defer func() { lease.Release(outcome) }()
+
+	vecs, tokens, err := m.inner.EmbedUsage(ctx, texts)
+	outcome = err
+	// The tokens travel back even on the error path: a call that failed
+	// halfway still cost what the endpoint says it cost.
+	return vecs, tokens, err
 }
 
 type budgetedOCR struct {

@@ -1,0 +1,1277 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Alchemy",
+    "description": "Files in, a graph out: entities, relations, chunks and vectors, each\ncarrying where it came from and how it was produced.\n\nThis document is generated from alchemy.proto and describes a\ngateway in front of a gRPC service. The gRPC service is the product;\nthis is a translation of it, offered because a buyer evaluating\nAlchemy should be able to curl it and because browsers exist\n(DESIGN.md §6). Anything the two disagree about is a bug in the\ngateway, never a feature of it.\n\n**Review has no route here, and that is deliberate.** `Review` is a\nbidirectional stream: a reviewer answers item three while item four\nis still arriving, and a decision reaches an extraction that has not\nrun yet. HTTP/1.1 has no shape for that — a request body must be\nfinished before its response can be read — so translating it would\nproduce polling plus a submit endpoint, which is the thing §6\nrejected gRPC-over-HTTP for in the first place. Rather than ship a\nroute that deadlocks, `POST /v1/jobs/{job_id}/review` answers **501\nNot Implemented** with a sentence naming the gRPC method. Use\n`alchemy.v1.Alchemy/Review` over gRPC. A job held at\n`JOB_STATE_NEEDS_REVIEW` (§7.3) can be watched, fetched and deleted\nover HTTP; it can only be *unblocked* over gRPC.\n\n**The two streaming routes** — `GET /v1/jobs/{id}/events` and\n`GET /v1/jobs/{id}/result:stream` — answer with a stream of JSON\nobjects, one per line (`application/json`), each wrapping the\nmessage in `{\"result\": …}` or, if the stream fails partway,\n`{\"error\": …}`. Send `Accept: text/event-stream` and the same\nobjects arrive as Server-Sent Events instead, for the benefit of\n`EventSource`. The events, and their order, are identical.\n\n**Uploading a corpus.** `POST /v1/sources` accepts either a stream\nof JSON `SourceChunk` objects or — the way a human uploads a 10GB\ndump — the raw bytes with `Content-Type: application/octet-stream`\nand the metadata in the query string:\n`?name=dump.sql\u0026kind=SOURCE_KIND_DDL\u0026media_type=application/sql`.\nEither way the bytes are forwarded a frame at a time and spooled to\ndisk; nothing buffers the file (§8.4).\n\n**Error codes.** The gRPC codes arrive as: `NOT_FOUND` 404,\n`INVALID_ARGUMENT` 400, `FAILED_PRECONDITION` **412**,\n`RESOURCE_EXHAUSTED` **429**, `UNAUTHENTICATED` 401, `CANCELLED`\n499, `INTERNAL` 500. 412 rather than 400 for `FAILED_PRECONDITION`\nis the one deliberate departure from the gateway's defaults: the\nservice separates \"this request can never be valid\" from \"this\nrequest is fine and the job is not ready yet\", and collapsing both\nto 400 would tell half of all callers to stop retrying something\nthat will work in a minute. 429 is §8.4's \"try later\" and is the one\nrefusal a retry loop should act on.\n",
+    "version": "v1"
+  },
+  "tags": [
+    {
+      "name": "Alchemy"
+    }
+  ],
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "consumes": [
+    "application/json",
+    "application/octet-stream"
+  ],
+  "produces": [
+    "application/json",
+    "text/event-stream"
+  ],
+  "paths": {
+    "/v1/jobs": {
+      "post": {
+        "summary": "Unary for things that are one question.",
+        "operationId": "Alchemy_CreateJob",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Job"
+            }
+          },
+          "400": {
+            "description": "The request could not be valid for any state of the world — no\nsources, a source nobody uploaded, or a document source with no\nontology (§5 has no unconstrained extraction mode). Retrying it\nunchanged will fail identically.\n",
+            "schema": {}
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "429": {
+            "description": "§8.4's admission control. The service declares its capacity and\nrefuses beyond it rather than accepting work it cannot hold. This\nis the refusal to retry on; a rejected job is an operator's\nproblem for a minute, an accepted job that dies is their problem\nfor an afternoon.\n",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateJobRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}": {
+      "get": {
+        "operationId": "Alchemy_GetJob",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Job"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "404": {
+            "description": "No such job, or one the retention sweep already dropped.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      },
+      "delete": {
+        "operationId": "Alchemy_DeleteJob",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}/events": {
+      "get": {
+        "summary": "Progress is server-streaming: stages, counts, and conflicts as they are\nfound rather than at the end.",
+        "description": "Over HTTP this is newline-delimited JSON by default and Server-Sent Events\nwhen the caller asks for them by Accept. Both are the same events in the\nsame order; §6 called SSE \"a stream pretending to be a response\" and that\nis still true — it is offered because EventSource is what a browser has,\nand §6's own reason for a gateway is that browsers exist.",
+        "operationId": "Alchemy_WatchJob",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1JobEvent"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1JobEvent"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}/result": {
+      "get": {
+        "operationId": "Alchemy_GetResult",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Result"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "404": {
+            "description": "No such job, or one the retention sweep already dropped.",
+            "schema": {}
+          },
+          "412": {
+            "description": "The job has no result to give yet. Either it is still running, or\nit is held at NEEDS_REVIEW because two sources disagree and §7.3\nwill not let a caller opt out of a person — or the result is too\nlarge for one message and the body names\n`/v1/jobs/{job_id}/result:stream` instead.\n",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "description": "Records per page, honoured only by StreamResult. Zero means the server's\ndefault, which is picked so a page stays well under the 4MB limit.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}/result:stream": {
+      "get": {
+        "summary": "A large result is not one message; see §8.4. gRPC's default limit is 4MB\nand a large import blows through it, so GetResult refuses a result that\ndoes not fit rather than truncating one, and points here.",
+        "description": "Over HTTP the refusal is kept even though HTTP has no such limit, because\na gateway that quietly served what gRPC refused would be a second source\nof truth about what the service does. The custom verb rather than a query\nparameter is deliberate: paging and not-paging are two different response\nshapes, and a flag that changes the shape of a response is a route\npretending to be one route.",
+        "operationId": "Alchemy_StreamResult",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v1ResultPage"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of v1ResultPage"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "description": "Records per page, honoured only by StreamResult. Zero means the server's\ndefault, which is picked so a page stays well under the 4MB limit.",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
+    "/v1/sources": {
+      "post": {
+        "summary": "Upload is client-streaming: a corpus is not a field in a message.",
+        "description": "body:\"*\" is the only mapping grpc-gateway allows for a client stream, and\nit means the request body is a sequence of SourceChunk messages rather\nthan one. That is what keeps §8.4 true over HTTP as well: the gateway\ndecodes a frame at a time and forwards it, so a 10GB dump is never a\n10GB buffer. The path carries no parameters because a client-streaming\nmethod cannot bind them; the first frame names the source, exactly as it\ndoes over gRPC.",
+        "operationId": "Alchemy_UploadSource",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Source"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "SourceChunk is one frame of an upload. The metadata fields are read from the\nfirst frame only and ignored afterwards, so a client streaming a 10GB dump\nrepeats no headers and the server holds no per-frame state beyond the file\nhandle it is writing to. (streaming inputs)",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SourceChunk"
+            }
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "protobufNullValue": {
+      "type": "string",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "default": "NULL_VALUE",
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\n The JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1Chunk": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "text": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "heading": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "end": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v1Chunking": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "description": "One of fixed, sentence, paragraph, heading, semantic, whole. Empty means\nthe default of §7.1 — heading falling back to paragraph then fixed."
+        },
+        "size": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "overlap": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Overlap is the cheap insurance against the split-relation problem, and is\nnon-zero by default. A negative value is refused rather than clamped."
+        }
+      },
+      "description": "Chunking is a job input for the same reason models are: the person who knows\nthe corpus is the caller (§7.1)."
+    },
+    "v1Claim": {
+      "type": "object",
+      "properties": {
+        "statement": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance"
+        }
+      }
+    },
+    "v1Conflict": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/v1ConflictKind"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "left": {
+          "$ref": "#/definitions/v1Claim"
+        },
+        "right": {
+          "$ref": "#/definitions/v1Claim"
+        }
+      },
+      "description": "Conflict is two sources both claiming to be right, with nothing in the data\nto decide between them. It is returned whether or not review is on, so a\ncaller running unattended still learns that its sources disagree rather than\nreceiving whichever edge happened to be written last."
+    },
+    "v1ConflictKind": {
+      "type": "string",
+      "enum": [
+        "CONFLICT_KIND_UNSPECIFIED",
+        "CONFLICT_KIND_ENTITY_ATTRIBUTES",
+        "CONFLICT_KIND_ENTITY_TYPE",
+        "CONFLICT_KIND_RELATION_DIRECTION",
+        "CONFLICT_KIND_CONTRADICTION",
+        "CONFLICT_KIND_RELATION_ATTRIBUTES"
+      ],
+      "default": "CONFLICT_KIND_UNSPECIFIED"
+    },
+    "v1Counts": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "relations": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "deterministic": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "inferred": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "violations": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "conflicts": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "guesses": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "chunks_empty": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Chunks that produced nothing. A high number means extraction is failing\nquietly."
+        },
+        "chunks_unread": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Source text that could not be read at all — a scanned page with no OCR\nmodel supplied. §5: never silently returned as empty."
+        }
+      },
+      "description": "Counts is what makes the difference between a graph you can act on and one\nyou merely have (§5)."
+    },
+    "v1CreateJobRequest": {
+      "type": "object",
+      "properties": {
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Source IDs handed back by UploadSource. Naming an unknown one is refused\nrather than skipped: a job that quietly imports three of the four files it\nwas given produces a graph whose gaps nobody can explain."
+        },
+        "ontology": {
+          "type": "string",
+          "description": "Required for document sources (§5). There is no unconstrained mode: the\n74%→94% story is the argument, and shipping the ungoverned version would\nmean shipping the 74%."
+        },
+        "models": {
+          "$ref": "#/definitions/v1Models"
+        },
+        "chunking": {
+          "$ref": "#/definitions/v1Chunking"
+        },
+        "review": {
+          "$ref": "#/definitions/v1ReviewOptions"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "description": "Supplying an idempotency key makes creation idempotent. A client whose\ncall timed out cannot know whether the job was admitted, and both blind\nanswers are expensive: retry and a 10GB dump is imported twice, give up\nand the night's work is silently lost."
+        },
+        "part": {
+          "type": "string",
+          "description": "Which part of the ontology this corpus is read under and checked against.\nThe ontology is partitioned by provenance (§2.1's third lesson): telling a\nprose extractor it may emit `function` and `calls` invites it to invent\ncode structure out of documentation, so a job names one part and gets one\nvocabulary.\n\nEmpty means \"prose\". That is a decision, not a placeholder: §5's first\nrelease is documents and entity extraction, a document is prose, and every\nrequest written before this field existed meant a prose job. A required\nfield would have invalidated all of them, and proto3 gives no way to tell\nan unset string from an empty one — so the default has to be the meaning\nthose callers already had rather than a refusal they never asked for."
+        }
+      }
+    },
+    "v1Edit": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "An empty field is one the reviewer did not touch. A reviewer who retyped\nan entity said nothing about its name, and a message that carried both\nwould silently blank the half they left alone."
+        },
+        "name": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Entity": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "attributes": {
+          "type": "object"
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance"
+        }
+      }
+    },
+    "v1Guess": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "chosen_as": {
+          "type": "string"
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance"
+        }
+      },
+      "description": "Guess is an inferred mapping the pipeline made and is obliged to report.\n§2.1: a guess that does not announce itself is a bug with a three-month fuse."
+    },
+    "v1Job": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/v1JobState"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When un-reviewed work is discarded. §5c: without it the \"stateless\"\nservice quietly grows a database of abandoned reviews."
+        },
+        "stage": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "v1JobEvent": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "state": {
+          "$ref": "#/definitions/v1JobState"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/definitions/v1Counts",
+          "description": "Counts so far, not at the end."
+        },
+        "conflict": {
+          "$ref": "#/definitions/v1Conflict",
+          "description": "§7.3: a conflict is emitted when it is found. An operator watching a\ntwo-hour import should learn in minute three that it will need them, not\nat minute one hundred and twenty."
+        },
+        "model_calls": {
+          "type": "string",
+          "format": "int64",
+          "description": "§7.2: a running total, so a job whose bill is growing faster than expected\ncan be cancelled while it runs rather than after it finishes."
+        },
+        "model_calls_by_stage": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ModelCall"
+          },
+          "description": "The same total broken down, for the operator who wants to know which stage\nis spending it."
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "v1JobState": {
+      "type": "string",
+      "enum": [
+        "JOB_STATE_UNSPECIFIED",
+        "JOB_STATE_PENDING",
+        "JOB_STATE_RUNNING",
+        "JOB_STATE_NEEDS_REVIEW",
+        "JOB_STATE_SUCCEEDED",
+        "JOB_STATE_FAILED",
+        "JOB_STATE_EXPIRED",
+        "JOB_STATE_CANCELLED"
+      ],
+      "default": "JOB_STATE_UNSPECIFIED",
+      "description": "JobState is where a job is. NEEDS_REVIEW is reachable without review mode\nbeing on, because a conflict always requires a person (§7.3)."
+    },
+    "v1ModelCall": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "calls": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "tokens": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "description": "ModelCall records what a job spent. §7.2: cost is not optimised for, but it\nis never hidden."
+    },
+    "v1ModelEndpoint": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Deliberately per call rather than a server-side secret: the service never\nholds a buyer's credentials between jobs, which is the same reasoning as\n§4 applied to keys instead of graphs."
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "ModelEndpoint is one of the caller's models. The name is not decoration: it\nis what appears in provenance and in the cost report, so two runs against\ntwo models are told apart by a reader who has only the result."
+    },
+    "v1Models": {
+      "type": "object",
+      "properties": {
+        "llm": {
+          "$ref": "#/definitions/v1ModelEndpoint"
+        },
+        "embedder": {
+          "$ref": "#/definitions/v1ModelEndpoint"
+        },
+        "ocr": {
+          "$ref": "#/definitions/v1ModelEndpoint",
+          "description": "Absent OCR is a supported configuration, not an error: §5 says a scanned\npage is then reported as unread, never silently returned as empty text."
+        }
+      }
+    },
+    "v1Producer": {
+      "type": "string",
+      "enum": [
+        "PRODUCER_UNSPECIFIED",
+        "PRODUCER_DDL",
+        "PRODUCER_GRAPH_IMPORT",
+        "PRODUCER_TABULAR",
+        "PRODUCER_LLM_EXTRACT"
+      ],
+      "default": "PRODUCER_UNSPECIFIED",
+      "description": "Producer is §5b's \"field that matters\": DDL and GRAPH_IMPORT mean a machine\nread something that already said this, LLM_EXTRACT means a model decided it."
+    },
+    "v1Provenance": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "chunk": {
+          "type": "integer",
+          "format": "int32",
+          "description": "-1 when the producer did not work in chunks (DDL, graph import)."
+        },
+        "producer": {
+          "$ref": "#/definitions/v1Producer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "ontology": {
+          "type": "string"
+        },
+        "chunking": {
+          "type": "string",
+          "description": "The chunking strategy that produced the chunk. §7.1: a graph re-extracted\nunder a different strategy is a different graph."
+        },
+        "confidence": {
+          "type": "number",
+          "format": "double"
+        },
+        "reviewed_by": {
+          "type": "string",
+          "description": "§5c: review adds to provenance, it does not overwrite it — a reviewed edge\nstill says a model proposed it."
+        }
+      },
+      "description": "Provenance says where a fact came from and how it was produced. Every entity\nand every relation carries one; §5b makes this a product guarantee rather\nthan a debugging aid."
+    },
+    "v1Ref": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/v1RefKind"
+        },
+        "id": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance",
+          "description": "Narrows the Ref to the records one source produced. A conflict names two\nclaims about one subject and a decision is about one of them, so without\nthis a rejection would delete the side the reviewer kept."
+        }
+      },
+      "description": "Ref names graph records by what they say rather than by index: an index into\na slice stops meaning anything the moment a rejection removes an element."
+    },
+    "v1RefKind": {
+      "type": "string",
+      "enum": [
+        "REF_KIND_UNSPECIFIED",
+        "REF_KIND_ENTITY",
+        "REF_KIND_RELATION"
+      ],
+      "default": "REF_KIND_UNSPECIFIED"
+    },
+    "v1Relation": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "attributes": {
+          "type": "object"
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance"
+        }
+      }
+    },
+    "v1Result": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Entity"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Relation"
+          }
+        },
+        "chunks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Chunk"
+          }
+        },
+        "vectors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Vector"
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Conflict"
+          }
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Violation"
+          }
+        },
+        "guesses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Guess"
+          }
+        },
+        "counts": {
+          "$ref": "#/definitions/v1Counts"
+        },
+        "model_calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ModelCall"
+          }
+        },
+        "unread": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Unread"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ReviewRule"
+          },
+          "description": "The `always` rules this job's review produced. They are returned rather\nthan kept because §4 means the service holds no policy between jobs: the\ncaller keeps them and supplies them on the next job, which is how a\npipeline that started attended becomes one that runs itself without ever\nhaving guessed (§7.3)."
+        }
+      }
+    },
+    "v1ResultPage": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Zero-based, so a client can tell a resumed stream from a fresh one."
+        },
+        "last": {
+          "type": "boolean"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Entity"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Relation"
+          }
+        },
+        "chunks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Chunk"
+          }
+        },
+        "vectors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Vector"
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Conflict"
+          }
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Violation"
+          }
+        },
+        "guesses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Guess"
+          }
+        },
+        "counts": {
+          "$ref": "#/definitions/v1Counts",
+          "description": "Set on the first page only."
+        },
+        "model_calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ModelCall"
+          }
+        },
+        "unread": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Unread"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ReviewRule"
+          }
+        }
+      },
+      "description": "ResultPage is one page of a large result (§8.4). The summary rides on the\nfirst page rather than the last: an operator who wants the numbers needed to\ndistrust the graph should get them before deciding whether to read it, not\nafter paying for every entity."
+    },
+    "v1ReviewDecision": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "The first message on the stream must name the job; later ones may repeat\nit or leave it empty. A first message with a job_id and no item_id is how\na reviewer attaches to a queue without deciding anything yet."
+        },
+        "item_id": {
+          "type": "string"
+        },
+        "verb": {
+          "$ref": "#/definitions/v1ReviewVerb"
+        },
+        "by": {
+          "type": "string",
+          "description": "Who decided. Required: a decision nobody signed cannot be written into\nprovenance, and \"reviewed by\" with nobody in it is worse than not claiming\nreview at all."
+        },
+        "edit": {
+          "$ref": "#/definitions/v1Edit"
+        },
+        "note": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1ReviewItem": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/v1ReviewKind"
+        },
+        "rank": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "index": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Where the finding sits in the matching Result slice."
+        },
+        "subject": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "shape": {
+          "type": "string",
+          "description": "The class of mistake this item belongs to, and what an `always` rule is\nmatched on."
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Ref"
+          }
+        },
+        "suppressed_by": {
+          "$ref": "#/definitions/v1ReviewRule",
+          "description": "The rule that already answered this item's class. An item carrying one is\nnot a question — it is an answer already given, sent rather than dropped\nso that a queue three items shorter than the findings can say which rule\ntook each away."
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance"
+        }
+      }
+    },
+    "v1ReviewKind": {
+      "type": "string",
+      "enum": [
+        "REVIEW_KIND_UNSPECIFIED",
+        "REVIEW_KIND_CONFLICT",
+        "REVIEW_KIND_VIOLATION",
+        "REVIEW_KIND_GUESS",
+        "REVIEW_KIND_LOW_CONFIDENCE"
+      ],
+      "default": "REVIEW_KIND_UNSPECIFIED",
+      "description": "ReviewKind is §5c's ranking table as a set. The order of the values is the\norder of that table, and it is why a conflict is never below a guess."
+    },
+    "v1ReviewOptions": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Review is a mode, not a stage everything passes through (§5c). Leaving\nthis false still gets conflicts queued, because a conflict holds the job\neither way and the queue is how it gets unblocked."
+        },
+        "min_confidence": {
+          "type": "number",
+          "format": "double",
+          "description": "The line below which an inferred record is queued as low confidence. Zero\nqueues none: a caller who has not said what \"unsure\" means for their model\nhas not asked a question."
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ReviewRule"
+          },
+          "description": "Rules already recorded by an earlier `always`. Carried per job because the\nservice stores nothing between jobs (§4) — the caller keeps its own policy."
+        }
+      }
+    },
+    "v1ReviewRule": {
+      "type": "object",
+      "properties": {
+        "shape": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/v1ReviewKind"
+        },
+        "from": {
+          "$ref": "#/definitions/v1ReviewDecision"
+        },
+        "because": {
+          "type": "string"
+        }
+      },
+      "description": "ReviewRule is what `always` produced, and it carries the decision that\nproduced it: a rule without an origin is an unexplainable policy (§5c)."
+    },
+    "v1ReviewVerb": {
+      "type": "string",
+      "enum": [
+        "REVIEW_VERB_UNSPECIFIED",
+        "REVIEW_VERB_ACCEPT",
+        "REVIEW_VERB_REJECT",
+        "REVIEW_VERB_EDIT",
+        "REVIEW_VERB_ALWAYS"
+      ],
+      "default": "REVIEW_VERB_UNSPECIFIED",
+      "description": "ReviewVerb is what a reviewer did. §5c lists exactly four and the set is\nclosed: a fifth would be a way of disposing of a proposal that the\nprovenance of the result has no way to describe.\n\n - REVIEW_VERB_ALWAYS: ALWAYS accepts this one and stops the queue asking about ones like it."
+    },
+    "v1Source": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/v1SourceKind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string",
+          "format": "int64"
+        },
+        "media_type": {
+          "type": "string"
+        }
+      },
+      "description": "Source is the handle a CreateJob names. It is not the bytes: those are on\ndisk, and every reader works from a stream."
+    },
+    "v1SourceChunk": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/v1SourceKind"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string",
+          "format": "byte"
+        }
+      },
+      "description": "SourceChunk is one frame of an upload. The metadata fields are read from the\nfirst frame only and ignored afterwards, so a client streaming a 10GB dump\nrepeats no headers and the server holds no per-frame state beyond the file\nhandle it is writing to."
+    },
+    "v1SourceKind": {
+      "type": "string",
+      "enum": [
+        "SOURCE_KIND_UNSPECIFIED",
+        "SOURCE_KIND_TABULAR",
+        "SOURCE_KIND_DDL",
+        "SOURCE_KIND_DOCUMENT",
+        "SOURCE_KIND_GRAPH"
+      ],
+      "default": "SOURCE_KIND_UNSPECIFIED",
+      "description": "SourceKind is which of the four readers handles a source (§2)."
+    },
+    "v1Unread": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "description": "Unread exists so that \"no text here\" is never indistinguishable from \"an\nempty page\"."
+    },
+    "v1Vector": {
+      "type": "object",
+      "properties": {
+        "chunk": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          }
+        },
+        "model": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Violation": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/v1ViolationKind"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance"
+        }
+      }
+    },
+    "v1ViolationKind": {
+      "type": "string",
+      "enum": [
+        "VIOLATION_KIND_UNSPECIFIED",
+        "VIOLATION_KIND_UNKNOWN_ENTITY_TYPE",
+        "VIOLATION_KIND_UNKNOWN_RELATION_TYPE",
+        "VIOLATION_KIND_RELATION_NOT_ALLOWED",
+        "VIOLATION_KIND_DANGLING_RELATION",
+        "VIOLATION_KIND_MALFORMED_ROW",
+        "VIOLATION_KIND_UNNAMED_COLUMN",
+        "VIOLATION_KIND_MISSING_ID",
+        "VIOLATION_KIND_DUPLICATE_ID"
+      ],
+      "default": "VIOLATION_KIND_UNSPECIFIED",
+      "description": " - VIOLATION_KIND_MALFORMED_ROW: The kinds above are ontology-shaped. The four below are source-shaped — a\nfile that does not fit its own header, which is a way a table can fail and\na schema cannot."
+    }
+  },
+  "securityDefinitions": {
+    "BearerToken": {
+      "type": "apiKey",
+      "description": "`Authorization: Bearer \u003ctoken\u003e`. The header is forwarded\nverbatim to the gRPC service as `authorization` metadata, which\nis the only thing that decides whether it is valid — the gateway\nholds no credential of its own and has no opinion about yours.\nA request with no bearer header at all is refused by the gateway\nwith 401 before it reaches the service, so that every route\nincluding the 501 above answers the same way to an anonymous\ncaller.\n",
+      "name": "Authorization",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "BearerToken": []
+    }
+  ]
+}

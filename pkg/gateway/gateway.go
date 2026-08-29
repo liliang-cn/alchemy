@@ -1,0 +1,92 @@
+// Package gateway is the last sentence of DESIGN.md §6: "A REST/JSON gateway
+// is generated from the same definitions, because a buyer evaluating the
+// product should be able to curl it, and because browsers exist. The gateway
+// is a translation, never a second source of truth about what the service
+// does."
+//
+// The second half of that sentence is the whole design of this package, and it
+// is a constraint rather than an aspiration. There is no validation here, no
+// defaulting, no retry, no cache, and no route that does not correspond to an
+// RPC. Every refusal a caller sees was decided by pkg/service and is being
+// re-spelled in HTTP; the only opinions this package holds are about HTTP
+// itself — which status code carries which gRPC code, how a stream is framed,
+// and how a credential travels in a header instead of in metadata.
+//
+// What is hand-written here is only what protoc could not generate: three
+// pieces of content negotiation (raw uploads, Server-Sent Events, and the
+// status mapping) and one refusal (Review, which has no honest translation).
+// Each has its own file and its own reason.
+package gateway
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/protojson"
+)
+
+// New builds the HTTP surface in front of an already-dialled gRPC connection.
+//
+// It takes a connection rather than an address because the gateway has no
+// business deciding how the service is reached — transport credentials, a Unix
+// socket, an in-process pipe in a test — and because a package that dials is a
+// package that has to own retry and shutdown policy for something it does not
+// operate.
+//
+// ctx bounds the registration: grpc-gateway watches it to release the handlers
+// when the process is going away.
+func New(ctx context.Context, conn *grpc.ClientConn) (http.Handler, error) {
+	mux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, jsonMarshaler()),
+		// See errors.go: one gRPC code is carried to a different status than
+		// the gateway's default, because the default loses a distinction
+		// pkg/service was careful to make.
+		runtime.WithErrorHandler(httpError),
+	)
+	if err := alchemyv1.RegisterAlchemyHandler(ctx, mux, conn); err != nil {
+		return nil, err
+	}
+	// The refusals are registered after the generated routes and never overlap
+	// them: an RPC has a translation or it has a refusal, never both, which is
+	// what routes_test.go's coverage check enforces.
+	client := alchemyv1.NewAlchemyClient(conn)
+	for _, ref := range Refusals() {
+		if err := mux.HandlePath(ref.Method, ref.Path, refuse(mux, client, ref)); err != nil {
+			return nil, err
+		}
+	}
+	return mux, nil
+}
+
+// jsonMarshaler is the JSON a buyer reads, and its two settings are both
+// answers to "what did the document promise them".
+//
+// UseProtoNames because DESIGN.md writes its own JSON in snake_case — §5b's
+// counts block is `"chunks_empty": 23` — and a gateway emitting `chunksEmpty`
+// would be describing a different product than the document that sold it. The
+// generated OpenAPI is produced with json_names_for_fields=false for the same
+// reason, so the document and the wire agree.
+//
+// EmitDefaultValues because a zero in the counts block is a fact, not an
+// absence. "violations": 0 is the sentence §5 says every graph must carry;
+// omitting the key leaves a reader unable to tell "none" from "not measured",
+// which is precisely the distinction the whole design is built to preserve.
+// Empty messages and empty lists are still omitted — an absent provenance is
+// genuinely absent, and emitting one would invent a fact.
+func jsonMarshaler() *runtime.JSONPb {
+	return &runtime.JSONPb{
+		MarshalOptions: protojson.MarshalOptions{
+			UseProtoNames:     true,
+			EmitDefaultValues: true,
+		},
+		// DiscardUnknown stays false. A CreateJob body with a misspelled field
+		// is refused rather than silently ignored, which is §2.1's lesson
+		// applied to a request: a guess that does not announce itself is a bug
+		// with a three-month fuse, and "the ontology I sent was ignored" is
+		// exactly that bug.
+		UnmarshalOptions: protojson.UnmarshalOptions{},
+	}
+}

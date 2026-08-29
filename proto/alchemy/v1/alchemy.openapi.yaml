@@ -1,0 +1,133 @@
+# The half of the OpenAPI document that has nowhere to live in a .proto.
+#
+# Everything describing *what the service does* stays in alchemy.proto, because
+# DESIGN.md §6 says the gateway is "a translation, never a second source of
+# truth". What is here is only what OpenAPI needs and gRPC has no word for: how
+# a credential is presented over HTTP, and which HTTP statuses the gRPC codes
+# arrive as. Neither is a fact about the service; both are facts about HTTP.
+#
+# It is a side-car file rather than annotations in the .proto for one reason:
+# using the openapiv2 options inline would mean vendoring two more protobuf
+# files whose only purpose is to decorate a document, and a build that needs
+# four vendored schemas to produce one JSON file is a build people stop running.
+openapi_options:
+  file:
+    - file: alchemy/v1/alchemy.proto
+      option:
+        info:
+          title: Alchemy
+          version: v1
+          description: |
+            Files in, a graph out: entities, relations, chunks and vectors, each
+            carrying where it came from and how it was produced.
+
+            This document is generated from alchemy.proto and describes a
+            gateway in front of a gRPC service. The gRPC service is the product;
+            this is a translation of it, offered because a buyer evaluating
+            Alchemy should be able to curl it and because browsers exist
+            (DESIGN.md §6). Anything the two disagree about is a bug in the
+            gateway, never a feature of it.
+
+            **Review has no route here, and that is deliberate.** `Review` is a
+            bidirectional stream: a reviewer answers item three while item four
+            is still arriving, and a decision reaches an extraction that has not
+            run yet. HTTP/1.1 has no shape for that — a request body must be
+            finished before its response can be read — so translating it would
+            produce polling plus a submit endpoint, which is the thing §6
+            rejected gRPC-over-HTTP for in the first place. Rather than ship a
+            route that deadlocks, `POST /v1/jobs/{job_id}/review` answers **501
+            Not Implemented** with a sentence naming the gRPC method. Use
+            `alchemy.v1.Alchemy/Review` over gRPC. A job held at
+            `JOB_STATE_NEEDS_REVIEW` (§7.3) can be watched, fetched and deleted
+            over HTTP; it can only be *unblocked* over gRPC.
+
+            **The two streaming routes** — `GET /v1/jobs/{id}/events` and
+            `GET /v1/jobs/{id}/result:stream` — answer with a stream of JSON
+            objects, one per line (`application/json`), each wrapping the
+            message in `{"result": …}` or, if the stream fails partway,
+            `{"error": …}`. Send `Accept: text/event-stream` and the same
+            objects arrive as Server-Sent Events instead, for the benefit of
+            `EventSource`. The events, and their order, are identical.
+
+            **Uploading a corpus.** `POST /v1/sources` accepts either a stream
+            of JSON `SourceChunk` objects or — the way a human uploads a 10GB
+            dump — the raw bytes with `Content-Type: application/octet-stream`
+            and the metadata in the query string:
+            `?name=dump.sql&kind=SOURCE_KIND_DDL&media_type=application/sql`.
+            Either way the bytes are forwarded a frame at a time and spooled to
+            disk; nothing buffers the file (§8.4).
+
+            **Error codes.** The gRPC codes arrive as: `NOT_FOUND` 404,
+            `INVALID_ARGUMENT` 400, `FAILED_PRECONDITION` **412**,
+            `RESOURCE_EXHAUSTED` **429**, `UNAUTHENTICATED` 401, `CANCELLED`
+            499, `INTERNAL` 500. 412 rather than 400 for `FAILED_PRECONDITION`
+            is the one deliberate departure from the gateway's defaults: the
+            service separates "this request can never be valid" from "this
+            request is fine and the job is not ready yet", and collapsing both
+            to 400 would tell half of all callers to stop retrying something
+            that will work in a minute. 429 is §8.4's "try later" and is the one
+            refusal a retry loop should act on.
+        schemes:
+          - HTTP
+          - HTTPS
+        consumes:
+          - application/json
+          - application/octet-stream
+        produces:
+          - application/json
+          - text/event-stream
+        security_definitions:
+          security:
+            BearerToken:
+              type: TYPE_API_KEY
+              name: Authorization
+              in: IN_HEADER
+              description: |
+                `Authorization: Bearer <token>`. The header is forwarded
+                verbatim to the gRPC service as `authorization` metadata, which
+                is the only thing that decides whether it is valid — the gateway
+                holds no credential of its own and has no opinion about yours.
+                A request with no bearer header at all is refused by the gateway
+                with 401 before it reaches the service, so that every route
+                including the 501 above answers the same way to an anonymous
+                caller.
+        security:
+          - security_requirement:
+              BearerToken: {}
+        responses:
+          "401":
+            description: No bearer token, or one the service does not accept.
+  method:
+    - method: alchemy.v1.Alchemy.CreateJob
+      option:
+        responses:
+          "429":
+            description: |
+              §8.4's admission control. The service declares its capacity and
+              refuses beyond it rather than accepting work it cannot hold. This
+              is the refusal to retry on; a rejected job is an operator's
+              problem for a minute, an accepted job that dies is their problem
+              for an afternoon.
+          "400":
+            description: |
+              The request could not be valid for any state of the world — no
+              sources, a source nobody uploaded, or a document source with no
+              ontology (§5 has no unconstrained extraction mode). Retrying it
+              unchanged will fail identically.
+    - method: alchemy.v1.Alchemy.GetResult
+      option:
+        responses:
+          "404":
+            description: No such job, or one the retention sweep already dropped.
+          "412":
+            description: |
+              The job has no result to give yet. Either it is still running, or
+              it is held at NEEDS_REVIEW because two sources disagree and §7.3
+              will not let a caller opt out of a person — or the result is too
+              large for one message and the body names
+              `/v1/jobs/{job_id}/result:stream` instead.
+    - method: alchemy.v1.Alchemy.GetJob
+      option:
+        responses:
+          "404":
+            description: No such job, or one the retention sweep already dropped.

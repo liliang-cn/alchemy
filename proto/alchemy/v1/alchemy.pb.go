@@ -22,11 +22,12 @@
 // versions:
 // 	protoc-gen-go v1.36.10
 // 	protoc        v3.19.1
-// source: proto/alchemy/v1/alchemy.proto
+// source: alchemy/v1/alchemy.proto
 
 package alchemyv1
 
 import (
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -94,11 +95,11 @@ func (x JobState) String() string {
 }
 
 func (JobState) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_alchemy_v1_alchemy_proto_enumTypes[0].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[0].Descriptor()
 }
 
 func (JobState) Type() protoreflect.EnumType {
-	return &file_proto_alchemy_v1_alchemy_proto_enumTypes[0]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[0]
 }
 
 func (x JobState) Number() protoreflect.EnumNumber {
@@ -107,7 +108,7 @@ func (x JobState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use JobState.Descriptor instead.
 func (JobState) EnumDescriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{0}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{0}
 }
 
 // SourceKind is which of the four readers handles a source (§2).
@@ -150,11 +151,11 @@ func (x SourceKind) String() string {
 }
 
 func (SourceKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_alchemy_v1_alchemy_proto_enumTypes[1].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[1].Descriptor()
 }
 
 func (SourceKind) Type() protoreflect.EnumType {
-	return &file_proto_alchemy_v1_alchemy_proto_enumTypes[1]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[1]
 }
 
 func (x SourceKind) Number() protoreflect.EnumNumber {
@@ -163,7 +164,7 @@ func (x SourceKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SourceKind.Descriptor instead.
 func (SourceKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{1}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{1}
 }
 
 // Producer is §5b's "field that matters": DDL and GRAPH_IMPORT mean a machine
@@ -207,11 +208,11 @@ func (x Producer) String() string {
 }
 
 func (Producer) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_alchemy_v1_alchemy_proto_enumTypes[2].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[2].Descriptor()
 }
 
 func (Producer) Type() protoreflect.EnumType {
-	return &file_proto_alchemy_v1_alchemy_proto_enumTypes[2]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[2]
 }
 
 func (x Producer) Number() protoreflect.EnumNumber {
@@ -220,7 +221,7 @@ func (x Producer) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Producer.Descriptor instead.
 func (Producer) EnumDescriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{2}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{2}
 }
 
 type ViolationKind int32
@@ -277,11 +278,11 @@ func (x ViolationKind) String() string {
 }
 
 func (ViolationKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_alchemy_v1_alchemy_proto_enumTypes[3].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[3].Descriptor()
 }
 
 func (ViolationKind) Type() protoreflect.EnumType {
-	return &file_proto_alchemy_v1_alchemy_proto_enumTypes[3]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[3]
 }
 
 func (x ViolationKind) Number() protoreflect.EnumNumber {
@@ -290,7 +291,7 @@ func (x ViolationKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ViolationKind.Descriptor instead.
 func (ViolationKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{3}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{3}
 }
 
 type ConflictKind int32
@@ -335,11 +336,11 @@ func (x ConflictKind) String() string {
 }
 
 func (ConflictKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_alchemy_v1_alchemy_proto_enumTypes[4].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[4].Descriptor()
 }
 
 func (ConflictKind) Type() protoreflect.EnumType {
-	return &file_proto_alchemy_v1_alchemy_proto_enumTypes[4]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[4]
 }
 
 func (x ConflictKind) Number() protoreflect.EnumNumber {
@@ -348,7 +349,7 @@ func (x ConflictKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConflictKind.Descriptor instead.
 func (ConflictKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{4}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{4}
 }
 
 // ReviewKind is §5c's ranking table as a set. The order of the values is the
@@ -392,11 +393,11 @@ func (x ReviewKind) String() string {
 }
 
 func (ReviewKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_alchemy_v1_alchemy_proto_enumTypes[5].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[5].Descriptor()
 }
 
 func (ReviewKind) Type() protoreflect.EnumType {
-	return &file_proto_alchemy_v1_alchemy_proto_enumTypes[5]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[5]
 }
 
 func (x ReviewKind) Number() protoreflect.EnumNumber {
@@ -405,7 +406,7 @@ func (x ReviewKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReviewKind.Descriptor instead.
 func (ReviewKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{5}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{5}
 }
 
 // ReviewVerb is what a reviewer did. §5c lists exactly four and the set is
@@ -451,11 +452,11 @@ func (x ReviewVerb) String() string {
 }
 
 func (ReviewVerb) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_alchemy_v1_alchemy_proto_enumTypes[6].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[6].Descriptor()
 }
 
 func (ReviewVerb) Type() protoreflect.EnumType {
-	return &file_proto_alchemy_v1_alchemy_proto_enumTypes[6]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[6]
 }
 
 func (x ReviewVerb) Number() protoreflect.EnumNumber {
@@ -464,7 +465,7 @@ func (x ReviewVerb) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReviewVerb.Descriptor instead.
 func (ReviewVerb) EnumDescriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{6}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{6}
 }
 
 type RefKind int32
@@ -500,11 +501,11 @@ func (x RefKind) String() string {
 }
 
 func (RefKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_alchemy_v1_alchemy_proto_enumTypes[7].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[7].Descriptor()
 }
 
 func (RefKind) Type() protoreflect.EnumType {
-	return &file_proto_alchemy_v1_alchemy_proto_enumTypes[7]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[7]
 }
 
 func (x RefKind) Number() protoreflect.EnumNumber {
@@ -513,7 +514,7 @@ func (x RefKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RefKind.Descriptor instead.
 func (RefKind) EnumDescriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{7}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{7}
 }
 
 // ModelEndpoint is one of the caller's models. The name is not decoration: it
@@ -534,7 +535,7 @@ type ModelEndpoint struct {
 
 func (x *ModelEndpoint) Reset() {
 	*x = ModelEndpoint{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[0]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -546,7 +547,7 @@ func (x *ModelEndpoint) String() string {
 func (*ModelEndpoint) ProtoMessage() {}
 
 func (x *ModelEndpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[0]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -559,7 +560,7 @@ func (x *ModelEndpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelEndpoint.ProtoReflect.Descriptor instead.
 func (*ModelEndpoint) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{0}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ModelEndpoint) GetName() string {
@@ -603,7 +604,7 @@ type Models struct {
 
 func (x *Models) Reset() {
 	*x = Models{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[1]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -615,7 +616,7 @@ func (x *Models) String() string {
 func (*Models) ProtoMessage() {}
 
 func (x *Models) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[1]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -628,7 +629,7 @@ func (x *Models) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Models.ProtoReflect.Descriptor instead.
 func (*Models) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{1}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Models) GetLlm() *ModelEndpoint {
@@ -669,7 +670,7 @@ type Chunking struct {
 
 func (x *Chunking) Reset() {
 	*x = Chunking{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[2]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -681,7 +682,7 @@ func (x *Chunking) String() string {
 func (*Chunking) ProtoMessage() {}
 
 func (x *Chunking) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[2]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -694,7 +695,7 @@ func (x *Chunking) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chunking.ProtoReflect.Descriptor instead.
 func (*Chunking) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{2}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Chunking) GetStrategy() string {
@@ -737,7 +738,7 @@ type ReviewOptions struct {
 
 func (x *ReviewOptions) Reset() {
 	*x = ReviewOptions{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[3]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -749,7 +750,7 @@ func (x *ReviewOptions) String() string {
 func (*ReviewOptions) ProtoMessage() {}
 
 func (x *ReviewOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[3]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -762,7 +763,7 @@ func (x *ReviewOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewOptions.ProtoReflect.Descriptor instead.
 func (*ReviewOptions) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{3}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ReviewOptions) GetEnabled() bool {
@@ -800,7 +801,7 @@ type ReviewRule struct {
 
 func (x *ReviewRule) Reset() {
 	*x = ReviewRule{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[4]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -812,7 +813,7 @@ func (x *ReviewRule) String() string {
 func (*ReviewRule) ProtoMessage() {}
 
 func (x *ReviewRule) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[4]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -825,7 +826,7 @@ func (x *ReviewRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewRule.ProtoReflect.Descriptor instead.
 func (*ReviewRule) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{4}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ReviewRule) GetShape() string {
@@ -893,7 +894,7 @@ type CreateJobRequest struct {
 
 func (x *CreateJobRequest) Reset() {
 	*x = CreateJobRequest{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[5]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -905,7 +906,7 @@ func (x *CreateJobRequest) String() string {
 func (*CreateJobRequest) ProtoMessage() {}
 
 func (x *CreateJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[5]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -918,7 +919,7 @@ func (x *CreateJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateJobRequest.ProtoReflect.Descriptor instead.
 func (*CreateJobRequest) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{5}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateJobRequest) GetSourceIds() []string {
@@ -986,7 +987,7 @@ type Job struct {
 
 func (x *Job) Reset() {
 	*x = Job{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[6]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -998,7 +999,7 @@ func (x *Job) String() string {
 func (*Job) ProtoMessage() {}
 
 func (x *Job) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[6]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1011,7 +1012,7 @@ func (x *Job) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Job.ProtoReflect.Descriptor instead.
 func (*Job) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{6}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Job) GetId() string {
@@ -1065,7 +1066,7 @@ type GetJobRequest struct {
 
 func (x *GetJobRequest) Reset() {
 	*x = GetJobRequest{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[7]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1077,7 +1078,7 @@ func (x *GetJobRequest) String() string {
 func (*GetJobRequest) ProtoMessage() {}
 
 func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[7]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1090,7 +1091,7 @@ func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{7}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetJobRequest) GetJobId() string {
@@ -1109,7 +1110,7 @@ type DeleteJobRequest struct {
 
 func (x *DeleteJobRequest) Reset() {
 	*x = DeleteJobRequest{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[8]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1121,7 +1122,7 @@ func (x *DeleteJobRequest) String() string {
 func (*DeleteJobRequest) ProtoMessage() {}
 
 func (x *DeleteJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[8]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1134,7 +1135,7 @@ func (x *DeleteJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteJobRequest.ProtoReflect.Descriptor instead.
 func (*DeleteJobRequest) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{8}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DeleteJobRequest) GetJobId() string {
@@ -1153,7 +1154,7 @@ type WatchJobRequest struct {
 
 func (x *WatchJobRequest) Reset() {
 	*x = WatchJobRequest{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[9]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1165,7 +1166,7 @@ func (x *WatchJobRequest) String() string {
 func (*WatchJobRequest) ProtoMessage() {}
 
 func (x *WatchJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[9]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1178,7 +1179,7 @@ func (x *WatchJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchJobRequest.ProtoReflect.Descriptor instead.
 func (*WatchJobRequest) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{9}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WatchJobRequest) GetJobId() string {
@@ -1200,7 +1201,7 @@ type GetResultRequest struct {
 
 func (x *GetResultRequest) Reset() {
 	*x = GetResultRequest{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[10]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1212,7 +1213,7 @@ func (x *GetResultRequest) String() string {
 func (*GetResultRequest) ProtoMessage() {}
 
 func (x *GetResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[10]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1225,7 +1226,7 @@ func (x *GetResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResultRequest.ProtoReflect.Descriptor instead.
 func (*GetResultRequest) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{10}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetResultRequest) GetJobId() string {
@@ -1258,7 +1259,7 @@ type SourceChunk struct {
 
 func (x *SourceChunk) Reset() {
 	*x = SourceChunk{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[11]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1270,7 +1271,7 @@ func (x *SourceChunk) String() string {
 func (*SourceChunk) ProtoMessage() {}
 
 func (x *SourceChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[11]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1283,7 +1284,7 @@ func (x *SourceChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceChunk.ProtoReflect.Descriptor instead.
 func (*SourceChunk) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{11}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SourceChunk) GetName() string {
@@ -1329,7 +1330,7 @@ type Source struct {
 
 func (x *Source) Reset() {
 	*x = Source{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[12]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1341,7 +1342,7 @@ func (x *Source) String() string {
 func (*Source) ProtoMessage() {}
 
 func (x *Source) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[12]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1354,7 +1355,7 @@ func (x *Source) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Source.ProtoReflect.Descriptor instead.
 func (*Source) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{12}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Source) GetId() string {
@@ -1416,7 +1417,7 @@ type Provenance struct {
 
 func (x *Provenance) Reset() {
 	*x = Provenance{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[13]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1428,7 +1429,7 @@ func (x *Provenance) String() string {
 func (*Provenance) ProtoMessage() {}
 
 func (x *Provenance) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[13]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1441,7 +1442,7 @@ func (x *Provenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provenance.ProtoReflect.Descriptor instead.
 func (*Provenance) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{13}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Provenance) GetSource() string {
@@ -1513,7 +1514,7 @@ type Entity struct {
 
 func (x *Entity) Reset() {
 	*x = Entity{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[14]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1525,7 +1526,7 @@ func (x *Entity) String() string {
 func (*Entity) ProtoMessage() {}
 
 func (x *Entity) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[14]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1538,7 +1539,7 @@ func (x *Entity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Entity.ProtoReflect.Descriptor instead.
 func (*Entity) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{14}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Entity) GetId() string {
@@ -1589,7 +1590,7 @@ type Relation struct {
 
 func (x *Relation) Reset() {
 	*x = Relation{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[15]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1601,7 +1602,7 @@ func (x *Relation) String() string {
 func (*Relation) ProtoMessage() {}
 
 func (x *Relation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[15]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1614,7 +1615,7 @@ func (x *Relation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relation.ProtoReflect.Descriptor instead.
 func (*Relation) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{15}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Relation) GetFrom() string {
@@ -1667,7 +1668,7 @@ type Chunk struct {
 
 func (x *Chunk) Reset() {
 	*x = Chunk{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[16]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1679,7 +1680,7 @@ func (x *Chunk) String() string {
 func (*Chunk) ProtoMessage() {}
 
 func (x *Chunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[16]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1692,7 +1693,7 @@ func (x *Chunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chunk.ProtoReflect.Descriptor instead.
 func (*Chunk) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{16}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Chunk) GetIndex() int32 {
@@ -1755,7 +1756,7 @@ type Vector struct {
 
 func (x *Vector) Reset() {
 	*x = Vector{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[17]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1767,7 +1768,7 @@ func (x *Vector) String() string {
 func (*Vector) ProtoMessage() {}
 
 func (x *Vector) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[17]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1780,7 +1781,7 @@ func (x *Vector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Vector.ProtoReflect.Descriptor instead.
 func (*Vector) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{17}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Vector) GetChunk() int32 {
@@ -1816,7 +1817,7 @@ type Violation struct {
 
 func (x *Violation) Reset() {
 	*x = Violation{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[18]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1828,7 +1829,7 @@ func (x *Violation) String() string {
 func (*Violation) ProtoMessage() {}
 
 func (x *Violation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[18]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1841,7 +1842,7 @@ func (x *Violation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Violation.ProtoReflect.Descriptor instead.
 func (*Violation) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{18}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Violation) GetKind() ViolationKind {
@@ -1887,7 +1888,7 @@ type Guess struct {
 
 func (x *Guess) Reset() {
 	*x = Guess{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[19]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1899,7 +1900,7 @@ func (x *Guess) String() string {
 func (*Guess) ProtoMessage() {}
 
 func (x *Guess) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[19]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1912,7 +1913,7 @@ func (x *Guess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Guess.ProtoReflect.Descriptor instead.
 func (*Guess) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{19}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *Guess) GetField() string {
@@ -1960,7 +1961,7 @@ type Claim struct {
 
 func (x *Claim) Reset() {
 	*x = Claim{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[20]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1972,7 +1973,7 @@ func (x *Claim) String() string {
 func (*Claim) ProtoMessage() {}
 
 func (x *Claim) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[20]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1985,7 +1986,7 @@ func (x *Claim) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Claim.ProtoReflect.Descriptor instead.
 func (*Claim) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{20}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Claim) GetStatement() string {
@@ -2019,7 +2020,7 @@ type Conflict struct {
 
 func (x *Conflict) Reset() {
 	*x = Conflict{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[21]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2031,7 +2032,7 @@ func (x *Conflict) String() string {
 func (*Conflict) ProtoMessage() {}
 
 func (x *Conflict) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[21]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2044,7 +2045,7 @@ func (x *Conflict) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Conflict.ProtoReflect.Descriptor instead.
 func (*Conflict) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{21}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *Conflict) GetKind() ConflictKind {
@@ -2105,7 +2106,7 @@ type Counts struct {
 
 func (x *Counts) Reset() {
 	*x = Counts{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[22]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2117,7 +2118,7 @@ func (x *Counts) String() string {
 func (*Counts) ProtoMessage() {}
 
 func (x *Counts) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[22]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2130,7 +2131,7 @@ func (x *Counts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Counts.ProtoReflect.Descriptor instead.
 func (*Counts) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{22}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Counts) GetEntities() int32 {
@@ -2210,7 +2211,7 @@ type ModelCall struct {
 
 func (x *ModelCall) Reset() {
 	*x = ModelCall{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[23]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2222,7 +2223,7 @@ func (x *ModelCall) String() string {
 func (*ModelCall) ProtoMessage() {}
 
 func (x *ModelCall) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[23]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2235,7 +2236,7 @@ func (x *ModelCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelCall.ProtoReflect.Descriptor instead.
 func (*ModelCall) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{23}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ModelCall) GetModel() string {
@@ -2279,7 +2280,7 @@ type Unread struct {
 
 func (x *Unread) Reset() {
 	*x = Unread{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[24]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2291,7 +2292,7 @@ func (x *Unread) String() string {
 func (*Unread) ProtoMessage() {}
 
 func (x *Unread) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[24]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2304,7 +2305,7 @@ func (x *Unread) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Unread.ProtoReflect.Descriptor instead.
 func (*Unread) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{24}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Unread) GetSource() string {
@@ -2352,7 +2353,7 @@ type Result struct {
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[25]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2364,7 +2365,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[25]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2377,7 +2378,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{25}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Result) GetEntities() []*Entity {
@@ -2484,7 +2485,7 @@ type ResultPage struct {
 
 func (x *ResultPage) Reset() {
 	*x = ResultPage{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[26]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2496,7 +2497,7 @@ func (x *ResultPage) String() string {
 func (*ResultPage) ProtoMessage() {}
 
 func (x *ResultPage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[26]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2509,7 +2510,7 @@ func (x *ResultPage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultPage.ProtoReflect.Descriptor instead.
 func (*ResultPage) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{26}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ResultPage) GetPage() int32 {
@@ -2627,7 +2628,7 @@ type JobEvent struct {
 
 func (x *JobEvent) Reset() {
 	*x = JobEvent{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[27]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2639,7 +2640,7 @@ func (x *JobEvent) String() string {
 func (*JobEvent) ProtoMessage() {}
 
 func (x *JobEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[27]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2652,7 +2653,7 @@ func (x *JobEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobEvent.ProtoReflect.Descriptor instead.
 func (*JobEvent) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{27}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *JobEvent) GetAt() *timestamppb.Timestamp {
@@ -2730,7 +2731,7 @@ type Ref struct {
 
 func (x *Ref) Reset() {
 	*x = Ref{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[28]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2742,7 +2743,7 @@ func (x *Ref) String() string {
 func (*Ref) ProtoMessage() {}
 
 func (x *Ref) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[28]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2755,7 +2756,7 @@ func (x *Ref) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ref.ProtoReflect.Descriptor instead.
 func (*Ref) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{28}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Ref) GetKind() RefKind {
@@ -2826,7 +2827,7 @@ type ReviewItem struct {
 
 func (x *ReviewItem) Reset() {
 	*x = ReviewItem{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[29]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2838,7 +2839,7 @@ func (x *ReviewItem) String() string {
 func (*ReviewItem) ProtoMessage() {}
 
 func (x *ReviewItem) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[29]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2851,7 +2852,7 @@ func (x *ReviewItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewItem.ProtoReflect.Descriptor instead.
 func (*ReviewItem) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{29}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ReviewItem) GetJobId() string {
@@ -2946,7 +2947,7 @@ type Edit struct {
 
 func (x *Edit) Reset() {
 	*x = Edit{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[30]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2958,7 +2959,7 @@ func (x *Edit) String() string {
 func (*Edit) ProtoMessage() {}
 
 func (x *Edit) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[30]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2971,7 +2972,7 @@ func (x *Edit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Edit.ProtoReflect.Descriptor instead.
 func (*Edit) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{30}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Edit) GetType() string {
@@ -3023,7 +3024,7 @@ type ReviewDecision struct {
 
 func (x *ReviewDecision) Reset() {
 	*x = ReviewDecision{}
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[31]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3035,7 +3036,7 @@ func (x *ReviewDecision) String() string {
 func (*ReviewDecision) ProtoMessage() {}
 
 func (x *ReviewDecision) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_alchemy_v1_alchemy_proto_msgTypes[31]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3048,7 +3049,7 @@ func (x *ReviewDecision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewDecision.ProtoReflect.Descriptor instead.
 func (*ReviewDecision) Descriptor() ([]byte, []int) {
-	return file_proto_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{31}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ReviewDecision) GetJobId() string {
@@ -3100,12 +3101,12 @@ func (x *ReviewDecision) GetAt() *timestamppb.Timestamp {
 	return nil
 }
 
-var File_proto_alchemy_v1_alchemy_proto protoreflect.FileDescriptor
+var File_alchemy_v1_alchemy_proto protoreflect.FileDescriptor
 
-const file_proto_alchemy_v1_alchemy_proto_rawDesc = "" +
+const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\n" +
-	"\x1eproto/alchemy/v1/alchemy.proto\x12\n" +
-	"alchemy.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd6\x01\n" +
+	"\x18alchemy/v1/alchemy.proto\x12\n" +
+	"alchemy.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd6\x01\n" +
 	"\rModelEndpoint\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12\x17\n" +
@@ -3403,32 +3404,32 @@ const file_proto_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\aRefKind\x12\x18\n" +
 	"\x14REF_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fREF_KIND_ENTITY\x10\x01\x12\x15\n" +
-	"\x11REF_KIND_RELATION\x10\x022\x87\x04\n" +
-	"\aAlchemy\x12:\n" +
-	"\tCreateJob\x12\x1c.alchemy.v1.CreateJobRequest\x1a\x0f.alchemy.v1.Job\x124\n" +
-	"\x06GetJob\x12\x19.alchemy.v1.GetJobRequest\x1a\x0f.alchemy.v1.Job\x12=\n" +
-	"\tGetResult\x12\x1c.alchemy.v1.GetResultRequest\x1a\x12.alchemy.v1.Result\x12F\n" +
-	"\fStreamResult\x12\x1c.alchemy.v1.GetResultRequest\x1a\x16.alchemy.v1.ResultPage0\x01\x12A\n" +
-	"\tDeleteJob\x12\x1c.alchemy.v1.DeleteJobRequest\x1a\x16.google.protobuf.Empty\x12=\n" +
-	"\fUploadSource\x12\x17.alchemy.v1.SourceChunk\x1a\x12.alchemy.v1.Source(\x01\x12?\n" +
-	"\bWatchJob\x12\x1b.alchemy.v1.WatchJobRequest\x1a\x14.alchemy.v1.JobEvent0\x01\x12@\n" +
+	"\x11REF_KIND_RELATION\x10\x022\xd7\x05\n" +
+	"\aAlchemy\x12O\n" +
+	"\tCreateJob\x12\x1c.alchemy.v1.CreateJobRequest\x1a\x0f.alchemy.v1.Job\"\x13\x82\xd3\xe4\x93\x02\r:\x01*\"\b/v1/jobs\x12O\n" +
+	"\x06GetJob\x12\x19.alchemy.v1.GetJobRequest\x1a\x0f.alchemy.v1.Job\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/jobs/{job_id}\x12_\n" +
+	"\tGetResult\x12\x1c.alchemy.v1.GetResultRequest\x1a\x12.alchemy.v1.Result\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/jobs/{job_id}/result\x12o\n" +
+	"\fStreamResult\x12\x1c.alchemy.v1.GetResultRequest\x1a\x16.alchemy.v1.ResultPage\"'\x82\xd3\xe4\x93\x02!\x12\x1f/v1/jobs/{job_id}/result:stream0\x01\x12\\\n" +
+	"\tDeleteJob\x12\x1c.alchemy.v1.DeleteJobRequest\x1a\x16.google.protobuf.Empty\"\x19\x82\xd3\xe4\x93\x02\x13*\x11/v1/jobs/{job_id}\x12U\n" +
+	"\fUploadSource\x12\x17.alchemy.v1.SourceChunk\x1a\x12.alchemy.v1.Source\"\x16\x82\xd3\xe4\x93\x02\x10:\x01*\"\v/v1/sources(\x01\x12a\n" +
+	"\bWatchJob\x12\x1b.alchemy.v1.WatchJobRequest\x1a\x14.alchemy.v1.JobEvent\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/jobs/{job_id}/events0\x01\x12@\n" +
 	"\x06Review\x12\x1a.alchemy.v1.ReviewDecision\x1a\x16.alchemy.v1.ReviewItem(\x010\x01B:Z8github.com/liliang-cn/alchemy/proto/alchemy/v1;alchemyv1b\x06proto3"
 
 var (
-	file_proto_alchemy_v1_alchemy_proto_rawDescOnce sync.Once
-	file_proto_alchemy_v1_alchemy_proto_rawDescData []byte
+	file_alchemy_v1_alchemy_proto_rawDescOnce sync.Once
+	file_alchemy_v1_alchemy_proto_rawDescData []byte
 )
 
-func file_proto_alchemy_v1_alchemy_proto_rawDescGZIP() []byte {
-	file_proto_alchemy_v1_alchemy_proto_rawDescOnce.Do(func() {
-		file_proto_alchemy_v1_alchemy_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_alchemy_v1_alchemy_proto_rawDesc), len(file_proto_alchemy_v1_alchemy_proto_rawDesc)))
+func file_alchemy_v1_alchemy_proto_rawDescGZIP() []byte {
+	file_alchemy_v1_alchemy_proto_rawDescOnce.Do(func() {
+		file_alchemy_v1_alchemy_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_alchemy_v1_alchemy_proto_rawDesc), len(file_alchemy_v1_alchemy_proto_rawDesc)))
 	})
-	return file_proto_alchemy_v1_alchemy_proto_rawDescData
+	return file_alchemy_v1_alchemy_proto_rawDescData
 }
 
-var file_proto_alchemy_v1_alchemy_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_proto_alchemy_v1_alchemy_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
-var file_proto_alchemy_v1_alchemy_proto_goTypes = []any{
+var file_alchemy_v1_alchemy_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
+var file_alchemy_v1_alchemy_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_alchemy_v1_alchemy_proto_goTypes = []any{
 	(JobState)(0),                 // 0: alchemy.v1.JobState
 	(SourceKind)(0),               // 1: alchemy.v1.SourceKind
 	(Producer)(0),                 // 2: alchemy.v1.Producer
@@ -3474,7 +3475,7 @@ var file_proto_alchemy_v1_alchemy_proto_goTypes = []any{
 	(*structpb.Struct)(nil),       // 42: google.protobuf.Struct
 	(*emptypb.Empty)(nil),         // 43: google.protobuf.Empty
 }
-var file_proto_alchemy_v1_alchemy_proto_depIdxs = []int32{
+var file_alchemy_v1_alchemy_proto_depIdxs = []int32{
 	40, // 0: alchemy.v1.ModelEndpoint.options:type_name -> alchemy.v1.ModelEndpoint.OptionsEntry
 	8,  // 1: alchemy.v1.Models.llm:type_name -> alchemy.v1.ModelEndpoint
 	8,  // 2: alchemy.v1.Models.embedder:type_name -> alchemy.v1.ModelEndpoint
@@ -3561,27 +3562,27 @@ var file_proto_alchemy_v1_alchemy_proto_depIdxs = []int32{
 	0,  // [0:63] is the sub-list for field type_name
 }
 
-func init() { file_proto_alchemy_v1_alchemy_proto_init() }
-func file_proto_alchemy_v1_alchemy_proto_init() {
-	if File_proto_alchemy_v1_alchemy_proto != nil {
+func init() { file_alchemy_v1_alchemy_proto_init() }
+func file_alchemy_v1_alchemy_proto_init() {
+	if File_alchemy_v1_alchemy_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_alchemy_v1_alchemy_proto_rawDesc), len(file_proto_alchemy_v1_alchemy_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alchemy_v1_alchemy_proto_rawDesc), len(file_alchemy_v1_alchemy_proto_rawDesc)),
 			NumEnums:      8,
 			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_proto_alchemy_v1_alchemy_proto_goTypes,
-		DependencyIndexes: file_proto_alchemy_v1_alchemy_proto_depIdxs,
-		EnumInfos:         file_proto_alchemy_v1_alchemy_proto_enumTypes,
-		MessageInfos:      file_proto_alchemy_v1_alchemy_proto_msgTypes,
+		GoTypes:           file_alchemy_v1_alchemy_proto_goTypes,
+		DependencyIndexes: file_alchemy_v1_alchemy_proto_depIdxs,
+		EnumInfos:         file_alchemy_v1_alchemy_proto_enumTypes,
+		MessageInfos:      file_alchemy_v1_alchemy_proto_msgTypes,
 	}.Build()
-	File_proto_alchemy_v1_alchemy_proto = out.File
-	file_proto_alchemy_v1_alchemy_proto_goTypes = nil
-	file_proto_alchemy_v1_alchemy_proto_depIdxs = nil
+	File_alchemy_v1_alchemy_proto = out.File
+	file_alchemy_v1_alchemy_proto_goTypes = nil
+	file_alchemy_v1_alchemy_proto_depIdxs = nil
 }
