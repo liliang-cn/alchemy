@@ -24,8 +24,14 @@ import (
 // the document used, because the ID exists to join facts and the name exists
 // to show a person what was said.
 func entityID(typ, name string) string {
-	return foldKey(typ) + ":" + foldKey(name)
+	return foldKey(typ) + idSeparator + foldKey(name)
 }
+
+// idSeparator divides the folded type from the folded name. It is a constant
+// rather than a literal because resolveID reads it back: an ID whose type half
+// is empty is an unresolved untyped end, and that is only true if both halves
+// of the convention are written in one place.
+const idSeparator = ":"
 
 // foldKey lowercases and collapses runs of whitespace. Models re-wrap names
 // across a line break more often than they misspell them.
@@ -189,7 +195,60 @@ func copyAttributes(in map[string]any) map[string]any {
 	return out
 }
 
-// relationOf turns one proposed relation into an edge between entity IDs.
+// relationsOf turns one reply's relations into edges, with each end resolved
+// as far as this chunk on its own can resolve it.
+//
+// "As far as this chunk can" is the whole of the split between this function
+// and merger.resolveEnds, and the split exists because of the cache (§8.2). An
+// edge is content-addressed by the chunk that proposed it, so whatever is
+// stored under that address has to be a function of that chunk alone. The
+// job-wide half of the resolution — an end that names a thing some other chunk
+// introduced — is deliberately left undone here and finished at merge time, in
+// the job the entry is being used in rather than the job that paid for it.
+// Storing the finished IDs instead would freeze one job's answer into the
+// address: the same paragraph reused where "SuperAI" is a Node rather than a
+// Cluster would come back pointing at the Cluster, and a resumed job would
+// stop being identical to a fresh one, which is what the cache is for.
+func relationsOf(c alchemy.Chunk, r reply, opts Options) []alchemy.Relation {
+	out := make([]alchemy.Relation, 0, len(r.Relations))
+	for _, rr := range r.Relations {
+		// An end that is neither a name nor an object is not dropped: it is
+		// resolved to an ID nothing carries, so the edge arrives at the
+		// verifier as a dangling relation with its chunk attached. A dropped
+		// edge is invisible; a dangling one is a line in a report.
+		from, _ := endOf(rr.From, rr.FromType)
+		to, _ := endOf(rr.To, rr.ToType)
+		out = append(out, alchemy.Relation{
+			From:       localEnd(from),
+			To:         localEnd(to),
+			Type:       rr.Type,
+			Attributes: copyAttributes(rr.Attributes),
+			Provenance: provenanceFor(c, opts, rr.Confidence),
+		})
+	}
+	return out
+}
+
+// localEnd is the part of end resolution that needs nothing but the end.
+//
+// A typed end needs no lookup at all: type and name are exactly what entityID
+// is a function of, so an end the model typed lands on the same ID as the
+// entity of that name wherever it was listed — including in a chunk this reply
+// never saw.
+//
+// An untyped end becomes entityID("", name), which is both the answer when
+// nothing better is found and the marker that something better may exist:
+// entityID puts the folded type first, and a typed end's type is non-empty by
+// construction, so an ID beginning with the separator is an end still waiting
+// on the rest of the job. See resolveEnds.
+func localEnd(e end) string {
+	if strings.TrimSpace(e.Type) != "" {
+		return entityID(e.Type, e.Name)
+	}
+	return entityID("", e.Name)
+}
+
+// resolveEnds finishes the ends localEnd could not.
 //
 // It runs after every chunk's entities have been merged, which is the whole
 // reason relations are resolved in a second pass: a relation in chunk 1 may
@@ -197,43 +256,29 @@ func copyAttributes(in map[string]any) map[string]any {
 // introduces. Resolving as the replies arrived would join the first and break
 // the second, and which of the two a corpus hits would depend on the order the
 // author happened to write their sections in.
-func (m *merger) relationOf(c alchemy.Chunk, rr rawRelation, opts Options) alchemy.Relation {
-	// An end that is neither a name nor an object is not dropped: it is
-	// resolved to an ID nothing carries, so the edge arrives at the verifier as
-	// a dangling relation with its chunk attached. A dropped edge is invisible;
-	// a dangling one is a line in a report.
-	from, _ := endOf(rr.From, rr.FromType)
-	to, _ := endOf(rr.To, rr.ToType)
-	return alchemy.Relation{
-		From:       m.resolveEnd(from),
-		To:         m.resolveEnd(to),
-		Type:       rr.Type,
-		Attributes: copyAttributes(rr.Attributes),
-		Provenance: provenanceFor(c, opts, rr.Confidence),
-	}
+func (m *merger) resolveEnds(r alchemy.Relation) alchemy.Relation {
+	r.From = m.resolveID(r.From)
+	r.To = m.resolveID(r.To)
+	return r
 }
 
-// resolveEnd turns one end into an entity ID.
+// resolveID matches an untyped end by name, and only when the match is unique.
 //
-// A typed end needs no lookup: type and name are exactly what entityID is a
-// function of, so an end the model typed lands on the same ID as the entity of
-// that name wherever it was listed — including in a chunk this reply never saw.
-//
-// An untyped end is matched by name, and only when the match is unique. Two
-// entities sharing a name is precisely the case where picking one is a guess,
-// and §2.1's second lesson is that a guess which does not announce itself is a
-// bug with a three-month fuse. The alternative to guessing is not dropping the
-// edge: it is an ID nothing carries, which the verifier returns as
+// Two entities sharing a name is precisely the case where picking one is a
+// guess, and §2.1's second lesson is that a guess which does not announce
+// itself is a bug with a three-month fuse. The alternative to guessing is not
+// dropping the edge: it is an ID nothing carries, which the verifier returns as
 // alchemy.ViolationDanglingRelation naming the chunk. Wrong and visible beats
 // wrong and confident.
-func (m *merger) resolveEnd(e end) string {
-	if strings.TrimSpace(e.Type) != "" {
-		return entityID(e.Type, e.Name)
+func (m *merger) resolveID(id string) string {
+	name, untyped := strings.CutPrefix(id, idSeparator)
+	if !untyped {
+		return id
 	}
-	if ids := m.byName[foldKey(e.Name)]; len(ids) == 1 {
+	if ids := m.byName[name]; len(ids) == 1 {
 		return ids[0]
 	}
-	return entityID("", e.Name)
+	return id
 }
 
 // addRelation merges one edge into the graph. Two chunks asserting the same

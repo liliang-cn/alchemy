@@ -26,6 +26,10 @@ func (r *run) extract(ctx context.Context) error {
 			LLM:        r.req.Models.LLM,
 			Vocabulary: r.vocabulary,
 			OntologyID: r.ontologyID,
+			// §8.2. Nil is caching off, and pkg/cache contracts that a broken
+			// cache is a miss rather than a failed job, so there is nothing
+			// for this package to decide about it.
+			Cache: r.req.Cache,
 		})
 		// The Result comes back whether or not the error did, and everything
 		// in it is kept for the same reason: a failed run's cost, the chunks

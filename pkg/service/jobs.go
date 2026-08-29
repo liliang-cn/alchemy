@@ -82,6 +82,14 @@ func (s *Server) specOf(req *alchemyv1.CreateJobRequest) (JobSpec, error) {
 	return JobSpec{
 		Sources:  sources,
 		Ontology: req.GetOntology(),
+		// Carried, not interpreted. An empty part means prose and a part the
+		// ontology does not declare is refused, but both of those are
+		// statements about a vocabulary, and this layer has a JSON string
+		// rather than a vocabulary. pkg/ontology holds the closed set of names
+		// and the list of what this document actually declares, which is what
+		// the refusal has to say; a second opinion here would be a second
+		// closed set to keep in step with it.
+		Part: req.GetPart(),
 		Models: Models{
 			LLM:      modelFromProto(req.GetModels().GetLlm()),
 			Embedder: modelFromProto(req.GetModels().GetEmbedder()),

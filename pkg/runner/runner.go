@@ -19,6 +19,7 @@ import (
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/budget"
+	"github.com/liliang-cn/alchemy/pkg/cache"
 	"github.com/liliang-cn/alchemy/pkg/pipeline"
 	"github.com/liliang-cn/alchemy/pkg/service"
 )
@@ -47,6 +48,15 @@ type Config struct {
 	// (§8.2). Nil is a single node with no declared endpoint limit, which is
 	// what a buyer evaluating the product runs.
 	Budget budget.Budget
+	// Cache is §8.2's content-addressed store for extraction results, and it
+	// is optional. Nil is caching off.
+	//
+	// It is per-process rather than per-job because it is a property of the
+	// deployment: one node evaluating the product has an in-process one, and a
+	// cluster shares a store (§8.3). Nothing a caller sends can turn it on or
+	// off, which is deliberate — a cache is an operator's decision about money,
+	// and pkg/cache guarantees it cannot change what a job returns.
+	Cache cache.Cache
 }
 
 // Runner implements service.Runner on top of pipeline.Run.
@@ -93,6 +103,10 @@ func (r *Runner) Run(ctx context.Context, jobID string, spec service.JobSpec, ev
 	// pkg/budget allows — the pipeline wraps the models with it before the
 	// first stage runs, so no stage learns a budget exists.
 	req.Budget = r.cfg.Budget
+	// §8.2: "paying twice for the identical call after a crash is a bug." The
+	// pipeline hands this to the extractor, which is the only stage that buys
+	// anything cacheable.
+	req.Cache = r.cfg.Cache
 
 	// The pipeline owns its own channel: it closes the one it is given, and
 	// the service's is closed by the service. Bridging them is what keeps both

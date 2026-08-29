@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/cache"
 	"github.com/liliang-cn/alchemy/pkg/ontology"
 )
 
@@ -42,6 +43,12 @@ type Options struct {
 	OntologyID string
 	// Concurrency bounds the calls in flight. See defaultConcurrency.
 	Concurrency int
+	// Cache is §8.2's content-addressed store, and it is optional. Nil is
+	// caching off — the buyer running this for the first time, and every test
+	// that has no opinion about it — because a cache is an optimisation and an
+	// optimisation that has to be configured before the thing works is not
+	// optional at all. See cache.Fetch for what a nil one does.
+	Cache cache.Cache
 }
 
 // Result is what one extraction run produced, and the numbers needed to
@@ -124,7 +131,13 @@ func Extract(ctx context.Context, chunks []alchemy.Chunk, opts Options) (Result,
 // is what makes the output independent of Concurrency (§7, §8.2).
 type chunkOutcome struct {
 	chunk alchemy.Chunk
-	reply reply
+	// entities and relations are this chunk's proposal, already carrying
+	// identity and provenance. They are held in the finished types rather than
+	// as the raw reply because that is what the cache stores: a cache.Entry is
+	// entities and relations, so the conversion has to happen before the entry
+	// is written and cannot happen again after one is read.
+	entities  []alchemy.Entity
+	relations []alchemy.Relation
 	// unread is set when the call failed or the reply could not be read. When
 	// it is set, nothing else on this outcome is used.
 	unread *alchemy.Unread
@@ -152,7 +165,90 @@ func extractChunk(ctx context.Context, c alchemy.Chunk, sys string, opts Options
 		out.unread = unreadChunk(c, err.Error())
 		return out
 	}
-	out.reply = r
+	out.entities = entitiesOf(c, r, opts)
+	out.relations = relationsOf(c, r, opts)
+	return out
+}
+
+// errNotBought is how the producer below tells cache.Fetch not to store what
+// it just returned. It never reaches a caller: Fetch returns a producer's
+// error unchanged, and cachedOutcome turns it back into the outcome the chunk
+// actually had.
+//
+// It exists because a chunk that could not be read has no answer to cache, and
+// caching the absence would make that failure permanent for the content
+// address — a rate limit at 3am becoming "this paragraph contains nothing",
+// for every job that ever sees this paragraph again. That is the one bug worse
+// than paying for the call twice.
+var errNotBought = errors.New("extract: this chunk produced no answer to cache")
+
+// cachedOutcome is one chunk's work, taken from the cache when it is there and
+// bought when it is not.
+//
+// The address is the key §8.2 names: the chunk text, the model, the ontology
+// version and the prompt version. Everything else about a chunk — which source
+// it came from, its index, the strategy that cut it — is provenance rather than
+// question, so it is restamped on the way out rather than keyed on. See
+// adoptedBy.
+func cachedOutcome(ctx context.Context, c alchemy.Chunk, sys string, opts Options) chunkOutcome {
+	var bought chunkOutcome
+	// The error is discarded rather than inspected: errNotBought is the only
+	// error this producer can return, and the unread it stands for is already
+	// on bought, along with the call that bought it.
+	entry, hit, _ := cache.Fetch(ctx, opts.Cache, keyFor(c, opts), func(ctx context.Context) (cache.Entry, error) {
+		bought = extractChunk(ctx, c, sys, opts)
+		if bought.unread != nil {
+			return cache.Entry{}, errNotBought
+		}
+		return cache.Entry{Entities: bought.entities, Relations: bought.relations, Tokens: bought.tokens}, nil
+	})
+	if !hit {
+		return bought
+	}
+	// calls and tokens stay zero. §7.2 obliges the job to report what it spent,
+	// and a chunk that spent nothing this time is not spend: reporting the
+	// original call again would invent a bill for money nobody paid. The number
+	// is still in the entry, for a caller that wants to say what the graph cost
+	// to produce rather than what this run cost to make.
+	return adoptedBy(c, entry, opts)
+}
+
+// keyFor is the content address of one chunk's extraction (§8.2).
+//
+// The ontology is named by its ID rather than by its contents because §5b
+// requires that ID to carry a version — "sds@3" — so a vocabulary that changed
+// is an ontology that was reversioned, and an ontology that was not
+// reversioned is one whose rules did not move.
+func keyFor(c alchemy.Chunk, opts Options) cache.Key {
+	return cache.Key{
+		Chunk:    c.Text,
+		Model:    opts.LLM.Name(),
+		Ontology: opts.OntologyID,
+		Prompt:   PromptVersion,
+	}
+}
+
+// adoptedBy turns a cached entry into this run's outcome for chunk c.
+//
+// The model's opinion is kept — the types, the names, the attributes, the
+// confidence it gave — and the provenance is rebuilt from the chunk in front of
+// us. That is not bookkeeping: §5b makes "every entity and relation can name
+// the source, the chunk and the producer it came from" a product guarantee, and
+// the address is a hash of the text, so the same paragraph appearing in two
+// documents shares one entry. Returning the stored provenance would cite
+// whichever document happened to be imported first, which is a citation that
+// points at a real document and the wrong one — the failure §5b exists to
+// prevent, arriving through an optimisation.
+func adoptedBy(c alchemy.Chunk, e cache.Entry, opts Options) chunkOutcome {
+	out := chunkOutcome{chunk: c}
+	for _, ent := range e.Entities {
+		ent.Provenance = provenanceFor(c, opts, ent.Provenance.Confidence)
+		out.entities = append(out.entities, ent)
+	}
+	for _, rel := range e.Relations {
+		rel.Provenance = provenanceFor(c, opts, rel.Provenance.Confidence)
+		out.relations = append(out.relations, rel)
+	}
 	return out
 }
 
@@ -176,25 +272,24 @@ func assemble(outcomes []chunkOutcome, opts Options) Result {
 			res.Unread = append(res.Unread, *o.unread)
 			continue
 		}
-		ents := entitiesOf(o.chunk, o.reply, opts)
-		if len(ents) == 0 && len(o.reply.Relations) == 0 {
+		if len(o.entities) == 0 && len(o.relations) == 0 {
 			// Read, and honestly nothing in it. §5 wants this counted rather
 			// than inferred from a short entity list.
 			res.ChunksEmpty++
 			continue
 		}
-		for _, e := range ents {
+		for _, e := range o.entities {
 			m.add(e)
 		}
 	}
 	// Relations are resolved only once every chunk's entities are known; see
-	// merger.relationOf.
+	// merger.resolveEnds.
 	for _, o := range outcomes {
 		if o.unread != nil {
 			continue
 		}
-		for _, rr := range o.reply.Relations {
-			m.addRelation(m.relationOf(o.chunk, rr, opts))
+		for _, r := range o.relations {
+			m.addRelation(m.resolveEnds(r))
 		}
 	}
 	res.Entities = m.entities()
@@ -255,7 +350,7 @@ func run(ctx context.Context, chunks []alchemy.Chunk, opts Options) []chunkOutco
 				out[i] = chunkOutcome{chunk: c, unread: unreadChunk(c, err.Error())}
 				return
 			}
-			out[i] = extractChunk(ctx, c, sys, opts)
+			out[i] = cachedOutcome(ctx, c, sys, opts)
 		}(i, c)
 	}
 	wg.Wait()

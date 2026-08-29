@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/liliang-cn/alchemy/pkg/budget"
+	"github.com/liliang-cn/alchemy/pkg/cache"
 	"github.com/liliang-cn/alchemy/pkg/job"
 	"github.com/liliang-cn/alchemy/pkg/runner"
 	"github.com/liliang-cn/alchemy/pkg/service"
@@ -30,7 +31,7 @@ func build(s settings, token string) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	run, err := runner.New(runner.Config{Factory: modelFactory{}, Budget: b})
+	run, err := runner.New(runner.Config{Factory: modelFactory{}, Budget: b, Cache: extractCache(s)})
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +78,22 @@ func modelBudget(s settings) (budget.Budget, error) {
 		return nil, fmt.Errorf("alchemy: -model-concurrency: %w", err)
 	}
 	return b, nil
+}
+
+// extractCache builds §8.2's content-addressed store for extraction results.
+//
+// Zero or negative is no cache at all rather than a cache of size zero.
+// cache.NewMemory(0) is a legitimate value — it returns a working Cache that
+// stores nothing — and using it here would be the subtle wrong answer: the
+// extractor would consult a store for every chunk, miss, and store nothing,
+// paying for the lookup on every chunk of every job forever, and paying it
+// over a network the day the store is the shared one §8.3 describes. Off is
+// expressed by having nothing, the same way modelBudget expresses it.
+func extractCache(s settings) cache.Cache {
+	if s.extractCache <= 0 {
+		return nil
+	}
+	return cache.NewMemory(s.extractCache)
 }
 
 // serve runs until ctx is cancelled, then stops in the order that makes a

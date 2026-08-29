@@ -22,6 +22,7 @@ func startupLine(s settings, token string) string {
 	fmt.Fprintf(&b, " spool=%s", spoolLabel(s.spool))
 	fmt.Fprintf(&b, " store=%s capacity=%d sweep=%s", storeMemory, s.capacity, s.sweepEvery)
 	fmt.Fprintf(&b, " model-concurrency=%s", concurrencyLabel(s.modelConcurrency))
+	fmt.Fprintf(&b, " extract-cache=%s", cacheLabel(s.extractCache))
 	// The only thing said about the token is that there is one.
 	fmt.Fprintf(&b, " auth=%s", authLabel(token))
 	return b.String()
@@ -41,6 +42,17 @@ func spoolLabel(dir string) string {
 func concurrencyLabel(n int) string {
 	if n <= 0 {
 		return "unlimited"
+	}
+	return fmt.Sprint(n)
+}
+
+// cacheLabel spells the zero out too, and spells it "off" rather than
+// "unlimited" — the opposite of concurrencyLabel, because the two zeroes mean
+// opposite things. A budget of zero is no ceiling; a cache of zero is no cache.
+// Printing "0" for both would let one glance answer the wrong question.
+func cacheLabel(n int) string {
+	if n <= 0 {
+		return "off"
 	}
 	return fmt.Sprint(n)
 }

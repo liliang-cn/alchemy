@@ -221,6 +221,19 @@ message CreateJobRequest {
   // answers are expensive: retry and a 10GB dump is imported twice, give up
   // and the night's work is silently lost.
   string idempotency_key = 6;
+  // Which part of the ontology this corpus is read under and checked against.
+  // The ontology is partitioned by provenance (§2.1's third lesson): telling a
+  // prose extractor it may emit `function` and `calls` invites it to invent
+  // code structure out of documentation, so a job names one part and gets one
+  // vocabulary.
+  //
+  // Empty means "prose". That is a decision, not a placeholder: §5's first
+  // release is documents and entity extraction, a document is prose, and every
+  // request written before this field existed meant a prose job. A required
+  // field would have invalidated all of them, and proto3 gives no way to tell
+  // an unset string from an empty one — so the default has to be the meaning
+  // those callers already had rather than a refusal they never asked for.
+  string part = 7;
 }
 
 message Job {

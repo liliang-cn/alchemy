@@ -114,6 +114,22 @@ type Models struct {
 type JobSpec struct {
 	Sources  []Source
 	Ontology string
+	// Part names which vocabulary of the ontology this corpus is extracted
+	// under and verified against. It is a string rather than an ontology.Part
+	// so that the wire layer keeps its one property: a Runner built against
+	// this never learns that gRPC exists, and this package never learns what an
+	// ontology is. The closed set of names lives in pkg/ontology, and a name
+	// outside it is refused there, where the list of what the document actually
+	// declares is in hand.
+	//
+	// Empty means prose. That is a decision and not a fallback: §5 puts
+	// documents and entity extraction in the first release, prose is what a
+	// document is, and every caller that has ever created a job was creating a
+	// prose job. Making the new field required would have made the old requests
+	// invalid, and making the zero value mean something other than what every
+	// existing caller meant is how a compatible-looking change breaks a running
+	// binary.
+	Part     string
 	Models   Models
 	Chunking Chunking
 	Review   review.Options

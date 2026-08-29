@@ -874,8 +874,21 @@ type CreateJobRequest struct {
 	// answers are expensive: retry and a 10GB dump is imported twice, give up
 	// and the night's work is silently lost.
 	IdempotencyKey string `protobuf:"bytes,6,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Which part of the ontology this corpus is read under and checked against.
+	// The ontology is partitioned by provenance (§2.1's third lesson): telling a
+	// prose extractor it may emit `function` and `calls` invites it to invent
+	// code structure out of documentation, so a job names one part and gets one
+	// vocabulary.
+	//
+	// Empty means "prose". That is a decision, not a placeholder: §5's first
+	// release is documents and entity extraction, a document is prose, and every
+	// request written before this field existed meant a prose job. A required
+	// field would have invalidated all of them, and proto3 gives no way to tell
+	// an unset string from an empty one — so the default has to be the meaning
+	// those callers already had rather than a refusal they never asked for.
+	Part          string `protobuf:"bytes,7,opt,name=part,proto3" json:"part,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateJobRequest) Reset() {
@@ -946,6 +959,13 @@ func (x *CreateJobRequest) GetReview() *ReviewOptions {
 func (x *CreateJobRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *CreateJobRequest) GetPart() string {
+	if x != nil {
+		return x.Part
 	}
 	return ""
 }
@@ -3111,7 +3131,7 @@ const file_proto_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x05shape\x18\x01 \x01(\tR\x05shape\x12*\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.alchemy.v1.ReviewKindR\x04kind\x12.\n" +
 	"\x04from\x18\x03 \x01(\v2\x1a.alchemy.v1.ReviewDecisionR\x04from\x12\x18\n" +
-	"\abecause\x18\x04 \x01(\tR\abecause\"\x87\x02\n" +
+	"\abecause\x18\x04 \x01(\tR\abecause\"\x9b\x02\n" +
 	"\x10CreateJobRequest\x12\x1d\n" +
 	"\n" +
 	"source_ids\x18\x01 \x03(\tR\tsourceIds\x12\x1a\n" +
@@ -3119,7 +3139,8 @@ const file_proto_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x06models\x18\x03 \x01(\v2\x12.alchemy.v1.ModelsR\x06models\x120\n" +
 	"\bchunking\x18\x04 \x01(\v2\x14.alchemy.v1.ChunkingR\bchunking\x121\n" +
 	"\x06review\x18\x05 \x01(\v2\x19.alchemy.v1.ReviewOptionsR\x06review\x12'\n" +
-	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\"\xe3\x01\n" +
+	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\x12\x12\n" +
+	"\x04part\x18\a \x01(\tR\x04part\"\xe3\x01\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x14.alchemy.v1.JobStateR\x05state\x129\n" +

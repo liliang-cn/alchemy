@@ -27,6 +27,9 @@ type settings struct {
 	// single node with no declared endpoint limit that a buyer evaluating the
 	// product runs.
 	modelConcurrency int
+	// extractCache is how many chunk extractions §8.2's cache holds. Zero or
+	// negative is no cache; see extractCache in server.go.
+	extractCache int
 }
 
 // envToken is where the credential is read from when no file is named.
@@ -84,6 +87,14 @@ const (
 	defaultCapacity         = 64
 	defaultSweep            = time.Minute
 	defaultModelConcurrency = 8
+	// defaultExtractCache is on rather than off, which is the one default in
+	// this file that costs memory by default and is still the right way round.
+	// §8.2 calls paying twice for the identical call after a crash a bug, and a
+	// bug that has to be configured away is a bug the first buyer meets. The
+	// number is entries, not bytes, because that is what the LRU counts: a few
+	// thousand chunks is a large document's worth of extractions and tens of
+	// megabytes, which is cheap next to the model calls it stops.
+	defaultExtractCache = 4096
 )
 
 // parseFlags reads the settings from the command line, falling back to the
@@ -111,6 +122,11 @@ func parseFlags(args []string, getenv func(string) string, out io.Writer) (setti
 	capacity := fs.Int("capacity", 0, "how many live jobs to hold before refusing more")
 	sweep := fs.Duration("sweep", 0, "how often expired work is swept")
 	concurrency := fs.Int("model-concurrency", -1, "calls in flight per model endpoint (0 turns the budget off)")
+	// -1 is "the operator said nothing", so that 0 can mean what it says. A
+	// zero default would make this flag able to enlarge the cache and never to
+	// remove it, which is the half of the setting an operator reaches for when
+	// they are trying to reproduce a run.
+	extract := fs.Int("extract-cache", -1, "chunk extractions to cache (0 turns the cache off)")
 
 	if err := fs.Parse(args); err != nil {
 		return settings{}, err
@@ -121,6 +137,9 @@ func parseFlags(args []string, getenv func(string) string, out io.Writer) (setti
 		return settings{}, err
 	}
 	if s.modelConcurrency, err = pick(*concurrency, -1, getenv, "ALCHEMY_MODEL_CONCURRENCY", defaultModelConcurrency, atoi); err != nil {
+		return settings{}, err
+	}
+	if s.extractCache, err = pick(*extract, -1, getenv, "ALCHEMY_EXTRACT_CACHE", defaultExtractCache, atoi); err != nil {
 		return settings{}, err
 	}
 	if s.sweepEvery, err = pick(*sweep, 0, getenv, "ALCHEMY_SWEEP", defaultSweep, time.ParseDuration); err != nil {

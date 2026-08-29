@@ -27,7 +27,7 @@ func buildRequest(spec service.JobSpec, in service.Inbox) (pipeline.Request, err
 	return pipeline.Request{
 		Sources:  sourcesOf(spec.Sources),
 		Ontology: onto,
-		Part:     ontology.PartProse,
+		Part:     partOf(spec.Part),
 		Chunking: chunkingOf(spec.Chunking),
 
 		Reviewing:     spec.Review.Reviewing,
@@ -37,6 +37,28 @@ func buildRequest(spec service.JobSpec, in service.Inbox) (pipeline.Request, err
 		// costs and what it does not.
 		Decisions: decisionsOf(in),
 	}, nil
+}
+
+// partOf is which vocabulary of the ontology this corpus is read under.
+//
+// Empty means prose, and that default is load-bearing rather than tidy. §5's
+// first release is documents and entity extraction; a document is prose; and
+// every job ever created against this service was created before this field
+// existed, so the meaning of "unstated" has to be the meaning those jobs
+// already had. A default of "refuse" would be correct in the abstract and would
+// break every running client, and a default of "whatever the ontology declares
+// first" would make the vocabulary a job is checked against depend on the order
+// somebody wrote a JSON file in.
+//
+// A name that is not a part is passed through rather than corrected here.
+// ontology.Vocabulary refuses it, and it refuses it holding the list of parts
+// the document does declare — which is the error message the operator needs,
+// and one this function could not write.
+func partOf(name string) ontology.Part {
+	if name == "" {
+		return ontology.PartProse
+	}
+	return ontology.Part(name)
 }
 
 // chunkingOf carries §7.1's choice across unchanged, zeroes included.

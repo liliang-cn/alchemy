@@ -29,6 +29,7 @@ import (
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/budget"
+	"github.com/liliang-cn/alchemy/pkg/cache"
 	"github.com/liliang-cn/alchemy/pkg/chunk"
 	"github.com/liliang-cn/alchemy/pkg/ontology"
 	"github.com/liliang-cn/alchemy/pkg/review"
@@ -101,6 +102,16 @@ type Request struct {
 	// knows a budget exists. Nil is a single node with no declared endpoint
 	// limit, which is what a buyer evaluating the product runs.
 	Budget budget.Budget
+	// Cache is §8.2's content-addressed store for extraction results, and it
+	// is optional. Nil is caching off.
+	//
+	// It belongs to the job rather than to the process because the thing that
+	// knows a run is a resumption — the same corpus, after a crash or an
+	// expired lease (§8.3) — is the caller that scheduled it, and because a
+	// shared store is the cluster's, not this node's. §7.2 said cost is not
+	// optimised for; §8.2 draws the line that does not cross: "paying twice for
+	// the identical call after a crash is a bug."
+	Cache cache.Cache
 	// Mapping is the caller's column mapping for tabular sources. Supplying it
 	// is §2.1's determinism-first rule taken at its word: a mapping the caller
 	// states is a mapping nobody guessed, and the run makes no model call and
