@@ -47,7 +47,15 @@ func build(s settings, token string) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	gs := grpc.NewServer()
+	// The service exposes the credential check; installing it is the binary's
+	// job, and forgetting to is not a compile error — the program starts, every
+	// RPC works, and it serves the caller's graph to anyone who asks. Both
+	// interceptors are needed: unary and streaming are separate chains, and an
+	// UploadSource that skipped the check would be the one that mattered.
+	gs := grpc.NewServer(
+		grpc.UnaryInterceptor(svc.UnaryInterceptor()),
+		grpc.StreamInterceptor(svc.StreamInterceptor()),
+	)
 	alchemyv1.RegisterAlchemyServer(gs, svc)
 	return &server{grpc: gs, svc: svc}, nil
 }

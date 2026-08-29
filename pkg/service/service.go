@@ -13,6 +13,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -125,6 +126,15 @@ func New(cfg Config) (*Server, error) {
 			return nil, err
 		}
 		cfg.Spool = dir
+	} else if err := os.MkdirAll(cfg.Spool, 0o700); err != nil {
+		// A named spool is created here rather than assumed, because the
+		// alternative fails at the first upload: an operator who points at a
+		// path under /var/lib gets a clean start, a green log line, and an
+		// Internal error on their first source — which reads as a bug in
+		// uploading rather than as a directory that was never made. 0o700
+		// because a spooled corpus is the caller's data and nothing outside
+		// this process has business reading it.
+		return nil, fmt.Errorf("service: spool %q: %w", cfg.Spool, err)
 	}
 	if cfg.MaxResultBytes <= 0 {
 		cfg.MaxResultBytes = defaultMaxResultBytes
