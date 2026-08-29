@@ -81,3 +81,26 @@ func (r *rules) allowsRelation(typ, from, to string) (bool, string) {
 	r.endpoints[k] = verdict{ok: ok, reason: reason}
 	return ok, reason
 }
+
+// governs reports whether an ontology is in force for this input.
+//
+// The question is not "does the vocabulary declare anything" but "was an
+// ontology claimed", and the difference decides whether an empty vocabulary is
+// silence or a fault:
+//
+//   - An OntologyID with nothing in it is a broken ontology — it was named, so
+//     something was meant to be there. Everything is rejected loudly, which is
+//     §5's "there is no unconstrained mode" doing its job: a document import
+//     whose vocabulary failed to arrive must not quietly deliver the 74% graph.
+//   - Neither an ID nor a vocabulary is a job that never claimed one. §5
+//     requires an ontology only for document sources, so a DDL or graph import
+//     legitimately arrives with none, and the rule that would have been broken
+//     does not exist. (The document-source requirement is enforced upstream in
+//     pipeline.validate, before a model is called — this package does not
+//     re-decide who owed an ontology.)
+//
+// It is a question about the input rather than a mode: a caller does not turn
+// ontology checking off, and the one place the distinction is read is here.
+func (r *rules) governs() bool {
+	return r.ontologyID != "" || len(r.vocab.Entities) > 0 || len(r.vocab.Relations) > 0
+}

@@ -20,7 +20,22 @@ import (
 func violations(entities []alchemy.Entity, relations []alchemy.Relation, types map[string]string, rs *rules) []alchemy.Violation {
 	var out []alchemy.Violation
 
+	// An absent vocabulary means there are no ontology rules, not that every
+	// type is undeclared. §5 requires an ontology only for document sources, so
+	// a DDL or graph import legitimately arrives with none — and reporting one
+	// violation per table, each saying an ontology nobody supplied disallows
+	// what a CREATE TABLE stated, would fill §5's obligation to report the
+	// numbers needed to distrust a graph with a number that means nothing.
+	//
+	// It narrows the walk rather than skipping it: dangling ends are structural,
+	// not ontological, and an edge naming an entity the result does not contain
+	// corrupts every walker whatever vocabulary is in force.
+	governed := rs.governs()
+
 	for _, e := range entities {
+		if !governed {
+			break
+		}
 		if _, ok := rs.canonicalEntity(e.Type); ok {
 			continue
 		}
@@ -42,7 +57,7 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 		// through AllowsRelation, because it is true regardless of the ends: the
 		// fix is to widen the ontology or retype the edge, and naming endpoints
 		// that were never consulted would point at the wrong thing.
-		if !knownType {
+		if !knownType && governed {
 			out = append(out, alchemy.Violation{
 				Kind:       alchemy.ViolationUnknownRelationType,
 				Subject:    edge(r),
@@ -64,8 +79,9 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 			continue
 		}
 
-		if !knownType {
-			continue // already reported; AllowsRelation would only repeat it.
+		if !governed || !knownType {
+			continue // ungoverned, or already reported; either way there is no
+			// endpoint rule left to consult.
 		}
 		if ok, reason := rs.allowsRelation(r.Type, types[r.From], types[r.To]); !ok {
 			out = append(out, alchemy.Violation{

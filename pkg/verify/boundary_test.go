@@ -57,14 +57,37 @@ func TestNothingIsDroppedFromTheGraph(t *testing.T) {
 // §5: "Supplying an ontology is required for document sources. There is no
 // unconstrained mode." A vocabulary that declares nothing therefore rejects
 // everything loudly rather than waving it through.
-func TestAnEmptyVocabularyRejectsEverything(t *testing.T) {
+// The precondition here was narrowed after pkg/pipeline hit the other half of
+// it: §5 requires an ontology for document sources, so a DDL-only job has none
+// and every one of its tables was arriving as a violation of rules nobody
+// declared. What makes an empty vocabulary a fault is that an ontology was
+// *claimed* — an ID with nothing behind it is a vocabulary that failed to
+// arrive, and waving that through is exactly the unconstrained mode §5 forbids.
+// See rules.governs for the full split.
+func TestAnEmptyVocabularyUnderAClaimedOntologyRejectsEverything(t *testing.T) {
 	got := verify.Check(verify.Input{
-		Entities:  []alchemy.Entity{{ID: "c1", Type: "Cluster"}},
-		Relations: []alchemy.Relation{{From: "c1", To: "c1", Type: "CONTAINS"}},
+		Entities:   []alchemy.Entity{{ID: "c1", Type: "Cluster"}},
+		Relations:  []alchemy.Relation{{From: "c1", To: "c1", Type: "CONTAINS"}},
+		OntologyID: "sds@3",
 	})
 
 	if len(got.Violations) != 2 {
 		t.Fatalf("violations = %+v, want both items rejected", got.Violations)
+	}
+	if !strings.Contains(got.Violations[0].Detail, `ontology "sds@3"`) {
+		t.Fatalf("detail = %q, want it to name the ontology that was claimed", got.Violations[0].Detail)
+	}
+}
+
+// A violation has to read for a person who supplied a vocabulary inline and
+// never named it, which is what an empty Ontology ID means here.
+func TestAViolationReadsWithoutAnOntologyID(t *testing.T) {
+	got := verify.Check(verify.Input{
+		Entities:   []alchemy.Entity{{ID: "c1", Type: "Widget"}},
+		Vocabulary: vocab(),
+	})
+	if len(got.Violations) != 1 {
+		t.Fatalf("violations = %+v, want one", got.Violations)
 	}
 	if !strings.Contains(got.Violations[0].Detail, "the ontology") {
 		t.Fatalf("detail = %q, want it readable without an ontology ID", got.Violations[0].Detail)
