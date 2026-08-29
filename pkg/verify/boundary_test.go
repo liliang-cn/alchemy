@@ -112,13 +112,11 @@ func TestOpenEndedRelationsAreAllowedBetweenAnyDeclaredType(t *testing.T) {
 	}
 }
 
-// A known limit, written down so it is a decision rather than an oversight: two
-// inferred sources giving one edge different attribute values is a real
-// disagreement, and alchemy.ConflictKind has no member for it. Filing it as a
-// contradiction would tell a reviewer a schema is involved when none is, and
-// filing it as a direction conflict would be false. Adding a fifth kind means
-// changing the shared contract, which is not this package's to change.
-func TestTwoInferredSourcesDisagreeingOnAnEdgeAttributeIsNotYetReported(t *testing.T) {
+// Two sources of equal standing giving one edge different attribute values is
+// a question with no schema in it. It is a conflict rather than a violation for
+// the usual two reasons: both edges are well-typed, so the ontology has no rule
+// to point at, and there is no rule for which of the two to drop either.
+func TestTwoInferredSourcesDisagreeingOnAnEdgeAttributeIsAConflict(t *testing.T) {
 	got := verify.Check(verify.Input{
 		Entities: []alchemy.Entity{{ID: "c1", Type: "Cluster"}, {ID: "n1", Type: "Node"}},
 		Relations: []alchemy.Relation{
@@ -127,7 +125,75 @@ func TestTwoInferredSourcesDisagreeingOnAnEdgeAttributeIsNotYetReported(t *testi
 		},
 		Vocabulary: vocab(),
 	})
-	if len(got.Conflicts) != 0 {
-		t.Fatalf("conflicts = %+v; if this now reports something, the limit is fixed and this test should assert the new kind", got.Conflicts)
+
+	if len(got.Conflicts) != 1 {
+		t.Fatalf("conflicts = %+v, want exactly one", got.Conflicts)
+	}
+	c := got.Conflicts[0]
+	if c.Kind != alchemy.ConflictRelationAttributes {
+		t.Fatalf("kind = %q, want %q", c.Kind, alchemy.ConflictRelationAttributes)
+	}
+	if !strings.Contains(c.Subject, "CONTAINS") || !strings.Contains(c.Subject, "card") {
+		t.Fatalf("subject = %q, want it to name the edge and the attribute", c.Subject)
+	}
+	if !strings.Contains(c.Left.Statement, "1:n") || !strings.Contains(c.Right.Statement, "1:1") {
+		t.Fatalf("statements = %q / %q", c.Left.Statement, c.Right.Statement)
+	}
+	if c.Left.Provenance.Source != "contract.pdf" || c.Right.Provenance.Source != "architecture.pdf" {
+		t.Fatalf("claims = %+v / %+v, want each side to keep its own provenance", c.Left, c.Right)
+	}
+	if len(got.Violations) != 0 {
+		t.Fatalf("violations = %+v, want none: both edges are well-typed", got.Violations)
+	}
+}
+
+// The boundary between the two attribute kinds is standing, and it is written
+// out in one table so a later reader cannot collapse them by accident.
+//
+// ConflictContradiction means one side read a statement and the other inferred
+// it — "a schema says otherwise" is the fact that usually settles the question,
+// and §5c wants that on the label. ConflictRelationAttributes means neither
+// side has that advantage, which is what leaves the question for a person.
+//
+// Two deterministic sources therefore land on relation_attributes, not on
+// contradiction. A schema is involved on *both* sides there, so "the
+// deterministic side wins" names no side at all, and filing it as a
+// contradiction would send a reviewer looking for an authority that is not in
+// the room. It also keeps this family consistent with the direction family,
+// where a same-class reversal is already ConflictRelationDirection rather than
+// a contradiction — one standing rule for both, rather than two that drift.
+func TestTheAttributeConflictKindFollowsStandingNotProducer(t *testing.T) {
+	ddlB := alchemy.Provenance{Source: "other.sql", Chunk: -1, Producer: alchemy.ProducerGraphImport}
+
+	for _, tc := range []struct {
+		name  string
+		left  alchemy.Provenance
+		right alchemy.Provenance
+		want  alchemy.ConflictKind
+	}{
+		{"two inferred sources", fromPDF, fromOtherPDF, alchemy.ConflictRelationAttributes},
+		{"two deterministic sources", fromSchema, ddlB, alchemy.ConflictRelationAttributes},
+		{"a schema against a model", fromSchema, fromPDF, alchemy.ConflictContradiction},
+		{"a model against a schema", fromPDF, fromSchema, alchemy.ConflictContradiction},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := verify.Check(verify.Input{
+				Entities: []alchemy.Entity{{ID: "c1", Type: "Cluster"}, {ID: "n1", Type: "Node"}},
+				Relations: []alchemy.Relation{
+					{From: "c1", To: "n1", Type: "CONTAINS", Attributes: map[string]any{"card": "1:n"}, Provenance: tc.left},
+					{From: "c1", To: "n1", Type: "CONTAINS", Attributes: map[string]any{"card": "1:1"}, Provenance: tc.right},
+				},
+				Vocabulary: vocab(),
+			})
+			if len(got.Conflicts) != 1 || got.Conflicts[0].Kind != tc.want {
+				t.Fatalf("conflicts = %+v, want one %q", got.Conflicts, tc.want)
+			}
+			// A contradiction always reads schema-first; an equal-standing
+			// conflict reads in the order the claims arrived, because there is no
+			// side to promote.
+			if tc.want == alchemy.ConflictContradiction && !got.Conflicts[0].Left.Provenance.Producer.Deterministic() {
+				t.Fatalf("left = %+v, want the deterministic side first", got.Conflicts[0].Left)
+			}
+		})
 	}
 }

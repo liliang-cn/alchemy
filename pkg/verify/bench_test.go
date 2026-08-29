@@ -21,30 +21,38 @@ func benchInput(n int) verify.Input {
 		keys = 1
 	}
 	in := verify.Input{Vocabulary: vocab(), OntologyID: "sds@3",
-		Entities:  make([]alchemy.Entity, 0, n),
+		Entities:  make([]alchemy.Entity, 0, n+keys),
 		Relations: make([]alchemy.Relation, 0, n),
 	}
 	types := []string{"Cluster", "StoragePool"}
 	regions := []string{"eu-west", "us-east"}
+	cards := []string{"1:n", "1:1"}
+
 	for i := 0; i < n; i++ {
-		k := i % keys
+		// k is which of the fifty-times-repeated identities this record is
+		// about; m is which repetition. Everything that varies has to vary with
+		// m rather than with i, or the fifty records under one key are fifty
+		// copies of one claim and the detector is never asked a question — which
+		// is what the guard in the benchmark caught the first time this fixture
+		// was written.
+		k, m := i%keys, i/keys
 		id := fmt.Sprintf("c%d", k)
 		prov := fromPDF
-		if i%2 == 0 {
+		if m%2 == 0 {
 			prov = fromSchema
 		}
 		in.Entities = append(in.Entities, alchemy.Entity{
-			ID: id, Type: types[i%len(types)], Name: "prod",
-			Attributes: map[string]any{"region": regions[(i/2)%len(regions)], "version": "3.1"},
+			ID: id, Type: types[m%len(types)], Name: "prod",
+			Attributes: map[string]any{"region": regions[(m/2)%len(regions)], "version": "3.1"},
 			Provenance: prov,
 		})
 		from, to := id, fmt.Sprintf("n%d", k)
-		if i%3 == 0 {
+		if m%3 == 0 {
 			from, to = to, from // both directions of the same edge, in one job.
 		}
 		in.Relations = append(in.Relations, alchemy.Relation{
 			From: from, To: to, Type: "MENTIONS",
-			Attributes: map[string]any{"card": "1:n"},
+			Attributes: map[string]any{"card": cards[(m/2)%len(cards)]},
 			Provenance: prov,
 		})
 	}
@@ -68,8 +76,21 @@ func BenchmarkCheck(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				got = verify.Check(in)
 			}
-			if got.Counts.Conflicts == 0 {
-				b.Fatal("fixture produced no conflicts; the detector is not being exercised")
+			// Guard rather than decoration: a fixture that stopped producing one
+			// of the kinds would leave that code path unmeasured while the
+			// numbers below still looked convincing.
+			kinds := map[alchemy.ConflictKind]bool{}
+			for _, c := range got.Conflicts {
+				kinds[c.Kind] = true
+			}
+			for _, want := range []alchemy.ConflictKind{
+				alchemy.ConflictEntityType, alchemy.ConflictEntityAttributes,
+				alchemy.ConflictRelationDirection, alchemy.ConflictContradiction,
+				alchemy.ConflictRelationAttributes,
+			} {
+				if !kinds[want] {
+					b.Fatalf("fixture produced no %q conflict; that detector is not being measured", want)
+				}
 			}
 			// ns per (entity + relation), the number that must not grow with n.
 			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(2*n), "ns/element")

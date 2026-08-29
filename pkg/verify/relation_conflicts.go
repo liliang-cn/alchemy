@@ -41,20 +41,23 @@ type attrKey struct {
 	name string
 }
 
-// attrPair is the one comparison §5c's third bullet describes: what a schema
-// stated about this edge against what a model inferred about it.
+// attrPair remembers the first value each class of producer gave one attribute
+// of one edge. first[class] is a slot, the same one the entity side uses, so
+// "the same statement twice is corroboration" means one thing in both families
+// and each distinct disagreement is asked about once.
 //
-// Two *inferred* sources disagreeing about an edge attribute is a real
-// disagreement with no ConflictKind to file it under — contradiction would tell
-// a reviewer a schema is involved when none is, and direction would be false.
-// Adding a fifth kind means changing the shared contract, which is not this
-// package's to change; the limit is pinned by a test that will fail the day it
-// is lifted.
+// Two entries however many records arrive: this is the identity-keyed index
+// §8.1 asks for, not a scan of what has been seen before.
 type attrPair struct {
-	det, inf *valued
-	reported bool
+	first [2]*slot
+
+	// A schema disagreeing with a model is one question per attribute, however
+	// many chunks repeat it.
+	reportedContradiction bool
 }
 
+// valued is one side of a comparison being assembled, before it is worth
+// spending a sentence on.
 type valued struct {
 	value string
 	prov  alchemy.Provenance
@@ -112,17 +115,28 @@ func relationConflicts(relations []alchemy.Relation) []alchemy.Conflict {
 			g.first[dir][class(det)] = &p
 		}
 
-		out = append(out, attributeContradictions(g, key, dir, det, r)...)
+		out = append(out, attributeConflicts(g, key, dir, det, r)...)
 	}
 	return out
 }
 
-// attributeContradictions compares what a schema stated about this edge with
-// what a model inferred about it. Same direction only: when two records run
-// opposite ways the direction is the question, and their attributes are answers
-// to different ones.
-func attributeContradictions(g *relationGroup, key relationKey, dir direction, det bool, r alchemy.Relation) []alchemy.Conflict {
+// attributeConflicts compares what one source said about this edge's attributes
+// with what another said about the same attributes of the same edge.
+//
+// Same direction only: when two records run opposite ways the direction is the
+// question, and their attributes are answers to different ones.
+//
+// The kind turns on standing rather than on producer. A deterministic side
+// against an inferred one is a ConflictContradiction, because "a schema says
+// otherwise" is the fact that usually settles it and §5c wants that on the
+// label. Two sides of equal standing — two models, or two schemas — is a
+// ConflictRelationAttributes: neither side has that advantage, which is exactly
+// what leaves the question for a person. This is the same standing rule the
+// direction family uses, so the two cannot drift apart.
+func attributeConflicts(g *relationGroup, key relationKey, dir direction, det bool, r alchemy.Relation) []alchemy.Conflict {
 	var out []alchemy.Conflict
+	mine, theirs := class(det), class(!det)
+
 	for _, a := range sortedAttributes(r.Attributes) {
 		k := attrKey{dir: dir, name: a.name}
 		pair := g.attrs[k]
@@ -133,27 +147,52 @@ func attributeContradictions(g *relationGroup, key relationKey, dir direction, d
 			}
 			g.attrs[k] = pair
 		}
-		switch {
-		case det && pair.det == nil:
-			pair.det = &valued{value: a.value, prov: r.Provenance}
-		case !det && pair.inf == nil:
-			pair.inf = &valued{value: a.value, prov: r.Provenance}
+		// Checked before the equal-standing case and reported once, for the same
+		// reason the direction family checks it first: it is the more actionable
+		// label when both could apply.
+		if partner := pair.first[theirs]; partner != nil && !pair.reportedContradiction && partner.value != a.value {
+			pair.reportedContradiction = true
+			e := edgeOf(key, dir)
+			left, right := valued{value: a.value, prov: r.Provenance}, valued{value: partner.value, prov: partner.prov}
+			if !det {
+				left, right = right, left // the side that read a statement goes first.
+			}
+			out = append(out, alchemy.Conflict{
+				Kind:    alchemy.ConflictContradiction,
+				Subject: e + "." + a.name,
+				Detail: fmt.Sprintf("%s: %s says %s = %s, %s says %s; a model disagreeing with a statement is the case worth a person's time",
+					e, where(left.prov), a.name, left.value, where(right.prov), right.value),
+				Left:  claim(edgeAttrStatement(e, a.name, left.value), left.prov),
+				Right: claim(edgeAttrStatement(e, a.name, right.value), right.prov),
+			})
 		}
-		if pair.reported || pair.det == nil || pair.inf == nil || pair.det.value == pair.inf.value {
+
+		if pair.first[mine] == nil {
+			pair.first[mine] = &slot{value: a.value, prov: r.Provenance}
 			continue
 		}
-		pair.reported = true
+		first := pair.first[mine]
+		if !first.disagrees(a.value) {
+			continue
+		}
+		// edgeOf is rendered here rather than above the branches: the common
+		// record agrees with what is already known, and a string built for a
+		// message nobody sends is the sort of cost §8 notices.
 		e := edgeOf(key, dir)
 		out = append(out, alchemy.Conflict{
-			Kind:    alchemy.ConflictContradiction,
+			Kind:    alchemy.ConflictRelationAttributes,
 			Subject: e + "." + a.name,
-			Detail: fmt.Sprintf("%s: %s says %s = %s, %s says %s; a model disagreeing with a statement is the case worth a person's time",
-				e, where(pair.det.prov), a.name, pair.det.value, where(pair.inf.prov), pair.inf.value),
-			Left:  claim(fmt.Sprintf("%s has %s = %s", e, a.name, pair.det.value), pair.det.prov),
-			Right: claim(fmt.Sprintf("%s has %s = %s", e, a.name, pair.inf.value), pair.inf.prov),
+			Detail: fmt.Sprintf("%s: %s says %s = %s, %s says %s; neither source has more standing than the other, so nothing in the data settles it",
+				e, where(first.prov), a.name, first.value, where(r.Provenance), a.value),
+			Left:  claim(edgeAttrStatement(e, a.name, first.value), first.prov),
+			Right: claim(edgeAttrStatement(e, a.name, a.value), r.Provenance),
 		})
 	}
 	return out
+}
+
+func edgeAttrStatement(e, name, value string) string {
+	return fmt.Sprintf("%s has %s = %s", e, name, value)
 }
 
 // identify maps a record onto its undirected key and says which way it ran.
