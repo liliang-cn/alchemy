@@ -134,6 +134,27 @@ const (
 	ViolationDanglingRelation ViolationKind = "dangling_relation"
 )
 
+// The kinds above are ontology-shaped: a source said something the declared
+// vocabulary does not allow. The kinds below are source-shaped — a file that
+// does not fit its own header, which is a way a table can fail and a schema
+// cannot.
+//
+// Both families live here for one reason: Result.Violations is the JSON a
+// buyer parses, so its "kind" field has to be a closed set. A reader that
+// declares its own kinds privately leaves that field open while the contract
+// claims it is not, and a consumer switching on it silently falls through.
+const (
+	// ViolationMalformedRow — a row that cannot be read against its header.
+	ViolationMalformedRow ViolationKind = "malformed_row"
+	// ViolationUnnamedColumn — a header cell with no name, so no mapping can
+	// refer to the column and its values are left out.
+	ViolationUnnamedColumn ViolationKind = "unnamed_column"
+	// ViolationMissingID — a record whose identifying field is empty.
+	ViolationMissingID ViolationKind = "missing_id"
+	// ViolationDuplicateID — two records claiming the same identity, differently.
+	ViolationDuplicateID ViolationKind = "duplicate_id"
+)
+
 // Violation is one source saying something the ontology does not allow. §7.3:
 // it is attributable, excludable, and the rest of the graph is usable without
 // it — which is why a violation does not hold the job.
@@ -173,6 +194,12 @@ const (
 	ConflictRelationDirection ConflictKind = "relation_direction"
 	// ConflictContradiction — a deterministic edge contradicted by an inferred one.
 	ConflictContradiction ConflictKind = "contradiction"
+	// ConflictRelationAttributes — the same edge given different attribute values
+	// by two sources of equal standing. It is separate from
+	// ConflictContradiction because that kind tells a reviewer a schema is
+	// involved, and here none is: neither side has more standing than the
+	// other, which is precisely what leaves the question for a person.
+	ConflictRelationAttributes ConflictKind = "relation_attributes"
 )
 
 // Conflict is two sources both claiming to be right, with nothing in the data
