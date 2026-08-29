@@ -27,6 +27,8 @@ shapes everything below.
 ## 1. What it is not
 
 **It is not a database.** It returns its output and forgets it. See §4.
+A clustered deployment shares a job store (§8.3), which holds work in
+progress and still never holds a graph.
 
 **It is not DataIntelligence.** DI ingests structured sources into a warehouse
 under a governed semantic layer, so a consultant can ask for a metric by
@@ -398,6 +400,8 @@ service Alchemy {
   rpc CreateJob(CreateJobRequest) returns (Job);
   rpc GetJob(GetJobRequest) returns (Job);
   rpc GetResult(GetResultRequest) returns (Result);
+  // A large result is not one message; see §8.4.
+  rpc StreamResult(GetResultRequest) returns (stream ResultPage);
   rpc DeleteJob(DeleteJobRequest) returns (google.protobuf.Empty);
 
   // Upload is client-streaming: a corpus is not a field in a message.
@@ -536,7 +540,114 @@ operator to be annoyed by them.
 
 ---
 
-## 8. Status
+## 8. Scale: high-volume concurrent import, and clustering
 
-Design only. Nothing is built. This document exists so the first line of code
-answers to something.
+**Decision: the job is the unit of ownership, the chunk is the unit of
+parallelism, and the cluster coordinates through a shared job store rather than
+through each other.**
+
+Two things break a naive scale-out, and they are the reason this section is a
+design decision rather than an ops note.
+
+### 8.1 A job cannot be sharded, because a conflict is global to it
+
+§7.3 makes conflicts the one thing that always stops a job. A conflict is two
+sources disagreeing — and only something that sees *both* can notice. Spread one
+job's sources across five nodes and the disagreement between source 1 and source
+4 is visible to nobody: every node finishes cleanly, and the merged graph
+contradicts itself. That is precisely the failure this design exists to prevent,
+arriving through the back door of a scheduler.
+
+So:
+
+- **One node coordinates a job end to end.** It holds the accumulating identity
+  index and is the only place conflicts are decided.
+- **Chunk extraction fans out.** A chunk is an independent LLM call against a
+  vocabulary; that is embarrassingly parallel and is where the wall-clock is.
+- **The merge is on the coordinator**, and conflict detection is keyed by entity
+  identity rather than compared pairwise — an O(n²) scan is a plausible-looking
+  implementation that dies at the volume this section is about.
+
+The cost is honest: a single enormous job is bounded by one node's coordination.
+That is acceptable because the throughput case is *many* jobs, and the latency
+case is chunks within one. A job so large that its own merge is the bottleneck
+should be split by the caller, who knows what the corpus is.
+
+### 8.2 The bottleneck is the caller's model endpoint, not our CPU
+
+This is the one that surprises people. Extraction is a network call to a model
+the caller supplied (§6), and that endpoint has a rate limit. Ten nodes each
+running "8 concurrent" is 80 in flight against an endpoint that permits 20 — the
+cluster's own success at scaling out is what triggers the 429s.
+
+So **model concurrency is a cluster-wide budget, not a per-node setting.** It is
+declared per model endpoint, leased from the shared store like any other
+resource, and a node that cannot get a slot waits rather than tries.
+
+Two consequences worth designing for rather than discovering:
+
+- **Retries are part of the budget.** A retry storm after a rate-limit is a
+  cluster attacking its own dependency. Backoff is coordinated through the same
+  lease, not chosen independently by each node.
+- **§7.2 said cost is not optimised for. That is about quality, not waste.**
+  Declining to use a cheaper model is a product position; paying twice for the
+  identical call after a crash is a bug. Extraction results are cached by
+  content address — hash of (chunk text, model, ontology version, prompt
+  version) — so a resumed job does not re-buy what it already has. The cache is
+  keyed on everything that would change the answer, which is why the prompt
+  version is in the key: a cache that survives a prompt change is a cache that
+  returns the old prompt's opinion.
+
+### 8.3 What clustering actually requires
+
+Deliberately small. The service does not gossip, does not elect a leader, and
+does not embed a consensus library.
+
+- **A shared job store.** In-memory for a single node (the default, and what a
+  buyer evaluating the product runs), and one real implementation — Postgres —
+  for a cluster. This does not contradict §4: it stores *jobs*, never graphs.
+  The print queue analogy from §5c is the same one, now on shared paper.
+- **Leases with heartbeats.** A node that dies mid-job must not take a held job
+  with it. The lease expires, another node picks the job up, and the
+  content-addressed cache (§8.2) means the re-run costs the chunks that had not
+  finished rather than all of them.
+- **At-least-once, made safe by idempotency.** A lease that expires because a
+  node was merely slow means two nodes briefly work the same job. That must be
+  survivable rather than prevented, because preventing it is the part that needs
+  consensus. Writes are idempotent by job ID and chunk index; the second writer
+  loses harmlessly.
+
+Requiring Postgres for the clustered mode is a real deployment cost and is worth
+it: inventing our own replicated state is the kind of thing that works in
+testing and loses a job at 3am in someone else's data centre.
+
+### 8.4 Volume changes two things about the interface
+
+- **A big result is not one message.** gRPC's default message limit is 4MB and a
+  large import blows through it. `GetResult` stays for jobs that fit; a
+  server-streaming `StreamResult` returning pages of entities and relations is
+  what a large job uses. A caller should never have to discover this by
+  receiving a truncation.
+- **A big source is not held in memory.** `UploadSource` is already
+  client-streaming (§6); the received bytes are spooled to disk and every reader
+  works from a stream. A 10GB dump that is parsed by reading it into a string is
+  a service that dies on the first real customer.
+
+**Admission control, not optimism.** A queue that accepts everything is a queue
+that OOMs. The service declares its capacity and refuses beyond it with a clear
+"try later" rather than accepting work it cannot hold — a rejected job is an
+operator's problem for a minute, an accepted job that dies is their problem for
+an afternoon.
+
+### 8.5 What is deferred
+
+Autoscaling policy, multi-region, and any scheduling cleverer than "least loaded
+node that can get a model slot". The first is the operator's, the second needs a
+customer with the problem, and the third is a guess about a workload nobody has
+measured yet.
+
+---
+## 9. Status
+
+Design only for §1–§7; implementation started 2026-08-29 against the shared
+types in `pkg/alchemy`. §8 is design only.
