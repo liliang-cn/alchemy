@@ -126,10 +126,7 @@ func violationItem(i int, v alchemy.Violation, idx *records) Item {
 // would sweep in every record that shared a source. Apply refuses the verbs
 // that would need one.
 func guessItem(i int, g alchemy.Guess) Item {
-	subject := g.Field
-	if g.Provenance.Source != "" {
-		subject = g.Provenance.Source + ":" + g.Field
-	}
+	subject := guessSubject(g)
 	return Item{
 		ID:      "guess/" + subject,
 		Kind:    KindGuess,
@@ -235,4 +232,15 @@ func covered(items []Item) map[Ref]bool {
 		}
 	}
 	return taken
+}
+
+// guessSubject names a guess the way a queue item does. It is one function
+// rather than two because Apply compares the two to prove it was handed the
+// result the queue was built from, and a second spelling would make that
+// comparison a coin flip.
+func guessSubject(g alchemy.Guess) string {
+	if g.Provenance.Source != "" {
+		return g.Provenance.Source + ":" + g.Field
+	}
+	return g.Field
 }

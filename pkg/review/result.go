@@ -24,6 +24,9 @@ func stampFindings(res *alchemy.Result, decided []answered) error {
 				return outOfRange(a.item, "conflicts")
 			}
 			c := res.Conflicts[a.item.Index]
+			if err := sameFinding(a.item, "conflicts", c.Subject); err != nil {
+				return err
+			}
 			// Both sides are stamped. The reviewer did not approve one claim;
 			// they adjudicated between two, and a Left that stayed unmarked
 			// would read as the side nobody considered.
@@ -35,6 +38,9 @@ func stampFindings(res *alchemy.Result, decided []answered) error {
 				return outOfRange(a.item, "violations")
 			}
 			v := res.Violations[a.item.Index]
+			if err := sameFinding(a.item, "violations", v.Subject); err != nil {
+				return err
+			}
 			v.Provenance.ReviewedBy = reviewedBy(v.Provenance.ReviewedBy, by)
 			res.Violations = replace(res.Violations, a.item.Index, v)
 		case KindGuess:
@@ -42,6 +48,9 @@ func stampFindings(res *alchemy.Result, decided []answered) error {
 				return outOfRange(a.item, "guesses")
 			}
 			g := res.Guesses[a.item.Index]
+			if err := sameFinding(a.item, "guesses", guessSubject(g)); err != nil {
+				return err
+			}
 			g.Provenance.ReviewedBy = reviewedBy(g.Provenance.ReviewedBy, by)
 			res.Guesses = replace(res.Guesses, a.item.Index, g)
 		}
@@ -54,6 +63,28 @@ func stampFindings(res *alchemy.Result, decided []answered) error {
 // conflicts and violations out of the verifier's report and guesses out of the
 // result, and a coordinator that assembled the two into a Result kept their
 // order, because the verifier is deterministic.
+// sameFinding refuses to stamp a finding that is not the one the item
+// described.
+//
+// The range check above catches a result that is shorter than the queue. This
+// catches the one that is the right length and holds different findings —
+// which is the worse of the two, because it succeeds: a reviewer's name lands
+// on something they never saw, and the finding they did answer comes back
+// unmarked. §5c's claim is "the model proposed, and what you have was
+// checked"; a name on the wrong finding makes that claim false in the one way
+// nobody can see afterwards.
+//
+// Subject is what it compares because it is the field Queue copies off the
+// finding, so the two agree exactly when the item and the finding are the same
+// thing.
+func sameFinding(item Item, slice, subject string) error {
+	if subject == item.Subject {
+		return nil
+	}
+	return fmt.Errorf("review: item %q describes %q but %s[%d] is now %q; Apply needs the result the queue was built from, in the order it was built from",
+		item.ID, item.Subject, slice, item.Index, subject)
+}
+
 func outOfRange(item Item, slice string) error {
 	return fmt.Errorf("review: item %q points at %s[%d], which this result does not have; Apply needs the result the queue was built from", item.ID, slice, item.Index)
 }
