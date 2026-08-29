@@ -1,0 +1,528 @@
+// The wire contract of DESIGN.md §6: "gRPC is the service. Anything else is a
+// gateway in front of it."
+//
+// Three shapes in here are not stylistic choices, and each one is a reason
+// gRPC was picked over HTTP:
+//
+//   - Review is bidirectional because a person working a queue wants their
+//     decisions to take effect on work still running. Over HTTP that is polling
+//     plus a submit endpoint, which is the same thing with latency and more
+//     state on both sides.
+//   - WatchJob is server-streaming because progress on a minutes-long job is a
+//     stream, and SSE is a stream pretending to be a response.
+//   - UploadSource is client-streaming because a corpus is not a field in a
+//     message, and §8.4 spools the received bytes to disk: a 10GB dump read
+//     into a string is a service that dies on the first real customer.
+//
+// The enums mirror pkg/alchemy's closed sets deliberately. Those sets are
+// closed because a consumer switching on the field must not silently fall
+// through, and an open wire enum would reopen what the Go contract closed.
+
+syntax = "proto3";
+
+package alchemy.v1;
+
+option go_package = "github.com/liliang-cn/alchemy/proto/alchemy/v1;alchemyv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+service Alchemy {
+  // Unary for things that are one question.
+  rpc CreateJob(CreateJobRequest) returns (Job);
+  rpc GetJob(GetJobRequest) returns (Job);
+  rpc GetResult(GetResultRequest) returns (Result);
+  // A large result is not one message; see §8.4. gRPC's default limit is 4MB
+  // and a large import blows through it, so GetResult refuses a result that
+  // does not fit rather than truncating one, and points here.
+  rpc StreamResult(GetResultRequest) returns (stream ResultPage);
+  rpc DeleteJob(DeleteJobRequest) returns (google.protobuf.Empty);
+
+  // Upload is client-streaming: a corpus is not a field in a message.
+  rpc UploadSource(stream SourceChunk) returns (Source);
+
+  // Progress is server-streaming: stages, counts, and conflicts as they are
+  // found rather than at the end.
+  rpc WatchJob(WatchJobRequest) returns (stream JobEvent);
+
+  // Review is bidirectional: items out, decisions in, on one connection, so a
+  // decision reaches an extraction that has not run yet.
+  rpc Review(stream ReviewDecision) returns (stream ReviewItem);
+  // A job can reach NEEDS_REVIEW without review mode being on: a conflict
+  // always requires a person (§7.3). Review is how it gets unblocked, which is
+  // why this rpc is not gated on the job having asked for review.
+}
+
+// ---------------------------------------------------------------------------
+// Closed sets. Each mirrors a const block in pkg/alchemy or pkg/review.
+// ---------------------------------------------------------------------------
+
+// JobState is where a job is. NEEDS_REVIEW is reachable without review mode
+// being on, because a conflict always requires a person (§7.3).
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_PENDING = 1;
+  JOB_STATE_RUNNING = 2;
+  JOB_STATE_NEEDS_REVIEW = 3;
+  JOB_STATE_SUCCEEDED = 4;
+  JOB_STATE_FAILED = 5;
+  JOB_STATE_EXPIRED = 6;
+  JOB_STATE_CANCELLED = 7;
+}
+
+// SourceKind is which of the four readers handles a source (§2).
+enum SourceKind {
+  SOURCE_KIND_UNSPECIFIED = 0;
+  SOURCE_KIND_TABULAR = 1;
+  SOURCE_KIND_DDL = 2;
+  SOURCE_KIND_DOCUMENT = 3;
+  SOURCE_KIND_GRAPH = 4;
+}
+
+// Producer is §5b's "field that matters": DDL and GRAPH_IMPORT mean a machine
+// read something that already said this, LLM_EXTRACT means a model decided it.
+enum Producer {
+  PRODUCER_UNSPECIFIED = 0;
+  PRODUCER_DDL = 1;
+  PRODUCER_GRAPH_IMPORT = 2;
+  PRODUCER_TABULAR = 3;
+  PRODUCER_LLM_EXTRACT = 4;
+}
+
+enum ViolationKind {
+  VIOLATION_KIND_UNSPECIFIED = 0;
+  VIOLATION_KIND_UNKNOWN_ENTITY_TYPE = 1;
+  VIOLATION_KIND_UNKNOWN_RELATION_TYPE = 2;
+  VIOLATION_KIND_RELATION_NOT_ALLOWED = 3;
+  VIOLATION_KIND_DANGLING_RELATION = 4;
+  // The kinds above are ontology-shaped. The four below are source-shaped — a
+  // file that does not fit its own header, which is a way a table can fail and
+  // a schema cannot.
+  VIOLATION_KIND_MALFORMED_ROW = 5;
+  VIOLATION_KIND_UNNAMED_COLUMN = 6;
+  VIOLATION_KIND_MISSING_ID = 7;
+  VIOLATION_KIND_DUPLICATE_ID = 8;
+}
+
+enum ConflictKind {
+  CONFLICT_KIND_UNSPECIFIED = 0;
+  CONFLICT_KIND_ENTITY_ATTRIBUTES = 1;
+  CONFLICT_KIND_ENTITY_TYPE = 2;
+  CONFLICT_KIND_RELATION_DIRECTION = 3;
+  CONFLICT_KIND_CONTRADICTION = 4;
+  CONFLICT_KIND_RELATION_ATTRIBUTES = 5;
+}
+
+// ReviewKind is §5c's ranking table as a set. The order of the values is the
+// order of that table, and it is why a conflict is never below a guess.
+enum ReviewKind {
+  REVIEW_KIND_UNSPECIFIED = 0;
+  REVIEW_KIND_CONFLICT = 1;
+  REVIEW_KIND_VIOLATION = 2;
+  REVIEW_KIND_GUESS = 3;
+  REVIEW_KIND_LOW_CONFIDENCE = 4;
+}
+
+// ReviewVerb is what a reviewer did. §5c lists exactly four and the set is
+// closed: a fifth would be a way of disposing of a proposal that the
+// provenance of the result has no way to describe.
+enum ReviewVerb {
+  REVIEW_VERB_UNSPECIFIED = 0;
+  REVIEW_VERB_ACCEPT = 1;
+  REVIEW_VERB_REJECT = 2;
+  REVIEW_VERB_EDIT = 3;
+  // ALWAYS accepts this one and stops the queue asking about ones like it.
+  REVIEW_VERB_ALWAYS = 4;
+}
+
+enum RefKind {
+  REF_KIND_UNSPECIFIED = 0;
+  REF_KIND_ENTITY = 1;
+  REF_KIND_RELATION = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Job input. §6: models are supplied per job, not configured globally — a
+// buyer's LLM, embedding and OCR endpoints are their business, and a service
+// that hardcodes them only works in the environment it was built in.
+// ---------------------------------------------------------------------------
+
+// ModelEndpoint is one of the caller's models. The name is not decoration: it
+// is what appears in provenance and in the cost report, so two runs against
+// two models are told apart by a reader who has only the result.
+message ModelEndpoint {
+  string name = 1;
+  string endpoint = 2;
+  // Deliberately per call rather than a server-side secret: the service never
+  // holds a buyer's credentials between jobs, which is the same reasoning as
+  // §4 applied to keys instead of graphs.
+  string api_key = 3;
+  map<string, string> options = 4;
+}
+
+message Models {
+  ModelEndpoint llm = 1;
+  ModelEndpoint embedder = 2;
+  // Absent OCR is a supported configuration, not an error: §5 says a scanned
+  // page is then reported as unread, never silently returned as empty text.
+  ModelEndpoint ocr = 3;
+}
+
+// Chunking is a job input for the same reason models are: the person who knows
+// the corpus is the caller (§7.1).
+message Chunking {
+  // One of fixed, sentence, paragraph, heading, semantic, whole. Empty means
+  // the default of §7.1 — heading falling back to paragraph then fixed.
+  string strategy = 1;
+  int32 size = 2;
+  // Overlap is the cheap insurance against the split-relation problem, and is
+  // non-zero by default. A negative value is refused rather than clamped.
+  int32 overlap = 3;
+}
+
+message ReviewOptions {
+  // Review is a mode, not a stage everything passes through (§5c). Leaving
+  // this false still gets conflicts queued, because a conflict holds the job
+  // either way and the queue is how it gets unblocked.
+  bool enabled = 1;
+  // The line below which an inferred record is queued as low confidence. Zero
+  // queues none: a caller who has not said what "unsure" means for their model
+  // has not asked a question.
+  double min_confidence = 2;
+  // Rules already recorded by an earlier `always`. Carried per job because the
+  // service stores nothing between jobs (§4) — the caller keeps its own policy.
+  repeated ReviewRule rules = 3;
+}
+
+// ReviewRule is what `always` produced, and it carries the decision that
+// produced it: a rule without an origin is an unexplainable policy (§5c).
+message ReviewRule {
+  string shape = 1;
+  ReviewKind kind = 2;
+  ReviewDecision from = 3;
+  string because = 4;
+}
+
+message CreateJobRequest {
+  // Source IDs handed back by UploadSource. Naming an unknown one is refused
+  // rather than skipped: a job that quietly imports three of the four files it
+  // was given produces a graph whose gaps nobody can explain.
+  repeated string source_ids = 1;
+  // Required for document sources (§5). There is no unconstrained mode: the
+  // 74%→94% story is the argument, and shipping the ungoverned version would
+  // mean shipping the 74%.
+  string ontology = 2;
+  Models models = 3;
+  Chunking chunking = 4;
+  ReviewOptions review = 5;
+  // Supplying an idempotency key makes creation idempotent. A client whose
+  // call timed out cannot know whether the job was admitted, and both blind
+  // answers are expensive: retry and a 10GB dump is imported twice, give up
+  // and the night's work is silently lost.
+  string idempotency_key = 6;
+}
+
+message Job {
+  string id = 1;
+  JobState state = 2;
+  google.protobuf.Timestamp created_at = 3;
+  // When un-reviewed work is discarded. §5c: without it the "stateless"
+  // service quietly grows a database of abandoned reviews.
+  google.protobuf.Timestamp expires_at = 4;
+  string stage = 5;
+  string error = 6;
+}
+
+message GetJobRequest { string job_id = 1; }
+message DeleteJobRequest { string job_id = 1; }
+message WatchJobRequest { string job_id = 1; }
+
+message GetResultRequest {
+  string job_id = 1;
+  // Records per page, honoured only by StreamResult. Zero means the server's
+  // default, which is picked so a page stays well under the 4MB limit.
+  int32 page_size = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Upload. §8.4: a big source is not held in memory.
+// ---------------------------------------------------------------------------
+
+// SourceChunk is one frame of an upload. The metadata fields are read from the
+// first frame only and ignored afterwards, so a client streaming a 10GB dump
+// repeats no headers and the server holds no per-frame state beyond the file
+// handle it is writing to.
+message SourceChunk {
+  string name = 1;
+  SourceKind kind = 2;
+  string media_type = 3;
+  bytes data = 4;
+}
+
+// Source is the handle a CreateJob names. It is not the bytes: those are on
+// disk, and every reader works from a stream.
+message Source {
+  string id = 1;
+  SourceKind kind = 2;
+  string name = 3;
+  int64 size = 4;
+  string media_type = 5;
+}
+
+// ---------------------------------------------------------------------------
+// The graph, and the numbers needed to distrust it (§5).
+// ---------------------------------------------------------------------------
+
+// Provenance says where a fact came from and how it was produced. Every entity
+// and every relation carries one; §5b makes this a product guarantee rather
+// than a debugging aid.
+message Provenance {
+  string source = 1;
+  // -1 when the producer did not work in chunks (DDL, graph import).
+  int32 chunk = 2;
+  Producer producer = 3;
+  string model = 4;
+  string ontology = 5;
+  // The chunking strategy that produced the chunk. §7.1: a graph re-extracted
+  // under a different strategy is a different graph.
+  string chunking = 6;
+  double confidence = 7;
+  // §5c: review adds to provenance, it does not overwrite it — a reviewed edge
+  // still says a model proposed it.
+  string reviewed_by = 8;
+}
+
+message Entity {
+  string id = 1;
+  string type = 2;
+  string name = 3;
+  google.protobuf.Struct attributes = 4;
+  Provenance provenance = 5;
+}
+
+message Relation {
+  string from = 1;
+  string to = 2;
+  string type = 3;
+  google.protobuf.Struct attributes = 4;
+  Provenance provenance = 5;
+}
+
+message Chunk {
+  int32 index = 1;
+  string text = 2;
+  string source = 3;
+  string strategy = 4;
+  string heading = 5;
+  int32 start = 6;
+  int32 end = 7;
+}
+
+message Vector {
+  int32 chunk = 1;
+  repeated float values = 2;
+  string model = 3;
+}
+
+message Violation {
+  ViolationKind kind = 1;
+  string detail = 2;
+  string subject = 3;
+  Provenance provenance = 4;
+}
+
+// Guess is an inferred mapping the pipeline made and is obliged to report.
+// §2.1: a guess that does not announce itself is a bug with a three-month fuse.
+message Guess {
+  string field = 1;
+  string chosen_as = 2;
+  repeated string alternatives = 3;
+  string reason = 4;
+  Provenance provenance = 5;
+}
+
+message Claim {
+  string statement = 1;
+  Provenance provenance = 2;
+}
+
+// Conflict is two sources both claiming to be right, with nothing in the data
+// to decide between them. It is returned whether or not review is on, so a
+// caller running unattended still learns that its sources disagree rather than
+// receiving whichever edge happened to be written last.
+message Conflict {
+  ConflictKind kind = 1;
+  string subject = 2;
+  string detail = 3;
+  Claim left = 4;
+  Claim right = 5;
+}
+
+// Counts is what makes the difference between a graph you can act on and one
+// you merely have (§5).
+message Counts {
+  int32 entities = 1;
+  int32 relations = 2;
+  int32 deterministic = 3;
+  int32 inferred = 4;
+  int32 violations = 5;
+  int32 conflicts = 6;
+  int32 guesses = 7;
+  // Chunks that produced nothing. A high number means extraction is failing
+  // quietly.
+  int32 chunks_empty = 8;
+  // Source text that could not be read at all — a scanned page with no OCR
+  // model supplied. §5: never silently returned as empty.
+  int32 chunks_unread = 9;
+}
+
+// ModelCall records what a job spent. §7.2: cost is not optimised for, but it
+// is never hidden.
+message ModelCall {
+  string model = 1;
+  string stage = 2;
+  int32 calls = 3;
+  int32 tokens = 4;
+}
+
+// Unread exists so that "no text here" is never indistinguishable from "an
+// empty page".
+message Unread {
+  string source = 1;
+  string locator = 2;
+  string reason = 3;
+}
+
+message Result {
+  repeated Entity entities = 1;
+  repeated Relation relations = 2;
+  repeated Chunk chunks = 3;
+  repeated Vector vectors = 4;
+
+  repeated Conflict conflicts = 5;
+  repeated Violation violations = 6;
+  repeated Guess guesses = 7;
+
+  Counts counts = 8;
+  repeated ModelCall model_calls = 9;
+  repeated Unread unread = 10;
+  // The `always` rules this job's review produced. They are returned rather
+  // than kept because §4 means the service holds no policy between jobs: the
+  // caller keeps them and supplies them on the next job, which is how a
+  // pipeline that started attended becomes one that runs itself without ever
+  // having guessed (§7.3).
+  repeated ReviewRule rules = 11;
+}
+
+// ResultPage is one page of a large result (§8.4). The summary rides on the
+// first page rather than the last: an operator who wants the numbers needed to
+// distrust the graph should get them before deciding whether to read it, not
+// after paying for every entity.
+message ResultPage {
+  // Zero-based, so a client can tell a resumed stream from a fresh one.
+  int32 page = 1;
+  bool last = 2;
+
+  repeated Entity entities = 3;
+  repeated Relation relations = 4;
+  repeated Chunk chunks = 5;
+  repeated Vector vectors = 6;
+  repeated Conflict conflicts = 7;
+  repeated Violation violations = 8;
+  repeated Guess guesses = 9;
+
+  // Set on the first page only.
+  Counts counts = 10;
+  repeated ModelCall model_calls = 11;
+  repeated Unread unread = 12;
+  repeated ReviewRule rules = 13;
+}
+
+// ---------------------------------------------------------------------------
+// Progress. §7.2 and §7.3 both put requirements on this message.
+// ---------------------------------------------------------------------------
+
+message JobEvent {
+  google.protobuf.Timestamp at = 1;
+  JobState state = 2;
+  string stage = 3;
+  // Counts so far, not at the end.
+  Counts counts = 4;
+  // §7.3: a conflict is emitted when it is found. An operator watching a
+  // two-hour import should learn in minute three that it will need them, not
+  // at minute one hundred and twenty.
+  Conflict conflict = 5;
+  // §7.2: a running total, so a job whose bill is growing faster than expected
+  // can be cancelled while it runs rather than after it finishes.
+  int64 model_calls = 6;
+  // The same total broken down, for the operator who wants to know which stage
+  // is spending it.
+  repeated ModelCall model_calls_by_stage = 7;
+  string message = 8;
+}
+
+// ---------------------------------------------------------------------------
+// Review. Items out, decisions in, on one connection.
+// ---------------------------------------------------------------------------
+
+// Ref names graph records by what they say rather than by index: an index into
+// a slice stops meaning anything the moment a rejection removes an element.
+message Ref {
+  RefKind kind = 1;
+  string id = 2;
+  string from = 3;
+  string to = 4;
+  string type = 5;
+  // Narrows the Ref to the records one source produced. A conflict names two
+  // claims about one subject and a decision is about one of them, so without
+  // this a rejection would delete the side the reviewer kept.
+  Provenance provenance = 6;
+}
+
+message ReviewItem {
+  string job_id = 1;
+  string id = 2;
+  ReviewKind kind = 3;
+  int32 rank = 4;
+  // Where the finding sits in the matching Result slice.
+  int32 index = 5;
+  string subject = 6;
+  string summary = 7;
+  // The class of mistake this item belongs to, and what an `always` rule is
+  // matched on.
+  string shape = 8;
+  repeated Ref targets = 9;
+  // The rule that already answered this item's class. An item carrying one is
+  // not a question — it is an answer already given, sent rather than dropped
+  // so that a queue three items shorter than the findings can say which rule
+  // took each away.
+  ReviewRule suppressed_by = 10;
+  Provenance provenance = 11;
+}
+
+message Edit {
+  // An empty field is one the reviewer did not touch. A reviewer who retyped
+  // an entity said nothing about its name, and a message that carried both
+  // would silently blank the half they left alone.
+  string type = 1;
+  string name = 2;
+  string from = 3;
+  string to = 4;
+}
+
+message ReviewDecision {
+  // The first message on the stream must name the job; later ones may repeat
+  // it or leave it empty. A first message with a job_id and no item_id is how
+  // a reviewer attaches to a queue without deciding anything yet.
+  string job_id = 1;
+  string item_id = 2;
+  ReviewVerb verb = 3;
+  // Who decided. Required: a decision nobody signed cannot be written into
+  // provenance, and "reviewed by" with nobody in it is worse than not claiming
+  // review at all.
+  string by = 4;
+  Edit edit = 5;
+  string note = 6;
+  google.protobuf.Timestamp at = 7;
+}

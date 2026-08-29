@@ -120,10 +120,12 @@ type Request struct {
 // events may be nil, which is a caller that does not want progress. When it is
 // not nil, Run closes it before returning, so a caller can range over it —
 // which means Run owns that channel for the duration of the call, and each Run
-// should be given its own. See emitter.go for what a slow consumer gets and
-// why it cannot stall the job.
+// should be given its own. The caller must consume it until it closes, or
+// cancel ctx: every stage change and every conflict is delivered, including
+// the ones still queued when the job ends. See emitter.go for why that is
+// worth a contract.
 func Run(ctx context.Context, req Request, events chan<- Event) (alchemy.Result, error) {
-	run := &run{req: req, events: newEmitter(events)}
+	run := &run{req: req, events: newEmitter(ctx, events)}
 	// The stream is closed on every path out, including the ones that refuse
 	// the request before anything is read: a caller ranging over the channel
 	// should finish when the job does, whatever ended it.

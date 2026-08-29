@@ -1,6 +1,10 @@
 package pipeline
 
-import "sync"
+import (
+	"context"
+	"sync"
+	"time"
+)
 
 // emitter carries events to the caller without ever letting the caller's
 // reading speed decide how fast the job runs.
@@ -24,12 +28,33 @@ import "sync"
 // next reading. The queue therefore holds at most one progress event at a time
 // and grows only with things that are genuinely news.
 //
-// What it does not do is wait at the end. Undelivered events are abandoned
-// when the job finishes, because the return value carries the same facts and
-// better: a caller who stopped reading gets a Result or a *HeldError, not a
-// hang.
+// At the end the queue is drained rather than abandoned, and that is the half
+// this design got wrong first. Abandoning it made "a conflict is never
+// dropped" true only while the job was running: the last stage changes and any
+// conflict still queued were lost on a coin flip between delivering and
+// quitting, which showed up as a test that passed fourteen times in fifteen.
+// A promise that holds until the moment the job finishes is not a promise.
+//
+// The drain is bounded, and the bound is the whole design here. Draining
+// without one trades a lost event for a hung job — a caller who walked away
+// from the channel would hold the job open forever, which on a server is a
+// worse bug than the one being fixed. So the job waits for a reader, but not
+// indefinitely: a reader that is there takes everything in microseconds, and a
+// reader that is gone costs drainGrace once, at the end, and nothing else.
+//
+// Neither half of this is free and it is worth being plain about which way
+// each error goes. Too short a grace and a real consumer misses the last
+// stage change. Too long and a dead consumer delays a finished job. The
+// asymmetry decides it: the first failure is silent and the second is a
+// measurable pause, so the grace is set well above the cost of a channel
+// handoff and well under anything an operator would notice in a job that
+// takes minutes.
 type emitter struct {
 	out chan<- Event
+	// ctx is the only thing that can cut delivery short. It is what keeps the
+	// contract above from being a way to hang: a caller who stops reading
+	// stops the job by cancelling, not by walking away.
+	ctx context.Context
 
 	mu    sync.Mutex
 	queue []Event
@@ -47,12 +72,13 @@ type emitter struct {
 // asked for no events. A nil *emitter is a working emitter that sends nothing,
 // which is what keeps "events may be nil" from being a branch at every call
 // site.
-func newEmitter(out chan<- Event) *emitter {
+func newEmitter(ctx context.Context, out chan<- Event) *emitter {
 	if out == nil {
 		return nil
 	}
 	e := &emitter{
 		out:      out,
+		ctx:      ctx,
 		progress: -1,
 		wake:     make(chan struct{}, 1),
 		quit:     make(chan struct{}),
@@ -89,20 +115,83 @@ func (e *emitter) send(ev Event) {
 func (e *emitter) loop() {
 	defer close(e.done)
 	for {
-		ev, ok := e.next()
-		if !ok {
-			select {
-			case <-e.wake:
-				continue
-			case <-e.quit:
+		if ev, ok := e.next(); ok {
+			if !e.deliver(ev) {
 				return
 			}
+			continue
+		}
+		select {
+		case <-e.wake:
+		case <-e.ctx.Done():
+			return
+		case <-e.quit:
+			// The job has finished. What is still queued is news the caller
+			// has not heard yet — a stage change, or a conflict §7.3 promised
+			// them — so it is delivered before the channel closes rather than
+			// dropped for being late.
+			e.drain()
+			return
+		}
+	}
+}
+
+// drainGrace is how long a finished job waits for a reader that is not there.
+// See the type comment for why it is bounded and why this size.
+const drainGrace = 2 * time.Second
+
+// drain delivers what is left to a reader that is still listening, and gives
+// up on one that is not.
+func (e *emitter) drain() {
+	timer := time.NewTimer(drainGrace)
+	defer timer.Stop()
+	for {
+		ev, ok := e.next()
+		if !ok {
+			return
 		}
 		select {
 		case e.out <- ev:
-		case <-e.quit:
+		case <-e.ctx.Done():
+			return
+		case <-timer.C:
+			// Nobody is reading. The job is over and its facts are in the
+			// return value; holding it open for an absent reader is how a
+			// server acquires a goroutine leak per abandoned watcher.
 			return
 		}
+	}
+}
+
+// deliver blocks until the caller takes the event or gives up on the job.
+// While the job runs there is no grace: a reader who is merely slow should
+// slow nothing, and the queue is what absorbs that.
+func (e *emitter) deliver(ev Event) bool {
+	select {
+	case e.out <- ev:
+		return true
+	case <-e.ctx.Done():
+		return false
+	case <-e.quit:
+		// The job finished while this event was waiting for a reader. Put it
+		// back so the bounded drain gets its turn at it rather than losing it
+		// to whichever branch the runtime picked.
+		e.unshift(ev)
+		e.drain()
+		return false
+	}
+}
+
+// unshift returns an undelivered event to the front of the queue.
+func (e *emitter) unshift(ev Event) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.queue = append([]Event{ev}, e.queue...)
+	if e.progress >= 0 {
+		e.progress++
+	}
+	if ev.Kind == EventProgress {
+		e.progress = 0
 	}
 }
 
@@ -122,8 +211,9 @@ func (e *emitter) next() (Event, bool) {
 	return ev, true
 }
 
-// close stops delivery and closes the caller's channel, so that a caller
-// ranging over it finishes when the job does.
+// close delivers whatever is still queued and then closes the caller's
+// channel, so that a caller ranging over it finishes when the job does and
+// finishes having heard everything.
 //
 // It closes the channel it was given, which means Run owns that channel for
 // the duration of the call: give each Run its own. The alternative — leaving
