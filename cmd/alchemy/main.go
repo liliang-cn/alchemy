@@ -41,6 +41,17 @@ func run(args []string, getenv func(string) string, stdout, stderr *os.File) err
 	if err != nil {
 		return fmt.Errorf("alchemy: listening on %s: %w", s.addr, err)
 	}
+	// Bound here rather than inside serve so that both ports are either taken
+	// or the process has not started. A gateway that failed to bind after the
+	// gRPC server was already accepting would leave a half-started service
+	// whose startup line claims a REST surface that is not there.
+	var httpLis net.Listener
+	if s.httpAddr != "" {
+		if httpLis, err = net.Listen("tcp", s.httpAddr); err != nil {
+			lis.Close()
+			return fmt.Errorf("alchemy: listening on %s for the gateway: %w", s.httpAddr, err)
+		}
+	}
 
 	// SIGINT and SIGTERM become a cancelled context, which is the only thing
 	// the rest of the program knows about shutting down. NotifyContext also
@@ -51,5 +62,5 @@ func run(args []string, getenv func(string) string, stdout, stderr *os.File) err
 	defer stop()
 
 	fmt.Fprintln(stdout, startupLine(s, token))
-	return sv.serve(ctx, lis)
+	return sv.serve(ctx, lis, httpLis)
 }

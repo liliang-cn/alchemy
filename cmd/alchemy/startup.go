@@ -19,6 +19,7 @@ import (
 func startupLine(s settings, token string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "alchemy listening on %s", s.addr)
+	fmt.Fprintf(&b, " http=%s", httpLabel(s.httpAddr))
 	fmt.Fprintf(&b, " spool=%s", spoolLabel(s.spool))
 	fmt.Fprintf(&b, " store=%s capacity=%d sweep=%s", storeMemory, s.capacity, s.sweepEvery)
 	fmt.Fprintf(&b, " model-concurrency=%s", concurrencyLabel(s.modelConcurrency))
@@ -26,6 +27,17 @@ func startupLine(s settings, token string) string {
 	// The only thing said about the token is that there is one.
 	fmt.Fprintf(&b, " auth=%s", authLabel(token))
 	return b.String()
+}
+
+// httpLabel spells the empty address out. A blank after "http=" reads as a
+// truncated log line rather than as a decision, and the decision — that the
+// REST surface is not listening — is one an operator debugging a refused
+// connection needs to see stated.
+func httpLabel(addr string) string {
+	if addr == "" {
+		return "off"
+	}
+	return addr
 }
 
 func spoolLabel(dir string) string {

@@ -18,6 +18,13 @@
 // Each has its own file and its own reason.
 package gateway
 
+// The generated half of this package's world — the .pb.gw.go handlers and the
+// OpenAPI document the tests read their route table out of — is rebuilt by the
+// Makefile at the repository root. The line below is so that `go generate
+// ./...` finds it too: a generation step that only one person knows the
+// command for is a generation step that stops being run.
+//go:generate make -C ../.. generate
+
 import (
 	"context"
 	"net/http"
@@ -41,6 +48,12 @@ import (
 func New(ctx context.Context, conn *grpc.ClientConn) (http.Handler, error) {
 	mux := runtime.NewServeMux(
 		runtime.WithMarshalerOption(runtime.MIMEWildcard, jsonMarshaler()),
+		// See upload.go: a corpus arrives as itself rather than as base64
+		// inside JSON, because §8.4's 10GB dump has to be curl-able.
+		runtime.WithMarshalerOption(rawUploadContentType, chunkMarshaler{Marshaler: jsonMarshaler()}),
+		// See sse.go: the same events, framed for EventSource, and only when
+		// a caller asks for them by Accept.
+		runtime.WithMarshalerOption(sseContentType, sseMarshaler{Marshaler: jsonMarshaler()}),
 		// See errors.go: one gRPC code is carried to a different status than
 		// the gateway's default, because the default loses a distinction
 		// pkg/service was careful to make.
@@ -58,7 +71,9 @@ func New(ctx context.Context, conn *grpc.ClientConn) (http.Handler, error) {
 			return nil, err
 		}
 	}
-	return mux, nil
+	// rawUploads wraps rather than routes: it decides how one body is spelled
+	// and never where a request goes.
+	return rawUploads(sseHeaders(mux)), nil
 }
 
 // jsonMarshaler is the JSON a buyer reads, and its two settings are both

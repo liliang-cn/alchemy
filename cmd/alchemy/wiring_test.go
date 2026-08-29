@@ -51,7 +51,7 @@ func serveForTest(t *testing.T, s settings) alchemyv1.AlchemyClient {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { defer close(done); _ = sv.serve(ctx, lis) }()
+	go func() { defer close(done); _ = sv.serve(ctx, lis, nil) }()
 	t.Cleanup(func() {
 		cancel()
 		select {

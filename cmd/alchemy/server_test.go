@@ -36,7 +36,7 @@ func TestServeStopsGracefullyOnACancelledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- sv.serve(ctx, lis) }()
+	go func() { done <- sv.serve(ctx, lis, nil) }()
 
 	// It is up: an authenticated call is answered.
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))

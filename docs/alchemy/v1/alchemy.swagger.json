@@ -142,7 +142,7 @@
     "/v1/jobs/{job_id}/events": {
       "get": {
         "summary": "Progress is server-streaming: stages, counts, and conflicts as they are\nfound rather than at the end.",
-        "description": "Over HTTP this is newline-delimited JSON by default and Server-Sent Events\nwhen the caller asks for them by Accept. Both are the same events in the\nsame order; §6 called SSE \"a stream pretending to be a response\" and that\nis still true — it is offered because EventSource is what a browser has,\nand §6's own reason for a gateway is that browsers exist.",
+        "description": "Over HTTP this is newline-delimited JSON, and Server-Sent Events when the\ncaller asks for them by Accept. Same events, same order. §6 called SSE \"a\nstream pretending to be a response\" and that is still true; it is offered\nbecause EventSource is all a browser has, and §6's own reason for a\ngateway is that browsers exist.",
         "operationId": "Alchemy_WatchJob",
         "responses": {
           "200": {
@@ -237,7 +237,7 @@
     "/v1/jobs/{job_id}/result:stream": {
       "get": {
         "summary": "A large result is not one message; see §8.4. gRPC's default limit is 4MB\nand a large import blows through it, so GetResult refuses a result that\ndoes not fit rather than truncating one, and points here.",
-        "description": "Over HTTP the refusal is kept even though HTTP has no such limit, because\na gateway that quietly served what gRPC refused would be a second source\nof truth about what the service does. The custom verb rather than a query\nparameter is deliberate: paging and not-paging are two different response\nshapes, and a flag that changes the shape of a response is a route\npretending to be one route.",
+        "description": "Over HTTP the refusal is kept even though HTTP has no such limit: a\ngateway that quietly served what gRPC refused would be the second source\nof truth. A custom verb rather than a query parameter because a flag that\nchanges the shape of a response is two routes pretending to be one.",
         "operationId": "Alchemy_StreamResult",
         "responses": {
           "200": {
@@ -290,7 +290,7 @@
     "/v1/sources": {
       "post": {
         "summary": "Upload is client-streaming: a corpus is not a field in a message.",
-        "description": "body:\"*\" is the only mapping grpc-gateway allows for a client stream, and\nit means the request body is a sequence of SourceChunk messages rather\nthan one. That is what keeps §8.4 true over HTTP as well: the gateway\ndecodes a frame at a time and forwards it, so a 10GB dump is never a\n10GB buffer. The path carries no parameters because a client-streaming\nmethod cannot bind them; the first frame names the source, exactly as it\ndoes over gRPC.",
+        "description": "body:\"*\" is the only mapping a client stream allows, and it makes the\nrequest body a sequence of SourceChunk messages rather than one — which is\nwhat keeps §8.4 true over HTTP too: a frame is decoded and forwarded at a\ntime, so a 10GB dump is never a 10GB buffer. The path takes no parameters\nbecause a client-streaming method cannot bind them; the first frame names\nthe source, exactly as it does over gRPC.",
         "operationId": "Alchemy_UploadSource",
         "responses": {
           "200": {

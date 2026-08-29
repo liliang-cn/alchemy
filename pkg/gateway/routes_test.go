@@ -129,3 +129,30 @@ func TestEveryRPCHasExactlyOneHTTPAnswer(t *testing.T) {
 		}
 	}
 }
+
+// The paths this package spells out itself must be paths the generated
+// document declares.
+//
+// There are two of them — the upload route, because the raw-body form has to
+// recognise it before the mux routes it, and the refusals, because they stand
+// in for RPCs the document deliberately does not carry. Both are string
+// literals that no compiler checks, and a literal that drifts from the
+// annotation fails in the least visible way available: raw uploads quietly
+// become JSON parse errors, and the refusal quietly becomes a 404.
+func TestTheGatewaysOwnPathsAgreeWithTheGeneratedDocument(t *testing.T) {
+	declared := map[string]bool{}
+	for _, r := range generatedRoutes(t) {
+		declared[r.template] = true
+	}
+
+	if !declared[gateway.UploadPath] {
+		t.Errorf("gateway.UploadPath is %q, which the generated document does not declare; "+
+			"raw uploads would fall through to the JSON mapping and fail as a parse error", gateway.UploadPath)
+	}
+	for _, ref := range gateway.Refusals() {
+		if declared[ref.Path] {
+			t.Errorf("%s is both a refusal and a generated route; the RPC it stands for has been annotated, "+
+				"so the refusal is now shadowing a translation", ref.Path)
+		}
+	}
+}

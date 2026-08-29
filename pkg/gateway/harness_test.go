@@ -7,14 +7,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/gateway"
 	"github.com/liliang-cn/alchemy/pkg/job"
-	"github.com/liliang-cn/alchemy/pkg/review"
 	"github.com/liliang-cn/alchemy/pkg/service"
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
 	"google.golang.org/grpc"
@@ -202,6 +200,3 @@ func disputed() alchemy.Result {
 		Counts: alchemy.Counts{Conflicts: 1},
 	}
 }
-
-var _ = review.Decision{}
-var _ = strings.TrimSpace

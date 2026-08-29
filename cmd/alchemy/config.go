@@ -15,7 +15,13 @@ import (
 // a function with inputs and outputs, and can therefore be tested without
 // starting a server or touching the real environment.
 type settings struct {
-	addr      string
+	addr string
+	// httpAddr is where the REST/JSON gateway listens, and empty means it does
+	// not. Off by default for the same reason addr is loopback: §6 makes gRPC
+	// the service and the gateway a convenience for a buyer with curl and for
+	// a browser, and a second listening port nobody asked for is a second
+	// thing to secure and to watch.
+	httpAddr  string
 	spool     string
 	store     string
 	tokenFile string
@@ -114,6 +120,7 @@ func parseFlags(args []string, getenv func(string) string, out io.Writer) (setti
 	fs.SetOutput(out)
 
 	fs.StringVar(&s.addr, "addr", envString(getenv, "ALCHEMY_ADDR", defaultAddr), "address to listen on")
+	fs.StringVar(&s.httpAddr, "http-addr", envString(getenv, "ALCHEMY_HTTP_ADDR", ""), "address the REST/JSON gateway listens on (empty: no gateway)")
 	fs.StringVar(&s.spool, "spool", getenv("ALCHEMY_SPOOL"), "directory uploaded sources are spooled to (empty: a temporary directory)")
 	fs.StringVar(&s.store, "store", envString(getenv, "ALCHEMY_STORE", storeMemory), "job store: only \"memory\" exists")
 	// Note what is missing: there is no -token. See readToken.

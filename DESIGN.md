@@ -649,5 +649,34 @@ measured yet.
 ---
 ## 9. Status
 
-Design only for §1–§7; implementation started 2026-08-29 against the shared
-types in `pkg/alchemy`. §8 is design only.
+**Built, 2026-08-29/30.** §1–§7 are implemented and §6's gateway with them; §8
+is implemented for a single node and designed for more.
+
+Twenty-one packages, 600+ tests, `go test ./... -race` green, three
+dependencies (a PDF reader, gRPC, protobuf). The pipeline runs end to end
+against real model endpoints, over gRPC and over HTTP.
+
+What is real rather than claimed:
+
+- **§7.3 holds.** Two schemas that each parse cleanly and only disagree with
+  each other stop the job at `NEEDS_REVIEW`; `GetResult` refuses; the question
+  is on the review stream. Verified on a running binary, over both transports.
+- **§5's counts are computed and add up** — `Deterministic + Inferred ==
+  Relations` is a test, not a convention.
+- **§7.2's running cost is a stream**, and a real run reports what it spent by
+  model and stage.
+- **§6's gateway is generated**, reproducibly, from this file's own service
+  definition. `Review` is refused with 501 rather than translated, because a
+  bidirectional stream has no honest shape over HTTP — the one place the
+  transport decision in §6 turned out to be load-bearing rather than
+  preferential.
+
+What is designed and not built: the shared job store, budget and cache of §8.3
+exist as interfaces with in-memory implementations; the Postgres ones do not.
+A lease has no heartbeat yet. A review decision reaches the result but not the
+extraction that is still running, so §6's "an extractor that has already
+learned this is not an entity should stop proposing it in the next chunk" is
+not true today; a test pins that so the day it changes, it is noticed.
+
+The document this began as was written so the first line of code would answer
+to something. It did.
