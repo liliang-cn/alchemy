@@ -58,12 +58,22 @@ type View struct {
 
 // Views is every route the browser view answers.
 //
-// Four, and the split is deliberate. Two serve HTML and hold no data (the
-// landing page and the page shell); one is the credential exchange; one is the
-// data, and it is the only one that reads a graph. Keeping the data on its own
-// route is what lets the page be cached, reloaded and resized without asking
-// the service for four hundred thousand records again, and it is what makes
-// the size and held-job decisions testable as JSON rather than as pixels.
+// Two serve HTML and hold no data (the landing page and the page shell); two
+// are the credential exchange; one is the graph, and it is the only one that
+// reads a result. Keeping the data on its own route is what lets the page be
+// cached, reloaded and resized without asking the service for four hundred
+// thousand records again, and it is what makes the size and held-job decisions
+// testable as JSON rather than as pixels.
+//
+// The last three are the ones that change something, and they are proxies of
+// one RPC each rather than pages. They exist because the page cannot reach
+// /v1 at all: the session cookie is scoped to this prefix and is HttpOnly, so
+// the browser will not send it there and the page cannot read it in order to
+// build a header — see viewedit.go for why the two ways round that are both
+// worse than a proxy. They are still clients of the service in the sense this
+// file's opening paragraph means: every one ends in the same RPC a buyer with
+// curl would call, carrying the same caller's credential, and decides nothing
+// the service did not decide.
 func Views() []View {
 	return []View{{
 		Method: http.MethodGet,
@@ -92,6 +102,29 @@ func Views() []View {
 		Because: "The JSON the page draws. It backs no RPC because it is not one RPC: it is StreamResult read until " +
 			"a browser's budget is spent, or — for a job held on a conflict, which GetResult refuses on purpose " +
 			"(§7.3) — WatchJob, which is what the service is willing to say about a held job.",
+	}, {
+		Method: http.MethodGet,
+		Path:   ViewPrefix + "jobs/{job_id}/findings",
+		Because: "ListFindings, reachable by a browser. It is a second spelling of a translated route rather than a " +
+			"new answer, and it exists because the cookie this view mints is scoped to this prefix and is " +
+			"HttpOnly: the page can neither send it to /v1/jobs/{id}/findings nor read it to build a header. " +
+			"The queue is what a decision names — an item id exists nowhere else — so without this the page " +
+			"could show a finding and could not act on one.",
+	}, {
+		Method: http.MethodPost,
+		Path:   ViewPrefix + "jobs/{job_id}/decisions",
+		Because: "Decide, reachable by a browser, for the same cookie reason. This is what 'modify' and 'delete' " +
+			"are on a job still held for review: REVIEW_VERB_EDIT retypes, renames, redirects or merges, and " +
+			"REVIEW_VERB_REJECT takes a record out before the graph is delivered. It adds nothing to the RPC — " +
+			"the verb, the signature and the queue are all pkg/service's to judge.",
+	}, {
+		Method: http.MethodPost,
+		Path:   ViewPrefix + "assertions",
+		Because: "Assert, reachable by a browser, for the same cookie reason. It is how the view adds a fact, and " +
+			"— because §4 means a delivered result is the output of a job and not state on a server — it is " +
+			"also the only honest way to correct or retire a record of a job that has already finished: an " +
+			"assertion that supersedes says the old record is over and names who said so, rather than deleting " +
+			"something nothing here holds.",
 	}}
 }
 
@@ -106,11 +139,14 @@ func Views() []View {
 func viewRoutes(next http.Handler, v *viewer) http.Handler {
 	mux := http.NewServeMux()
 	handlers := map[string]http.HandlerFunc{
-		http.MethodGet + " " + ViewPrefix + "{$}":                 v.landing,
-		http.MethodPost + " " + ViewPrefix + "session":            v.signIn,
-		http.MethodDelete + " " + ViewPrefix + "session":          v.signOut,
-		http.MethodGet + " " + ViewPrefix + "jobs/{job_id}":       v.page,
-		http.MethodGet + " " + ViewPrefix + "jobs/{job_id}/graph": v.graph,
+		http.MethodGet + " " + ViewPrefix + "{$}":                      v.landing,
+		http.MethodPost + " " + ViewPrefix + "session":                 v.signIn,
+		http.MethodDelete + " " + ViewPrefix + "session":               v.signOut,
+		http.MethodGet + " " + ViewPrefix + "jobs/{job_id}":            v.page,
+		http.MethodGet + " " + ViewPrefix + "jobs/{job_id}/graph":      v.graph,
+		http.MethodGet + " " + ViewPrefix + "jobs/{job_id}/findings":   v.findings,
+		http.MethodPost + " " + ViewPrefix + "jobs/{job_id}/decisions": v.decisions,
+		http.MethodPost + " " + ViewPrefix + "assertions":              v.assertions,
 	}
 	for _, view := range Views() {
 		pattern := view.Method + " " + view.Path

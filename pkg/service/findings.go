@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/job"
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
 )
@@ -72,12 +73,37 @@ func (s *Server) Decide(ctx context.Context, req *alchemyv1.DecideRequest) (*alc
 	if id == "" {
 		return nil, wireError(invalid("decide: no job ID; a batch of decisions is about one job"))
 	}
-	if _, err := s.store.Get(ctx, id); err != nil {
+	j, err := s.store.Get(ctx, id)
+	if err != nil {
 		return nil, wireError(err)
 	}
 	r := s.runFor(id)
 	if r == nil {
 		return nil, wireError(job.ErrNotFound)
+	}
+	// A job that has stopped for good takes no decisions, and saying so is the
+	// whole of this check.
+	//
+	// It reported success without it. hub.close does not empty the queue, so
+	// vet still found the item, the hub still recorded the answer, and resolve
+	// returned at its first line because the state is no longer NEEDS_REVIEW —
+	// leaving the caller holding "applied: 1" for a decision that changed
+	// nothing and will change nothing. A silent no-op that answers 200 is
+	// worse than a refusal by exactly the margin that nobody goes looking for
+	// it.
+	//
+	// PENDING and RUNNING are deliberately still accepted. §6's whole argument
+	// for a bidirectional stream is that a decision reaches an extraction that
+	// has not run yet, and this endpoint is the same mechanism arriving in a
+	// different shape (see the rpc comment); refusing a decision because the
+	// job is still working would be refusing the case the design is proudest
+	// of.
+	if j.State == alchemy.JobSucceeded || j.State == alchemy.JobFailed {
+		return nil, wireError(wrongState(
+			"job %s is %s, so its queue is closed and a decision would change nothing. A record in "+
+				"a delivered graph is corrected by asserting the correction and naming what it "+
+				"retires — POST /v1/assertions with supersedes — because §4 means this service "+
+				"holds no graph to edit", id, j.State))
 	}
 
 	apply, rejected, err := s.sift(r, id, req.GetDecisions())
@@ -104,7 +130,7 @@ func (s *Server) Decide(ctx context.Context, req *alchemyv1.DecideRequest) (*alc
 	// that answered the last open question has moved it to SUCCEEDED by now,
 	// and reporting the state this call started with would tell the caller
 	// their job is still waiting for them.
-	j, err := s.store.Get(ctx, id)
+	j, err = s.store.Get(ctx, id)
 	if err != nil {
 		return nil, wireError(err)
 	}

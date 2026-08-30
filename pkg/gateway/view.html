@@ -58,6 +58,12 @@
     }
   }
   *{box-sizing:border-box}
+  /* The browser's own rule for [hidden] is display:none, and any author rule
+     that gives an element a display beats it. The forms below set
+     display:block on their labels, so a label hidden by script would keep
+     rendering with no field under it — a caption for something that is not
+     there. This makes the attribute mean what it reads as. */
+  [hidden]{display:none !important}
   /* --barh is written by script from the bar's measured height. The counts
      wrap onto two rows in a narrow window and onto one in a wide one, and
      everything below has to sit under whichever it is — a constant here would
@@ -118,9 +124,58 @@
   .key .t{color:var(--dim)}
   .key .t b{color:var(--ink);font-weight:600}
 
-  #filters{padding:11px 12px;flex:none}
+  /* Shrinkable rather than fixed. The query box, three toggles and five
+     producer checkboxes are a taller panel than the three toggles were, and a
+     panel that cannot shrink is a panel that pushes the findings list off the
+     bottom of a short window. */
+  #filters{padding:11px 12px;flex:0 1 auto;overflow:auto}
   .toggle{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:12px;cursor:pointer;user-select:none}
   .toggle input{margin:0;accent-color:var(--accent)}
+
+  /* ---- query: a text field over the loaded graph, and the producer
+     checkboxes built from the legend beside it ---- */
+  input.txt,select.txt,textarea.txt{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;
+    background:var(--bg);color:var(--ink);font:inherit;font-size:12px}
+  textarea.txt{resize:vertical;min-height:44px}
+  #q{margin-bottom:6px}
+  #qcount{font-size:11px;color:var(--dim);display:block;margin:-2px 0 7px}
+  #qcount.none{color:var(--warn)}
+  #producers{border-top:1px solid var(--line);margin-top:8px;padding-top:7px}
+
+  /* ---- the inspector's actions, and the form they open ---- */
+  #actions{border-top:1px solid var(--line);margin-top:11px;padding-top:9px}
+  .why{margin:0 0 8px;font-size:11.5px;line-height:1.45;color:var(--dim)}
+  .why b{color:var(--ink);font-weight:600}
+  .row{display:flex;gap:6px;flex-wrap:wrap}
+  form.edit{margin-top:9px;display:none}
+  form.edit.on{display:block}
+  form.edit label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--dim);margin:7px 0 3px}
+  form.edit .err{color:var(--bad);font-size:11.5px;margin-top:7px;display:none}
+  form.edit .err.on{display:block}
+  form.edit .ok{color:var(--read);font-size:11.5px;margin-top:7px;display:none}
+  form.edit .ok.on{display:block}
+
+  /* ---- the assert panel: a modal, because composing a record is not a thing
+     to do in a 236px column, and because what comes back needs room ---- */
+  #assert{position:fixed;inset:0;z-index:32;display:none;align-items:flex-start;justify-content:center;
+    background:rgba(0,0,0,.45);padding:24px 16px;overflow:auto}
+  #assert.on{display:flex}
+  #assert .box{width:100%;max-width:520px;background:var(--bg);border:1px solid var(--line);
+    border-radius:12px;padding:18px 20px 20px}
+  #assert h2{margin:0;font-size:15px}
+  #assert .close{float:right;cursor:pointer;color:var(--dim);font-size:20px;line-height:1;border:0;background:none}
+  #assert .note{font-size:11.5px;line-height:1.5;color:var(--dim);margin:7px 0 0}
+  #assert .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+  #outcome{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;display:none}
+  #outcome.on{display:block}
+  #outcome ul{margin:6px 0 0;padding-left:0;list-style:none}
+  #outcome li{font-size:11.5px;line-height:1.45;padding:5px 7px;border-radius:6px;
+    border-left:3px solid var(--line);background:rgba(127,127,127,.09);margin-bottom:4px}
+  #outcome li.violation{border-left-color:var(--bad)}
+  #outcome li.proposal{border-left-color:var(--warn)}
+  #outcome li b{font-weight:600}
+  #outcome li .m{color:var(--dim)}
 
   #findings{padding:11px 12px;display:flex;flex-direction:column;flex:0 1 auto;min-height:0}
   #findlist{max-height:26vh}
@@ -210,6 +265,7 @@
     <span class="c" data-count="chunks_unread"><span class="n">–</span><span class="k">chunks_unread</span></span>
   </div>
   <div class="tools">
+    <button class="btn" id="add" title="State a fact nobody's documents said">Assert</button>
     <button class="btn" id="spin" title="Turn the graph on its own">Orbit</button>
     <button class="btn" id="fit" title="Frame everything">Fit</button>
     <button class="btn" id="out" title="Release this browser's session">Sign out</button>
@@ -221,21 +277,34 @@
 <div id="left">
 <div class="panel" id="legend">
   <h3>Producer — §5b's field that matters</h3>
-  <div class="key">
+  <!-- data-producer is not decoration: the producer filter's checkboxes are
+       built from these five keys at load, so the legend and the filter can
+       never come to list different producers. A sixth producer added to
+       pkg/alchemy needs one line here and nothing else. -->
+  <div class="key" data-producer="ddl">
     <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--read)" stroke-width="2.4"/></svg>
     <span class="t"><b>ddl</b> · a CREATE TABLE said it</span>
   </div>
-  <div class="key">
+  <div class="key" data-producer="graph-import">
     <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--read)" stroke-width="2.4"/></svg>
     <span class="t"><b>graph-import</b> · a graph already asserted it</span>
   </div>
-  <div class="key">
+  <div class="key" data-producer="tabular">
     <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--guess)" stroke-width="2.4" stroke-dasharray="4 3"/></svg>
     <span class="t"><b>tabular</b> · a mapping produced it</span>
   </div>
-  <div class="key">
+  <div class="key" data-producer="llm-extract">
     <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--guess)" stroke-width="2.4" stroke-dasharray="4 3"/></svg>
     <span class="t"><b>llm-extract</b> · a model decided it</span>
+  </div>
+  <!-- human is drawn cool and solid with the read producers, and that is the
+       claim rather than a shortcut: a named person who can be asked is not a
+       guess. It is the producer every record this page asserts comes back
+       stamped with, so a legend without it would draw the person's own record
+       as something nobody can account for. -->
+  <div class="key" data-producer="human">
+    <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--read)" stroke-width="2.4"/><circle cx="17" cy="6" r="3" fill="var(--read)"/></svg>
+    <span class="t"><b>human</b> · a named person asserted it</span>
   </div>
   <h3 style="margin-top:11px">Findings</h3>
   <div class="key">
@@ -249,10 +318,18 @@
 </div>
 
 <div class="panel" id="filters">
-  <h3>Show</h3>
+  <h3>Query</h3>
+  <!-- The search is over the graph already loaded and asks the service
+       nothing. That is not an optimisation: the JSON on this page is a sample
+       of a graph the service will not hold after this job expires, so a search
+       that went back to the server would be searching a different thing than
+       the one on the screen and would report matches nobody can see. -->
+  <input class="txt" id="q" placeholder="id, name, type, relation type" autocomplete="off" spellcheck="false" aria-label="Search the loaded graph">
+  <span id="qcount"></span>
   <label class="toggle"><input type="checkbox" id="only-guessed"> Only what was guessed</label>
   <label class="toggle"><input type="checkbox" id="only-findings"> Only records with findings</label>
   <label class="toggle"><input type="checkbox" id="show-labels" checked> Names</label>
+  <div id="producers"><h3 style="margin-bottom:6px">Producer</h3></div>
 </div>
 
 <div class="panel" id="findings">
@@ -267,9 +344,148 @@
   <div class="title" id="dtitle"></div>
   <div class="sub" id="dsub"></div>
   <dl class="field" id="dfields"></dl>
+
+  <!-- Modify and delete, and the sentence that says which of two entirely
+       different operations the buttons below are about to perform.
+
+       §4 is why there are two. A job still held for review has not delivered
+       its graph, so a correction is a decision on its queue and the service
+       applies it before anything is handed over. A job that has already
+       finished holds nothing here to correct: the result was returned and this
+       service forgot it, so the only honest act is an assertion that
+       supersedes — a record saying the old record is over, signed, carried
+       forward into whatever store the caller keeps. The words on the buttons
+       change with the mode for that reason. A button that silently meant both
+       would be a button whose first surprise is a person believing they
+       deleted something. -->
+  <div id="actions">
+    <p class="why" id="dwhy"></p>
+    <div class="row">
+      <button class="btn" id="act-modify"></button>
+      <button class="btn" id="act-remove"></button>
+    </div>
+
+    <form class="edit" id="modform">
+      <label for="m-type">type</label>
+      <input class="txt" id="m-type" autocomplete="off" spellcheck="false">
+      <label for="m-name">name</label>
+      <input class="txt" id="m-name" autocomplete="off" spellcheck="false">
+      <label for="m-from">from — the entity this edge starts at</label>
+      <input class="txt" id="m-from" autocomplete="off" spellcheck="false">
+      <label for="m-to">to — the entity this edge ends at</label>
+      <input class="txt" id="m-to" autocomplete="off" spellcheck="false">
+      <label for="m-into">into — the entity this record is the same record as (merge)</label>
+      <input class="txt" id="m-into" autocomplete="off" spellcheck="false">
+      <label for="m-by">who — required; a correction nobody signed is refused</label>
+      <input class="txt" id="m-by" autocomplete="off" spellcheck="false">
+      <label for="m-note">why</label>
+      <textarea class="txt" id="m-note" spellcheck="false"></textarea>
+      <p class="why" id="m-scope"></p>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" type="submit" id="m-send"></button>
+        <button class="btn" type="button" id="m-cancel">Cancel</button>
+      </div>
+      <div class="err" id="m-err"></div>
+      <div class="ok" id="m-ok"></div>
+    </form>
+
+    <form class="edit" id="delform">
+      <!-- Only on a delivered job. A supersession is carried BY a record —
+           pkg/service builds it from the first record of the assertion — so
+           there is no way to state an absence: something has to say the old
+           thing is over. On a job still held for review this block is hidden,
+           because a rejection there takes the record out before delivery and
+           replaces it with nothing. -->
+      <div id="d-replace" hidden>
+        <p class="why">The record that replaces this one, and carries the claim that this one is over.</p>
+        <div id="d-replace-entity">
+          <label for="d-id">id</label>
+          <input class="txt" id="d-id" autocomplete="off" spellcheck="false">
+          <label for="d-type">type</label>
+          <input class="txt" id="d-type" autocomplete="off" spellcheck="false">
+          <label for="d-name">name</label>
+          <input class="txt" id="d-name" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="d-replace-relation" hidden>
+          <label for="d-from">from</label>
+          <input class="txt" id="d-from" autocomplete="off" spellcheck="false">
+          <label for="d-to">to</label>
+          <input class="txt" id="d-to" autocomplete="off" spellcheck="false">
+          <label for="d-rtype">type</label>
+          <input class="txt" id="d-rtype" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <label for="d-by">who — required</label>
+      <input class="txt" id="d-by" autocomplete="off" spellcheck="false">
+      <label for="d-note">why this record is wrong or over — required</label>
+      <textarea class="txt" id="d-note" spellcheck="false"></textarea>
+      <p class="why" id="d-scope"></p>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" type="submit" id="d-send"></button>
+        <button class="btn" type="button" id="d-cancel">Cancel</button>
+      </div>
+      <div class="err" id="d-err"></div>
+      <div class="ok" id="d-ok"></div>
+    </form>
+  </div>
 </div>
 
-<div id="hint">drag to turn · wheel to zoom · click a record</div>
+<!-- Add: one entity or one relation, stated by a person, POSTed to
+     /ui/assertions and from there to Assert. -->
+<div id="assert">
+  <div class="box">
+    <button class="close" id="assertclose" aria-label="Close">&times;</button>
+    <h2>State a fact</h2>
+    <p class="note" id="assertwhy">
+      An assertion is a job of its own: it comes back stamped
+      <b>human</b> with your name on it, and it does <b>not</b> join the graph on this screen —
+      reload against the job id it returns to see it. This view has no copy of the job's ontology,
+      so the assertion is sent without a vocabulary, and an assertion sent without a vocabulary is
+      not checked against one: no violations and no proposals will come back, and that means
+      nothing was found rather than nothing is wrong.
+    </p>
+    <form id="assertform">
+      <label class="toggle" style="margin-top:11px">
+        <input type="radio" name="akind" value="entity" checked> An entity
+      </label>
+      <label class="toggle">
+        <input type="radio" name="akind" value="relation"> A relation
+      </label>
+
+      <div id="a-entity">
+        <div class="grid">
+          <div><label for="a-id">id</label><input class="txt" id="a-id" autocomplete="off" spellcheck="false"></div>
+          <div><label for="a-type">type</label><input class="txt" id="a-type" autocomplete="off" spellcheck="false"></div>
+        </div>
+        <label for="a-name">name</label>
+        <input class="txt" id="a-name" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div id="a-relation" hidden>
+        <div class="grid">
+          <div><label for="a-from">from</label><input class="txt" id="a-from" autocomplete="off" spellcheck="false"></div>
+          <div><label for="a-to">to</label><input class="txt" id="a-to" autocomplete="off" spellcheck="false"></div>
+        </div>
+        <div class="grid">
+          <div><label for="a-rtype">type</label><input class="txt" id="a-rtype" autocomplete="off" spellcheck="false"></div>
+          <div><label for="a-key">key — which of several parallel edges</label><input class="txt" id="a-key" autocomplete="off" spellcheck="false"></div>
+        </div>
+      </div>
+
+      <label for="a-by">who is asserting — required, and kept for this browser session</label>
+      <input class="txt" id="a-by" autocomplete="off" spellcheck="false">
+      <label for="a-note">why you know this</label>
+      <textarea class="txt" id="a-note" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:11px">
+        <button class="btn" type="submit" id="a-send">Assert</button>
+      </div>
+      <div class="err" id="a-err"></div>
+    </form>
+    <div id="outcome"></div>
+  </div>
+</div>
+
+<div id="hint">drag to turn · wheel to zoom · click a node or an edge</div>
 
 <div id="chooser">
   <div class="box">
@@ -298,6 +514,11 @@
       picture to fall back to. The same information is available without a browser:</p>
     <pre>curl -H "Authorization: Bearer $ALCHEMY_TOKEN" http://HOST/v1/jobs/JOB_ID/result</pre>
     <p>and, for a job held on a conflict, <code>/v1/jobs/JOB_ID/events</code>.</p>
+    <p>Changing something needs no browser either. The queue is
+      <code>/v1/jobs/JOB_ID/findings</code>, a decision is a POST to
+      <code>/v1/jobs/JOB_ID/decisions</code>, and a fact you know — or a statement that a
+      record is over — is a POST to <code>/v1/assertions</code>. This page uses the same three
+      through <code>/ui</code>, because its cookie does not reach <code>/v1</code>.</p>
   </div>
 </noscript>
 
@@ -317,6 +538,17 @@ var BY_ID = {};
 var selected = null;
 var spinning = false;
 var showLabels = true, onlyGuessed = false, onlyFindings = false;
+var query = "";            // the search box, lower-cased
+var producersOn = {};      // producer name -> drawn, built from the legend
+var FINDINGS = null;       // the job's review queue, when it has one
+
+/* WHO is asked for once and kept for as long as the tab is open.
+   Every decision and every assertion has to name a person — pkg/service
+   refuses both without one — and a field that empties itself between two
+   corrections is a field somebody eventually fills with "x". It is deliberately
+   not stored anywhere: it is a name typed into a form, not a credential, and
+   the cookie is the only thing here that outlives the page. */
+var WHO = "";
 
 /* ---------- palette, re-read when the system theme flips ---------- */
 var P = {};
@@ -344,8 +576,20 @@ function num(n) { return (n == null ? "–" : Number(n).toLocaleString()); }
 /* ---------- producer: the primary encoding (§5b) ----------
    Deterministic is cool and solid; inferred is warm and dashed. Two channels
    carrying one fact, so the split survives a reader who cannot see the hue and
-   a window too small to show the legend. */
-var DETERMINISTIC = { "PRODUCER_DDL": 1, "PRODUCER_GRAPH_IMPORT": 1, "ddl": 1, "graph-import": 1 };
+   a window too small to show the legend.
+
+   human is on the read side, and it is here because pkg/alchemy puts it there:
+   "a person signing their name to a sentence is the clearest case of stating
+   there is — clearer than a foreign key, which states what a schema believes
+   rather than what anybody checked." A page that drew a signed assertion warm
+   and dashed, and hid it behind "Only what was guessed", would be contradicting
+   the record it is drawing. Both spellings of every producer are listed because
+   this page reads the service's JSON, which sends the enum name, and its own
+   forms, which use the short one. */
+var DETERMINISTIC = {
+  "PRODUCER_DDL": 1, "PRODUCER_GRAPH_IMPORT": 1, "PRODUCER_HUMAN": 1,
+  "ddl": 1, "graph-import": 1, "human": 1
+};
 function isRead(prov) { return !!DETERMINISTIC[(prov && prov.producer) || ""]; }
 function producerName(prov) {
   var p = (prov && prov.producer) || "";
@@ -404,9 +648,11 @@ function render() {
   paintBanners(counts);
   measureBar();
   build(res);
+  applyQuery();
   fit();
-  loop();
+  startLoop();
   paintFindings(res);
+  loadFindings();
 }
 
 function paintCounts(counts) {
@@ -452,7 +698,8 @@ function paintBanners(counts) {
       // explaining what it drew instead, and a reader is owed the seam.
       (G.because || "").replace(/\s*$/, "") +
       " — What is drawn is the conflict itself: each side is a claim, coloured by what produced it. " +
-      "Answer them on the gRPC stream alchemy.v1.Alchemy/Review; the graph is delivered once they are.");
+      "Click the side you believe and answer it here, or on the gRPC stream alchemy.v1.Alchemy/Review; " +
+      "the graph is delivered once every conflict has an answer.");
   }
   if (G.truncated) {
     var shown = G.shown || {};
@@ -678,10 +925,92 @@ function fit() {
   draw();
 }
 
-function visible(prov, finding) {
+/* Whether a record is drawn lit or dimmed.
+
+   Dimmed rather than removed, throughout. A filtered graph that deleted what
+   it filtered would be a different graph every time somebody typed, and the
+   thing a person is usually looking for is where a match sits in the whole —
+   which is a question a picture with the rest of the graph missing cannot
+   answer. lit is the search's answer for this record; the rest are the
+   checkboxes. */
+function visible(prov, finding, lit) {
+  if (lit === false) { return false; }
   if (onlyFindings && !finding) { return false; }
   if (onlyGuessed && isRead(prov)) { return false; }
+  if (producersOn[producerName(prov)] === false) { return false; }
   return true;
+}
+
+/* ---------- query: a search over the graph already on the page ----------
+
+   It asks the service nothing, and that is not an optimisation. What is drawn
+   is a sample of a result the service will not hold once the job expires (§4),
+   so a search that went to the server would be searching something other than
+   the thing on the screen — and would report matches this view has no node
+   for. Matching a record it cannot draw is the one answer worse than no
+   answer. */
+function matchesQuery(text) {
+  return String(text == null ? "" : text).toLowerCase().indexOf(query) >= 0;
+}
+
+function applyQuery() {
+  var lit = 0, total = NODES.length + EDGES.length, i;
+  for (i = 0; i < NODES.length; i++) {
+    var n = NODES[i];
+    n.lit = !query || matchesQuery(n.id) || matchesQuery(n.label) || matchesQuery(n.type);
+    if (n.lit) { lit++; }
+  }
+  for (i = 0; i < EDGES.length; i++) {
+    var e = EDGES[i];
+    // A relation matches on its type — the thing a person searching a graph
+    // for "REFERENCES" is after. An edge whose two ends both matched is lit
+    // as well, because an edge between two lit nodes drawn dim reads as an
+    // edge that was excluded, which is a different claim.
+    e.lit = !query || matchesQuery(e.type) || (e.a.lit && e.b.lit);
+    if (e.lit) { lit++; }
+  }
+  var out = DOM("qcount");
+  if (!query) {
+    out.textContent = total ? total + " records drawn" : "";
+    out.classList.remove("none");
+  } else {
+    out.textContent = lit + " of " + total + " match";
+    // A search with no matches has to say so rather than leaving a person
+    // looking at a uniformly dim graph wondering whether it is still loading.
+    out.classList.toggle("none", lit === 0);
+  }
+}
+
+/* The producer checkboxes are built from the legend rather than written twice.
+
+   The legend is the list of producers this page knows how to talk about, so a
+   filter written separately is a second list that can come to disagree with
+   it — and the way that failure shows up is a producer nobody can switch off
+   and nobody can see they cannot. */
+function buildProducerFilter() {
+  var box = DOM("producers");
+  var keys = document.querySelectorAll("#legend .key[data-producer]");
+  for (var i = 0; i < keys.length; i++) {
+    var name = keys[i].getAttribute("data-producer");
+    producersOn[name] = true;
+    var label = document.createElement("label");
+    label.className = "toggle";
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.setAttribute("data-producer", name);
+    cb.addEventListener("change", function (ev) {
+      producersOn[ev.target.getAttribute("data-producer")] = ev.target.checked;
+      draw();
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" " + name));
+    box.appendChild(label);
+  }
+  // A producer the legend does not list still has to be drawable: a result
+  // from a version of the service this page has never seen must not vanish
+  // because there is no checkbox for it.
+  producersOn.unknown = true;
 }
 
 function draw() {
@@ -711,7 +1040,7 @@ function draw() {
 }
 
 function drawEdge(e) {
-  var shown = e.kind === "relation" ? visible(e.prov, e.finding) : true;
+  var shown = e.kind === "relation" ? visible(e.prov, e.finding, e.lit) : e.lit !== false;
   var dim = !shown;
   var read = e.kind === "relation" ? isRead(e.prov) : false;
 
@@ -747,7 +1076,7 @@ function drawEdge(e) {
 
 function drawNode(n) {
   var read = isRead(n.prov);
-  var shown = visible(n.prov, n.finding);
+  var shown = visible(n.prov, n.finding, n.lit);
   // Perspective as a cue, not as the scale: rel is 1 at the centre plane and
   // departs from it only by how near or far this node actually is.
   var rel = Math.max(0.35, Math.min(2.4, n.p.k / cam.kRef));
@@ -802,7 +1131,16 @@ function drawNode(n) {
 }
 
 /* ---------- the loop: settle while warm, orbit while asked ---------- */
-var warm = 0;
+var warm = 0, looping = false;
+/* startLoop is called on every render, and render runs again whenever the
+   graph is reloaded — a retry, or a decision that unblocked the job. Starting
+   a second animation loop would draw the scene twice per frame from then on,
+   which is a page that gets slower every time somebody presses a button. */
+function startLoop() {
+  if (looping) { return; }
+  looping = true;
+  loop();
+}
 function loop() {
   requestAnimationFrame(loop);
   var moved = false;
@@ -843,14 +1181,38 @@ cv.addEventListener("wheel", function (ev) {
 function pick(ev) {
   var rect = cv.getBoundingClientRect();
   var mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
-  var best = null, bestD = 22 * 22;
-  for (var i = 0; i < NODES.length; i++) {
+  var best = null, bestD = 22 * 22, i;
+  for (i = 0; i < NODES.length; i++) {
     var n = NODES[i];
     if (!n.p) { continue; }
     var dx = n.p.sx - mx, dy = n.p.sy - my, d = dx * dx + dy * dy;
     if (d < bestD) { bestD = d; best = n; }
   }
-  select(best);
+  if (best) { select(best); return; }
+
+  // Edges are pickable too, and they have to be: a relation is a record like
+  // an entity is, and "redirect this edge" and "this edge is wrong" are two of
+  // the four things this view exists to let somebody do. Nodes win any tie,
+  // because a click near a node that is also near one of its edges is a click
+  // on the node.
+  var bestEdge = null, bestEdgeD = 9;
+  for (i = 0; i < EDGES.length; i++) {
+    var e = EDGES[i];
+    if (!e.a.p || !e.b.p) { continue; }
+    var dist = segmentDistance(mx, my, e.a.p.sx, e.a.p.sy, e.b.p.sx, e.b.p.sy);
+    if (dist < bestEdgeD) { bestEdgeD = dist; bestEdge = e; }
+  }
+  select(bestEdge);
+}
+
+// Distance from a point to a line segment, in screen pixels.
+function segmentDistance(px, py, ax, ay, bx, by) {
+  var vx = bx - ax, vy = by - ay;
+  var len = vx * vx + vy * vy;
+  var t = len ? ((px - ax) * vx + (py - ay) * vy) / len : 0;
+  t = Math.max(0, Math.min(1, t));
+  var dx = px - (ax + t * vx), dy = py - (ay + t * vy);
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 function select(n) {
@@ -864,6 +1226,7 @@ function select(n) {
    provenance, named, for one record. "Attributable" is only true if a person
    can get from a dot on a screen to the chunk of the file it came from. */
 function showDetail(n) {
+  if (n.a && n.b) { showEdgeDetail(n); return; }
   var d = n.detail || {};
   DOM("dtitle").textContent = n.label;
   var prov = n.prov || {};
@@ -899,6 +1262,54 @@ function showDetail(n) {
     return "<dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd>";
   }).join("");
   DOM("detail").classList.add("on");
+  paintActions(selectedRecord());
+}
+
+/* The same panel for an edge.
+
+   It is a separate function rather than a branch inside the one above because
+   the two have different identities and different fields: a node is named by
+   its id and an edge by the arrow it draws, and a conflict tether or a
+   duplicate line is neither — it is a finding about two records, drawn like an
+   edge, and paintActions is given nothing for it so that no button offers to
+   retype a sentence about the graph. */
+function showEdgeDetail(e) {
+  var d = e.detail || {};
+  var prov = e.prov || d.provenance || null;
+  var read = isRead(prov);
+  DOM("dtitle").textContent = e.kind === "relation"
+    ? relationIdentity(d)
+    : (d.subject || e.type || e.kind);
+  DOM("dsub").innerHTML = e.kind === "relation"
+    ? '<span class="tag ' + (read ? "read" : "guess") + '">' + esc(read ? "read" : "guessed") + "</span> " + esc(e.type || "")
+    : esc(e.kind + (e.type ? " · " + e.type : ""));
+
+  var rows = [];
+  function row(k, v) { if (v !== undefined && v !== null && v !== "" && v !== 0) { rows.push([k, v]); } }
+  row("kind", e.kind);
+  if (e.kind === "relation") {
+    row("from", d.from); row("to", d.to); row("type", d.type); row("key", d.key);
+  }
+  if (prov) {
+    row("producer", producerName(prov));
+    row("source", prov.source);
+    row("chunk", prov.chunk === -1 ? "— (not chunked)" : prov.chunk);
+    row("model", prov.model);
+    row("ontology", prov.ontology);
+    row("confidence", prov.confidence ? prov.confidence.toFixed(2) : null);
+    row("reviewed by", prov.reviewed_by);
+    row("rule set", prov.rule_set);
+  }
+  row("detail", d.detail);
+  if (d.attributes) {
+    Object.keys(d.attributes).forEach(function (k) { row(k, JSON.stringify(d.attributes[k])); });
+  }
+
+  DOM("dfields").innerHTML = rows.map(function (r) {
+    return "<dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd>";
+  }).join("");
+  DOM("detail").classList.add("on");
+  paintActions(selectedRecord());
 }
 
 /* ---------- findings list ---------- */
@@ -933,13 +1344,531 @@ function paintFindings(res) {
           return "<dt>" + esc(k) + "</dt><dd>" + esc(typeof it.raw[k] === "object" ? JSON.stringify(it.raw[k]) : it.raw[k]) + "</dd>";
         }).join("");
         DOM("detail").classList.add("on");
+        // A guess is a mapping and not a record — pkg/review says so, and the
+        // service refuses a reject or an edit on one — so nothing here offers
+        // to act on it.
+        paintActions(null);
       }
     });
     ul.appendChild(li);
   });
 }
 
+/* =======================================================================
+   Changing something.
+
+   §4 is the whole shape of this section: "the service returns a graph; it does
+   not store one". A finished result is the output of a job, not state on a
+   server, so there is no edit and no delete to offer — and the two operations
+   this view does offer are genuinely different operations, not one operation
+   in two coats:
+
+     - A job still held for review has not delivered its graph. A correction
+       there is a decision on its queue (REVIEW_VERB_EDIT / REVIEW_VERB_REJECT)
+       and the service applies it before handing anything over.
+
+     - A job that has already finished is closed. The honest act is an
+       assertion that supersedes: a new record, signed, carrying the claim that
+       the old record is over. Nothing is removed, because there is nothing
+       here to remove.
+
+   The page says which of the two it is doing before it does it. A single
+   button that meant both, chosen from a state the person cannot see, would be
+   a button whose first surprise is somebody believing they deleted a fact.
+   ======================================================================= */
+
+var DECIDE_WHY =
+  "This job is <b>held for review</b>, so its graph has not been delivered. Both buttons send a " +
+  "<b>decision</b> on its queue — REVIEW_VERB_EDIT to retype, rename, redirect or merge, " +
+  "REVIEW_VERB_REJECT to take the record out — and the service applies it before it hands the graph over.";
+var SUPERSEDE_WHY =
+  "This job is <b>delivered</b> and its queue is closed, so a decision here would be recorded against " +
+  "nothing. Alchemy holds no graph and <b>never removes</b> a record: both buttons send an assertion that " +
+  "<b>supersede</b>s — it states this record is over, names you, and leaves the record itself where it is.";
+
+function reviewable() {
+  var state = ((G && G.job) || {}).state || "";
+  return !!(G && G.held) || state === "JOB_STATE_NEEDS_REVIEW";
+}
+
+/* The review queue, fetched beside the graph.
+
+   It is a separate request because it is a separate question: the graph says
+   what was found, and the queue says what the service is willing to be asked
+   about — with the item ids a decision has to name. There is nowhere else to
+   learn an item id, so without this the page could show a finding and not act
+   on one. A job with no queue (never in review, already delivered) answers
+   with an empty list or a refusal, and either is fine: the actions read the
+   job's state, not this. */
+function loadFindings() {
+  if (!jobId) { return; }
+  fetch("/ui/jobs/" + encodeURIComponent(jobId) + "/findings",
+    { credentials: "same-origin", headers: { "Accept": "application/json" } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (doc) { FINDINGS = doc; })
+    .catch(function () { FINDINGS = null; });
+}
+
+/* relationIdentity is how alchemy names one edge, and it is spelled here the
+   way pkg/review spells it — "from -[TYPE]-> to", with the producer's key
+   inside the brackets when the record has one, so two parallel edges are two
+   names. A supersession that retired the wrong one of a parallel pair would be
+   a correction that made the graph less true. */
+function relationIdentity(r) {
+  var label = r.key ? r.type + "#" + r.key : r.type;
+  return r.from + " -[" + label + "]-> " + r.to;
+}
+
+function parseSubject(subject) {
+  var m = String(subject || "").match(/^(.*) -\[(.*)\]-> (.*)$/);
+  if (!m) { return { kind: "entity", id: subject, type: "", name: "", identity: subject }; }
+  var type = m[2], key = "", hash = type.indexOf("#");
+  if (hash >= 0) { key = type.slice(hash + 1); type = type.slice(0, hash); }
+  return { kind: "relation", from: m[1], to: m[3], type: type, key: key, identity: subject };
+}
+
+/* What is selected, as a record — or null when the selection is not one.
+
+   A conflict tether and a duplicate line are drawn like edges and are not
+   records: they are findings about records, and offering to retype one would
+   be offering to edit a sentence about the graph rather than the graph. The
+   claim nodes of a held job are the other way round: they are drawn as two
+   nodes and they are one record, the conflict's subject, which is what a
+   decision on that item acts on. */
+function selectedRecord() {
+  var s = selected;
+  if (!s) { return null; }
+  if (s.a && s.b) {
+    if (s.kind !== "relation") { return null; }
+    var r = s.detail || {};
+    return { kind: "relation", from: r.from, to: r.to, type: r.type, key: r.key || "",
+      identity: relationIdentity(r) };
+  }
+  if (s.kind === "claim") { return parseSubject((s.detail || {}).subject); }
+  var e = s.detail || {};
+  if (!e.id) { return null; }
+  return { kind: "entity", id: e.id, type: e.type || "", name: e.name || "", identity: e.id };
+}
+
+/* The queue item a decision about this record would name.
+
+   Matched on the item's targets first and its subject second, because targets
+   are what pkg/review resolved and the subject is only its printed form. An
+   item with no target can be accepted and not edited — the service says so —
+   so a page that matched on the subject alone would offer a Modify button that
+   the service refuses every time. */
+function itemFor(rec) {
+  var items = (FINDINGS && FINDINGS.items) || [];
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i], targets = it.targets || [];
+    for (var j = 0; j < targets.length; j++) {
+      var t = targets[j];
+      if (rec.kind === "entity" && t.id && t.id === rec.id) { return it; }
+      if (rec.kind === "relation" && t.from === rec.from && t.to === rec.to && t.type === rec.type) { return it; }
+    }
+    if (it.subject === rec.identity) { return it; }
+  }
+  return null;
+}
+
+/* ---------- small DOM helpers, so the handlers below read as intent ---------- */
+function val(id) { return DOM(id) ? DOM(id).value : ""; }
+function fill(id, v) { if (DOM(id)) { DOM(id).value = v == null ? "" : v; } }
+function field(id, on) {
+  var input = DOM(id);
+  var label = document.querySelector('label[for="' + id + '"]');
+  if (input) { input.hidden = !on; }
+  if (label) { label.hidden = !on; }
+}
+function say(id, text, on) {
+  var el = DOM(id);
+  if (!el) { return; }
+  el.textContent = text || "";
+  el.classList.toggle("on", !!on && !!text);
+}
+function closeForms() {
+  DOM("modform").classList.remove("on");
+  DOM("delform").classList.remove("on");
+  ["m-err", "m-ok", "d-err", "d-ok"].forEach(function (id) { say(id, "", false); });
+}
+
+/* send is every write this page makes: same-origin, cookie-carried, JSON in
+   and JSON out.
+
+   It goes to /ui and not to /v1 because it cannot go to /v1. The session
+   cookie is scoped to /ui and is HttpOnly, so the browser will not send it to
+   the REST surface and this script cannot read it in order to build an
+   Authorization header. The /ui routes are proxies of one RPC each; see
+   pkg/gateway/viewedit.go. A 401 means the session went away underneath us,
+   and the honest response is to reload, because the body of that 401 is the
+   sign-in page. */
+function send(path, payload) {
+  return fetch(path, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify(payload)
+  }).then(function (r) {
+    if (r.status === 401) { location.reload(); throw new Error("this browser session has ended"); }
+    return r.text().then(function (body) {
+      if (!r.ok) { throw new Error((body || "").trim() || ("the service answered " + r.status)); }
+      return body ? JSON.parse(body) : {};
+    });
+  });
+}
+
+function decisionsPath() { return "/ui/jobs/" + encodeURIComponent(jobId) + "/decisions"; }
+
+/* ---------- the actions on a selected record ---------- */
+function paintActions(rec) {
+  closeForms();
+  var box = DOM("actions");
+  if (!rec) { box.style.display = "none"; return; }
+  box.style.display = "";
+  var live = reviewable();
+  DOM("dwhy").innerHTML = live ? DECIDE_WHY : SUPERSEDE_WHY;
+  DOM("act-modify").textContent = live ? "Modify — decision" : "Correct — supersede";
+  DOM("act-remove").textContent = live ? "Reject — decision" : "Retire — supersede";
+}
+
+function openModify() {
+  var rec = selectedRecord();
+  if (!rec) { return; }
+  closeForms();
+  var live = reviewable(), entity = rec.kind === "entity";
+  // A held job draws the two sides of a conflict rather than the graph, so the
+  // record behind a claim node carries no type of its own — the claim's
+  // statement is the type, and it is what the reviewer picked the node to
+  // choose. Prefilling it is the difference between clicking the side you
+  // agree with and retyping what it already says. Only for a type conflict:
+  // for any other kind the statement is not a type and filling it in would be
+  // putting a name where a type goes.
+  var claimed = selected && selected.kind === "claim" &&
+    String((selected.detail || {}).kind || "").indexOf("TYPE") >= 0 ? selected.label : "";
+  fill("m-type", rec.type || claimed); fill("m-name", rec.name || "");
+  fill("m-from", rec.from || ""); fill("m-to", rec.to || "");
+  fill("m-into", ""); fill("m-by", WHO); fill("m-note", "");
+  field("m-name", entity);
+  // into is a merge: the entity this record is the same record as. It has no
+  // meaning for an edge, whose "which node is this really" question is from
+  // and to.
+  field("m-into", entity);
+  field("m-from", !entity);
+  field("m-to", !entity);
+  DOM("m-send").textContent = live ? "Send decision" : "Send assertion";
+
+  if (live) {
+    var item = itemFor(rec);
+    DOM("m-scope").textContent = item
+      ? "Sent as REVIEW_VERB_EDIT on queue item " + item.id + "."
+      : "No item in this job's queue names this record, so there is no decision to make about it. " +
+        "The queue is what the service is willing to be asked about; the findings list at the bottom left is it.";
+  } else {
+    DOM("m-scope").textContent =
+      "Sent as an assertion: the record above, stated by you, with a supersedes entry retiring " +
+      rec.identity + ". It becomes a job of its own and does not join the graph on this screen.";
+  }
+  DOM("modform").classList.add("on");
+}
+
+function openRemove() {
+  var rec = selectedRecord();
+  if (!rec) { return; }
+  closeForms();
+  var live = reviewable(), entity = rec.kind === "entity";
+  fill("d-by", WHO); fill("d-note", "");
+  fill("d-id", ""); fill("d-type", ""); fill("d-name", "");
+  fill("d-from", ""); fill("d-to", ""); fill("d-rtype", "");
+  DOM("d-replace").hidden = live;
+  DOM("d-replace-entity").hidden = !entity;
+  DOM("d-replace-relation").hidden = entity;
+  DOM("d-send").textContent = live ? "Reject this record" : "State that this record is over";
+
+  if (live) {
+    var item = itemFor(rec);
+    DOM("d-scope").textContent = item
+      ? "Sent as REVIEW_VERB_REJECT on queue item " + item.id + ". The record is taken out before the graph is delivered."
+      : "No item in this job's queue names this record, so there is no decision to make about it.";
+  } else {
+    DOM("d-scope").textContent =
+      "Nothing is deleted. This states that " + rec.identity + " is over, signed by you — and because a " +
+      "claim that something is over is carried by a record, the replacement above is what carries it. " +
+      "There is no way to assert an absence.";
+  }
+  DOM("delform").classList.add("on");
+}
+
+/* signed is the one check this page makes for itself, and it is a courtesy
+   rather than a rule: pkg/service refuses an unsigned decision and an
+   unreasoned supersession in its own words, and those words are what the
+   person sees if this is ever wrong. Checking here only saves them a round
+   trip to be told something the form could have said. */
+function signed(byID, noteID, errID) {
+  var by = val(byID).trim(), note = val(noteID).trim();
+  if (!by) {
+    say(errID, "Say who is making this correction. A decision nobody signed is refused by the service, and " +
+      "\"reviewed by\" with nobody in it is worse than not claiming review at all.", true);
+    return null;
+  }
+  if (!note) {
+    say(errID, "Say why. A correction nobody explained cannot be argued with by whoever finds it next.", true);
+    return null;
+  }
+  WHO = by;
+  fill("a-by", by);
+  say(errID, "", false);
+  return { by: by, note: note };
+}
+
+/* What a decision batch came back saying.
+
+   applied and rejected are both reported, and rejected is the one that
+   matters: a decision that named an item the queue no longer has is carried,
+   answered and applied to nothing, and a page that showed only "sent" would
+   have a person believing they fixed something they did not. */
+function decided(doc, okID, errID) {
+  var rejected = doc.rejected || [];
+  if (rejected.length) {
+    say(errID, "The service did not apply this: " +
+      rejected.map(function (r) { return r.reason || r.item_id; }).join("; "), true);
+    return;
+  }
+  say(okID, "Applied " + (doc.applied || 0) + ". " +
+    (doc.remaining_holding ? doc.remaining_holding + " conflict(s) still holding this job." :
+      "Nothing is holding this job now.") + " Reloading the graph.", true);
+  setTimeout(function () { select(null); load(); }, 900);
+}
+
+function asserted(doc, okID) {
+  var vi = (doc.violations || []).length, pr = (doc.proposals || []).length;
+  say(okID, "Asserted, as job " + (doc.job || "?") + ". It does not join the graph on this screen. " +
+    "Sent without a vocabulary, so it was not checked against one" +
+    (vi || pr ? " — " + vi + " violation(s), " + pr + " proposal(s)." : ": no violations and no proposals came " +
+      "back, which is nothing found rather than nothing wrong."), true);
+}
+
+/* The record an assertion states, built from whichever set of fields the
+   selected record's kind put on screen. */
+function statedRecord(kind, ids) {
+  if (kind === "relation") {
+    return { relations: [{ from: val(ids[0]).trim(), to: val(ids[1]).trim(), type: val(ids[2]).trim() }] };
+  }
+  return { entities: [{ id: val(ids[0]).trim(), type: val(ids[1]).trim(), name: val(ids[2]).trim() }] };
+}
+
+DOM("act-modify").addEventListener("click", openModify);
+DOM("act-remove").addEventListener("click", openRemove);
+DOM("m-cancel").addEventListener("click", closeForms);
+DOM("d-cancel").addEventListener("click", closeForms);
+
+DOM("modform").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  var rec = selectedRecord();
+  if (!rec) { return; }
+  var who = signed("m-by", "m-note", "m-err");
+  if (!who) { return; }
+
+  if (reviewable()) {
+    var item = itemFor(rec);
+    if (!item) {
+      say("m-err", "There is no queue item naming this record, so there is no decision to make about it.", true);
+      return;
+    }
+    // An empty field is one the reviewer did not touch — Edit says so in as
+    // many words — so only what actually changed is sent. A message carrying
+    // both would silently blank the half they left alone.
+    var edit = {};
+    if (val("m-type").trim() && val("m-type").trim() !== rec.type) { edit.type = val("m-type").trim(); }
+    if (rec.kind === "entity") {
+      if (val("m-name").trim() && val("m-name").trim() !== rec.name) { edit.name = val("m-name").trim(); }
+      if (val("m-into").trim()) { edit.into = val("m-into").trim(); }
+    } else {
+      if (val("m-from").trim() && val("m-from").trim() !== rec.from) { edit.from = val("m-from").trim(); }
+      if (val("m-to").trim() && val("m-to").trim() !== rec.to) { edit.to = val("m-to").trim(); }
+    }
+    if (!Object.keys(edit).length) {
+      say("m-err", "Nothing was changed. A record marked reviewed and left alone is an accept wearing the " +
+        "wrong label, and the service refuses it.", true);
+      return;
+    }
+    send(decisionsPath(), { decisions: [{ item_id: item.id, verb: "REVIEW_VERB_EDIT",
+      by: who.by, note: who.note, edit: edit }] })
+      .then(function (doc) { decided(doc, "m-ok", "m-err"); })
+      .catch(function (err) { say("m-err", err.message, true); });
+    return;
+  }
+
+  // Delivered: the corrected record, stated by a person, retiring the old one.
+  var payload = rec.kind === "relation"
+    ? { relations: [{ from: val("m-from").trim(), to: val("m-to").trim(), type: val("m-type").trim(), key: rec.key }] }
+    : { entities: [{ id: val("m-into").trim() || rec.id, type: val("m-type").trim(), name: val("m-name").trim() }] };
+  payload.by = who.by;
+  payload.note = who.note;
+  payload.supersedes = [{ retires: rec.identity, reason: who.note }];
+  send("/ui/assertions", payload)
+    .then(function (doc) { asserted(doc, "m-ok"); })
+    .catch(function (err) { say("m-err", err.message, true); });
+});
+
+DOM("delform").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  var rec = selectedRecord();
+  if (!rec) { return; }
+  var who = signed("d-by", "d-note", "d-err");
+  if (!who) { return; }
+
+  if (reviewable()) {
+    var item = itemFor(rec);
+    if (!item) {
+      say("d-err", "There is no queue item naming this record, so there is no decision to make about it.", true);
+      return;
+    }
+    send(decisionsPath(), { decisions: [{ item_id: item.id, verb: "REVIEW_VERB_REJECT",
+      by: who.by, note: who.note }] })
+      .then(function (doc) { decided(doc, "d-ok", "d-err"); })
+      .catch(function (err) { say("d-err", err.message, true); });
+    return;
+  }
+
+  var payload = rec.kind === "relation"
+    ? statedRecord("relation", ["d-from", "d-to", "d-rtype"])
+    : statedRecord("entity", ["d-id", "d-type", "d-name"]);
+  var stated = (payload.entities || payload.relations)[0];
+  if (!(stated.id || stated.from)) {
+    say("d-err", "Name the record that replaces this one. Alchemy never removes a record — it carries a claim " +
+      "that one is over, and that claim is carried by another record, so there has to be one.", true);
+    return;
+  }
+  payload.by = who.by;
+  payload.note = who.note;
+  payload.supersedes = [{ retires: rec.identity, reason: who.note }];
+  send("/ui/assertions", payload)
+    .then(function (doc) { asserted(doc, "d-ok"); })
+    .catch(function (err) { say("d-err", err.message, true); });
+});
+
+/* =======================================================================
+   Add: one record a person states, and what came back.
+   ======================================================================= */
+function assertKind() {
+  var radios = document.getElementsByName("akind");
+  for (var i = 0; i < radios.length; i++) { if (radios[i].checked) { return radios[i].value; } }
+  return "entity";
+}
+
+function producerLabel(p) {
+  return String(p || "").replace(/^PRODUCER_/, "").toLowerCase().replace(/_/g, "-") || "unknown";
+}
+
+/* What the service said about what was just asserted.
+
+   The proposals are the half that is easy to lose and the half that is worth
+   the most. A violation is per record and says what is wrong; a proposal is
+   one entry per undeclared type and says what to add — "MEMBER_OF was used
+   four times, always from Person to Team, by liliang" — which is the sentence
+   that tells a person their vocabulary is missing a word rather than that
+   their typing is. Rendered as a short list, because a person reading raw JSON
+   to find that out is a person who will not read it. */
+function renderOutcome(doc) {
+  var box = DOM("outcome");
+  var parts = ['<h3>What came back</h3>'];
+  parts.push('<p class="note">Job <b>' + esc(doc.job || "?") + '</b>. An assertion is a job of its own and ' +
+    'does not join the graph on this screen — open that job id to see it.</p>');
+
+  var violations = doc.violations || [], proposals = doc.proposals || [];
+  if (!violations.length && !proposals.length) {
+    parts.push('<p class="note">No violations and no proposals. This view has no copy of the job\'s ontology, ' +
+      'so the assertion was sent without a vocabulary and was not checked against one: that is nothing found, ' +
+      'not nothing wrong.</p>');
+  }
+  if (violations.length) {
+    parts.push("<h3>violations — one per record</h3><ul>" + violations.map(function (v) {
+      return '<li class="violation"><b>' + esc(v.subject) + '</b> <span class="m">' +
+        esc(v.detail || String(v.kind || "")) + "</span></li>";
+    }).join("") + "</ul>");
+  }
+  if (proposals.length) {
+    parts.push("<h3>proposals — one per type the vocabulary does not declare</h3><ul>" + proposals.map(function (p) {
+      var kind = String(p.kind || "").replace(/^PROPOSAL_KIND_/, "").toLowerCase();
+      var ends = (p.from || []).length || (p.to || []).length
+        ? " · observed " + (p.from || []).join("/") + " → " + (p.to || []).join("/") : "";
+      var who = (p.producers || []).map(producerLabel).concat(p.sources || []).join(", ");
+      return '<li class="proposal"><b>' + esc(p.type) + '</b> <span class="m">' +
+        esc(kind + " · used by " + (p.records || 0) + " record(s)" + ends + (who ? " · " + who : "")) +
+        "</span></li>";
+    }).join("") + "</ul>");
+  }
+  box.innerHTML = parts.join("");
+  box.classList.add("on");
+}
+
+function openAssert() {
+  fill("a-by", WHO);
+  say("a-err", "", false);
+  DOM("outcome").classList.remove("on");
+  DOM("assert").classList.add("on");
+  DOM(assertKind() === "relation" ? "a-from" : "a-id").focus();
+}
+
+DOM("add").addEventListener("click", openAssert);
+DOM("assertclose").addEventListener("click", function () { DOM("assert").classList.remove("on"); });
+DOM("assert").addEventListener("click", function (ev) {
+  // Clicking the backdrop closes it; clicking the box does not.
+  if (ev.target === DOM("assert")) { DOM("assert").classList.remove("on"); }
+});
+(function () {
+  var radios = document.getElementsByName("akind");
+  for (var i = 0; i < radios.length; i++) {
+    radios[i].addEventListener("change", function () {
+      var relation = assertKind() === "relation";
+      DOM("a-entity").hidden = relation;
+      DOM("a-relation").hidden = !relation;
+    });
+  }
+})();
+
+DOM("assertform").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  var by = val("a-by").trim(), note = val("a-note").trim();
+  if (!by) {
+    say("a-err", "An assertion must name who is asserting. A record whose only authority is a person, and " +
+      "which names no person, is an anonymous claim wearing a person's badge — the service refuses it.", true);
+    return;
+  }
+  WHO = by;
+  var payload = { by: by, note: note };
+  if (assertKind() === "relation") {
+    var rel = { from: val("a-from").trim(), to: val("a-to").trim(), type: val("a-rtype").trim(), key: val("a-key").trim() };
+    if (!rel.from || !rel.to || !rel.type) {
+      say("a-err", "A relation needs a from, a to and a type.", true);
+      return;
+    }
+    payload.relations = [rel];
+  } else {
+    var ent = { id: val("a-id").trim(), type: val("a-type").trim(), name: val("a-name").trim() };
+    if (!ent.id || !ent.type) {
+      say("a-err", "An entity needs an id and a type.", true);
+      return;
+    }
+    payload.entities = [ent];
+  }
+  say("a-err", "", false);
+  // No ontology is sent, because this view has none: the graph JSON carries
+  // the job's records and not the document they were checked against. The
+  // panel says so, because an assertion checked against nothing comes back
+  // clean and a person who read that as "the types are fine" has been told the
+  // opposite of the truth.
+  send("/ui/assertions", payload)
+    .then(function (doc) { renderOutcome(doc); })
+    .catch(function (err) { say("a-err", err.message, true); });
+});
+
 /* ---------- controls ---------- */
+DOM("q").addEventListener("input", function (ev) {
+  query = ev.target.value.trim().toLowerCase();
+  applyQuery();
+  draw();
+});
 DOM("spin").addEventListener("click", function () {
   spinning = !spinning;
   DOM("spin").classList.toggle("on", spinning);
@@ -962,6 +1891,7 @@ DOM("pick").addEventListener("submit", function (ev) {
 
 /* ---------- go ---------- */
 try {
+  buildProducerFilter();
   measureBar();
   resize();
   start();

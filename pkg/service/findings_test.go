@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
@@ -286,4 +287,59 @@ func conflictProvenance(t *testing.T, cli alchemyv1.AlchemyClient, id string) *a
 		t.Fatalf("conflicts = %d, want the answered one still reported", len(res.GetConflicts()))
 	}
 	return res.GetConflicts()[0].GetRight().GetProvenance()
+}
+
+// TestADecisionOnADeliveredJobIsRefusedRatherThanQuietlyIgnored pins a
+// silent success.
+//
+// hub.close does not empty the queue, so vet still finds the item and the hub
+// still records the answer; resolve then returns at its first line because the
+// state is no longer NEEDS_REVIEW. The caller was handed "applied: 1" for a
+// decision that changed nothing and never would — a no-op that answers 200,
+// which is worse than a refusal by exactly the margin that nobody goes looking
+// for it.
+//
+// The refusal has to name the route that does work, because "you cannot edit
+// this" without "here is how corrections are made" is the answer that sends a
+// person to widen something they should not.
+func TestADecisionOnADeliveredJobIsRefusedRatherThanQuietlyIgnored(t *testing.T) {
+	cli := dial(t, harness{run: staticResult(disputed())})
+	src := upload(t, cli, "deal.pdf", alchemyv1.SourceKind_SOURCE_KIND_DOCUMENT, []byte("text"))
+	j := create(t, cli, &alchemyv1.CreateJobRequest{SourceIds: []string{src}, Ontology: "crm"})
+	awaitState(t, cli, j.GetId(), alchemyv1.JobState_JOB_STATE_NEEDS_REVIEW)
+	id := j.GetId()
+	ctx := authed(context.Background())
+
+	items := &alchemyv1.Findings{Items: findings(t, cli, id)}
+	if len(items.GetItems()) == 0 {
+		t.Fatal("the held job has an empty queue; this test's premise is wrong")
+	}
+	answer := func(itemID string) *alchemyv1.DecideRequest {
+		return &alchemyv1.DecideRequest{JobId: id, Decisions: []*alchemyv1.ReviewDecision{{
+			JobId: id, ItemId: itemID, Verb: alchemyv1.ReviewVerb_REVIEW_VERB_ACCEPT, By: "liliang",
+		}}}
+	}
+	for _, it := range items.GetItems() {
+		if _, err := cli.Decide(ctx, answer(it.GetId())); err != nil {
+			t.Fatalf("Decide: %v", err)
+		}
+	}
+	done, err := cli.GetJob(ctx, &alchemyv1.GetJobRequest{JobId: id})
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if done.GetState() != alchemyv1.JobState_JOB_STATE_SUCCEEDED {
+		t.Fatalf("the job is %v after every item was answered; this test needs a delivered one", done.GetState())
+	}
+
+	_, err = cli.Decide(ctx, answer(items.GetItems()[0].GetId()))
+	if err == nil {
+		t.Fatal("a decision on a delivered job was accepted; it changed nothing and said it had")
+	}
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", status.Code(err))
+	}
+	if !strings.Contains(err.Error(), "supersedes") {
+		t.Errorf("the refusal does not name the route that does work: %v", err)
+	}
 }
