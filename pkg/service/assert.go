@@ -110,7 +110,7 @@ func (s *Server) stated(req *alchemyv1.AssertRequest) (alchemy.Result, error) {
 			ID: e.GetId(), Type: e.GetType(), Name: e.GetName(),
 			Aliases:    e.GetAliases(),
 			Attributes: noted(e.GetAttributes().AsMap(), note),
-			// Deliberately not provenanceFromProto(e.GetProvenance()). The
+			// Deliberately not wire.ProvenanceFromProto(e.GetProvenance()). The
 			// field is stamped and never read: a caller who could fill it in
 			// could assert on somebody else's behalf, or backdate one, and
 			// either turns the record this endpoint exists to produce back into

@@ -5,6 +5,7 @@ import (
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/job"
+	"github.com/liliang-cn/alchemy/pkg/wire"
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
 )
 
@@ -43,7 +44,7 @@ func (s *Server) ListFindings(ctx context.Context, req *alchemyv1.ListFindingsRe
 	items := r.hub.queue()
 	out := &alchemyv1.Findings{
 		JobId:   id,
-		State:   jobStates[j.State],
+		State:   wire.JobStateToProto[j.State],
 		Holding: holding(r),
 		Items:   make([]*alchemyv1.ReviewItem, 0, len(items)),
 	}
@@ -134,7 +135,7 @@ func (s *Server) Decide(ctx context.Context, req *alchemyv1.DecideRequest) (*alc
 	if err != nil {
 		return nil, wireError(err)
 	}
-	out.State = jobStates[j.State]
+	out.State = wire.JobStateToProto[j.State]
 	out.RemainingHolding = holding(r)
 	return out, nil
 }

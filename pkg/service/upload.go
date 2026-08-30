@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/liliang-cn/alchemy/pkg/wire"
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
 	"google.golang.org/grpc"
 )
@@ -40,7 +41,7 @@ func (s *Server) UploadSource(stream grpc.ClientStreamingServer[alchemyv1.Source
 		// than discovered at the end of an import.
 		return wireError(invalid("upload: the first frame must name the source"))
 	}
-	kind, ok := sourceKinds[first.GetKind()]
+	kind, ok := wire.SourceKindFromProto[first.GetKind()]
 	if !ok {
 		return wireError(invalid("upload: the first frame must say which of tabular, ddl, document or graph this is"))
 	}
@@ -80,7 +81,7 @@ func (s *Server) UploadSource(stream grpc.ClientStreamingServer[alchemyv1.Source
 	done = true
 
 	return stream.SendAndClose(&alchemyv1.Source{
-		Id: src.ID, Kind: wireSourceKinds[src.Kind], Name: src.Name,
+		Id: src.ID, Kind: wire.SourceKindToProto[src.Kind], Name: src.Name,
 		Size: src.Size, MediaType: src.MediaType,
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/wire"
 )
 
 // §6's gateway is a translation and never a second source of truth, so
@@ -19,7 +20,7 @@ func TestAViolationsStructuredSubjectSurvivesTheWire(t *testing.T) {
 	if got.GetFrom() != "a" || got.GetTo() != "b" || got.GetType() != "OWNS" || got.GetKey() != "fk_left" {
 		t.Fatalf("about = %+v, want the edge in fields", got)
 	}
-	if got.GetKind() != refKinds[alchemy.RefRelation] {
+	if got.GetKind() != wire.RefKindToProto[alchemy.RefRelation] {
 		t.Fatalf("kind = %v, want a relation", got.GetKind())
 	}
 }

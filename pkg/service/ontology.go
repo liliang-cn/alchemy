@@ -6,6 +6,7 @@ import (
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/ontology"
+	"github.com/liliang-cn/alchemy/pkg/wire"
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
 )
 
@@ -58,27 +59,19 @@ func (s *Server) ExtendOntology(ctx context.Context, req *alchemyv1.ExtendOntolo
 	}, nil
 }
 
-// proposalFromProto reads a proposal back off the wire.
+// proposalFromProto reads a proposal back off the wire, narrowed to what
+// Extend uses.
 //
-// Only the fields Extend uses are read, and the omission is deliberate rather
-// than lazy: Records and Sources land in the sentence the accepted type
-// carries, and Example is a pointer back at the corpus that has no meaning in
-// a vocabulary. A caller who edits the ends before accepting is making exactly
-// the judgement this endpoint exists to keep in a person's hands, so the ends
-// are taken as sent rather than checked against anything.
+// The reading itself is pkg/wire's, and has to be: the producer table and the
+// proposal-kind table are closed sets whose two halves must not drift, and a
+// second decoder here would be a second place for one of them to go short.
+// What stays local is the narrowing. Example is a pointer back at the corpus
+// and has no meaning in a vocabulary, and a caller who edits the ends before
+// accepting is making exactly the judgement this endpoint exists to keep in a
+// person's hands — so the ends are taken as sent rather than checked against
+// anything.
 func proposalFromProto(p *alchemyv1.Proposal) alchemy.Proposal {
-	out := alchemy.Proposal{
-		Kind:         wireProposalKinds[p.GetKind()],
-		Type:         p.GetType(),
-		Records:      int(p.GetRecords()),
-		From:         p.GetFrom(),
-		To:           p.GetTo(),
-		Sources:      p.GetSources(),
-		DeclaredFrom: p.GetDeclaredFrom(),
-		DeclaredTo:   p.GetDeclaredTo(),
-	}
-	for _, pr := range p.GetProducers() {
-		out.Producers = append(out.Producers, wireProducers[pr])
-	}
+	out := wire.ProposalFromProto(p)
+	out.Example = alchemy.Ref{}
 	return out
 }

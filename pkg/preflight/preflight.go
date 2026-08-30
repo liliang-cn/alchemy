@@ -65,6 +65,22 @@ const (
 	// pointing at whichever record was written last. Two of the four stores
 	// refused this; the other two upsert and would have overwritten.
 	EntityIDReused Kind = "entity_id_reused"
+	// EntityCorroborated — two records under one ID that agree about what the
+	// node is. A store holding one row per entity writes one node and keeps
+	// one of the two provenances.
+	//
+	// It is a report and not a refusal, and the line is this package's own:
+	// the graph is writable and something in it is lost, rather than corrupt.
+	// alchemy.Relation.Identity settled the same question for edges years
+	// earlier -- "two records asserting one edge are one edge here" -- and
+	// entities had no equivalent, so two sources agreeing that Ravel is a
+	// Product called Ravel was refused as an ID collision.
+	//
+	// That was not a corner case. It made every multi-source graph unloadable
+	// into every store, which is the one thing this product exists to produce:
+	// four sources describing one company refused by all four connectors with
+	// eighteen defects, every one of them two documents agreeing.
+	EntityCorroborated Kind = "entity_corroborated"
 	// ChunkIndexReused — two chunks claiming one index. A chunk index is what
 	// Provenance.Chunk and Vector.Chunk name, and alchemy.Chunk carries an
 	// Index next to a Source, which reads as "index within this source" and is

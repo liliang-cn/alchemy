@@ -3,6 +3,7 @@ package preflight
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 )
@@ -20,7 +21,7 @@ import (
 // what this asks is whether the store will be able to tell them apart, and it
 // will not.
 func entities(res alchemy.Result) []Defect {
-	seen := make(map[string]string, len(res.Entities))
+	seen := make(map[string]alchemy.Entity, len(res.Entities))
 	said := make(map[string]bool)
 	var out []Defect
 	for _, e := range res.Entities {
@@ -40,17 +41,36 @@ func entities(res alchemy.Result) []Defect {
 		}
 		prev, dup := seen[e.ID]
 		if !dup {
-			seen[e.ID] = describe(e)
+			seen[e.ID] = e
 			continue
 		}
 		if said[e.ID] {
 			continue
 		}
 		said[e.ID] = true
+
+		// Two records under one ID that AGREE about the node are one node
+		// asserted twice, which is corroboration and not a collision. Relation
+		// identity has said so for edges since it was written; entities never
+		// had the equivalent, and without it every graph merged from more than
+		// one source was refused by every store.
+		//
+		// Attributes are deliberately not compared. Two sources agreeing about
+		// what a thing IS and disagreeing about what it says are exactly
+		// verify.ConflictEntityAttributes, which is a question for a person
+		// (§7.3) and not a reason a writer cannot write.
+		if sameNode(prev, e) {
+			out = append(out, Defect{
+				Kind: EntityCorroborated, Severity: SeverityReport, Subject: e.ID,
+				Detail: fmt.Sprintf("%s is asserted by %s and by %s; a store holding one row per entity keeps one of the two provenances, so the second source's claim on this node is not recoverable from it",
+					e.ID, where(prev.Provenance), where(e.Provenance)),
+			})
+			continue
+		}
 		out = append(out, Defect{
 			Kind: EntityIDReused, Severity: SeverityRefuse, Subject: e.ID,
-			Detail: fmt.Sprintf("the ID %q is claimed by %s and by %s; relations name entities by ID, so a store writing one node for both leaves every edge naming it pointing at whichever was written last",
-				e.ID, prev, describe(e)),
+			Detail: fmt.Sprintf("the ID %q is claimed by %s and by %s; they do not agree about what the node is, and relations name entities by ID, so a store writing one node for both leaves every edge naming it pointing at whichever was written last",
+				e.ID, describe(prev), describe(e)),
 		})
 	}
 	return out
@@ -214,4 +234,16 @@ func citations(res alchemy.Result, chunks map[int]bool) []Defect {
 		report(fmt.Sprintf("%s -[%s]-> %s", r.From, r.Type, r.To), r.Provenance)
 	}
 	return out
+}
+
+// sameNode reports whether two records under one ID are describing one thing.
+//
+// Type and name, folded, and nothing else. Those two are what a store writes
+// as the node itself; everything else about a record -- its attributes, its
+// provenance, its aliases -- is a claim ABOUT the node, and two sources making
+// different claims about one node is the ordinary case this whole design is
+// built to carry.
+func sameNode(a, b alchemy.Entity) bool {
+	return strings.EqualFold(strings.TrimSpace(a.Type), strings.TrimSpace(b.Type)) &&
+		strings.EqualFold(strings.TrimSpace(a.Name), strings.TrimSpace(b.Name))
 }

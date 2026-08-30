@@ -771,7 +771,7 @@ measured yet.
 **Built, 2026-08-29/30.** §1–§7 are implemented and §6's gateway with them; §8
 is implemented for a single node and designed for more.
 
-Twenty-one packages, 600+ tests, `go test ./... -race` green, six direct
+Twenty-two packages, 600+ tests, `go test ./... -race` green, six direct
 dependencies: a PDF reader, gRPC, protobuf, grpc-gateway with the generated
 API annotations it needs, and a Postgres driver. The pipeline runs end to end
 against real model endpoints, over gRPC and over HTTP.
