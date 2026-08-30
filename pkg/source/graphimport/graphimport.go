@@ -50,6 +50,15 @@ const ChunkStrategy = "graph-node-summary"
 // value Provenance.Chunk carries here.
 const NoSpan = -1
 
+// directionForward is the only value the "direction" member is understood to
+// take: the edge runs from the endpoint it wrote as the source to the one it
+// wrote as the target, which is what every reader here already assumed. It is
+// the only value any document read while writing this package contains — all
+// 21854 edges of the real code graph behind pkg/verify/testdata say it — and
+// see DirectionError for why an unobserved value is refused rather than given a
+// meaning it was never seen to have.
+const directionForward = "forward"
+
 // Result is what one document yielded.
 type Result struct {
 	Entities   []alchemy.Entity
@@ -140,14 +149,33 @@ var (
 	// one edge's id — the same false conflict a schema's two foreign keys onto
 	// one table used to raise. Most graph documents state no edge ids at all,
 	// and those are unchanged: no key, and identity stays what it was.
-	edgeID      = []string{"id"}
-	edgeFrom    = []string{"source", "from", "subject"}
-	edgeTo      = []string{"target", "to", "object"}
-	edgeType    = []string{"type", "relation", "predicate", "label"}
-	nodeID      = []string{"id"}
-	nodeType    = []string{"type"}
-	nodeName    = []string{"name", "label"}
-	nodeSummary = []string{"summary", "description"}
+	edgeID   = []string{"id"}
+	edgeFrom = []string{"source", "from", "subject"}
+	edgeTo   = []string{"target", "to", "object"}
+	edgeType = []string{"type", "relation", "predicate", "label"}
+	// edgeDirection is which way the record runs relative to the endpoints it
+	// just wrote down. Understand-Anything states it on every edge; nothing
+	// else read while writing this package states it at all.
+	//
+	// It is read rather than left among the attributes because it is not
+	// something the edge says about the world — it is how to read the edge, in
+	// the same family as from and to. The only value ever observed is
+	// "forward", which states what this package already assumed; see
+	// DirectionError for why any other value refuses the document instead of
+	// being carried along as an attribute nobody consults.
+	//
+	// What it does NOT say is anything about the relation *type*. Both halves
+	// of a mutual pair are written "forward" — both files really do import each
+	// other — so a producer stating it has stated two facts, not declared that
+	// `imports` may run both ways. That declaration belongs to an ontology
+	// (pkg/ontology's RelationType.BothWays); §5 keeps the ontology an input,
+	// and inferring one from the shape of the data is the automatic ontology
+	// generation it rules out.
+	edgeDirection = []string{"direction"}
+	nodeID        = []string{"id"}
+	nodeType      = []string{"type"}
+	nodeName      = []string{"name", "label"}
+	nodeSummary   = []string{"summary", "description"}
 )
 
 // document holds every accepted spelling of the two collections rather than
@@ -311,6 +339,16 @@ func Parse(source string, r io.Reader) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
+		// Checked before the missing-slot loop below, because a direction
+		// nobody can read makes the endpoints unreadable too: which of them is
+		// "from" is exactly what the value would have decided.
+		dir, err := e.pick(where, "direction", edgeDirection)
+		if err != nil {
+			return Result{}, err
+		}
+		if dir != "" && !strings.EqualFold(dir, directionForward) {
+			return Result{}, &DirectionError{Location: where, Value: dir}
+		}
 		// An edge missing an endpoint or a type is refused rather than
 		// reported. A dangling edge points at something and is kept because
 		// the claim survives its broken half (§7.3); an edge with no source
@@ -325,7 +363,7 @@ func Parse(source string, r io.Reader) (Result, error) {
 		}
 		res.Relations = append(res.Relations, alchemy.Relation{
 			From: from, To: to, Type: typ, Key: key, Provenance: prov(source),
-			Attributes: e.rest(edgeID, edgeFrom, edgeTo, edgeType),
+			Attributes: e.rest(edgeID, edgeFrom, edgeTo, edgeType, edgeDirection),
 		})
 		// An edge naming a node the document does not contain is reported and
 		// kept. Dropping it would leave a graph that looks complete and is

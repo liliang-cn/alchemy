@@ -61,7 +61,7 @@ func Check(in Input) Report {
 		Entities:   entities,
 		Relations:  relations,
 		Violations: violations(entities, relations, types, rs),
-		Conflicts:  conflicts(entities, relations),
+		Conflicts:  conflicts(entities, relations, rs),
 		// Computed whatever vocabulary is in force, and with none. Two
 		// spellings of one thing needs no ontology to be a question, which is
 		// the same sentence the conflict pass is here on.

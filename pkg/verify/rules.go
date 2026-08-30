@@ -19,6 +19,7 @@ type rules struct {
 	vocab      ontology.Vocabulary
 	entities   map[string]string
 	relations  map[string]string
+	oneWay     map[string]bool
 	endpoints  map[endpointKey]verdict
 	ontologyID string
 }
@@ -35,6 +36,7 @@ func newRules(v ontology.Vocabulary, ontologyID string) *rules {
 		vocab:      v,
 		entities:   map[string]string{},
 		relations:  map[string]string{},
+		oneWay:     map[string]bool{},
 		endpoints:  map[endpointKey]verdict{},
 		ontologyID: ontologyID,
 	}
@@ -65,6 +67,32 @@ func (r *rules) canonicalRelation(t string) (string, bool) {
 	}
 	r.relations[t] = c
 	return c, ok
+}
+
+// runsOneWay reports whether an ontology declared this relation type to run in
+// one direction only — the question the direction checks have to ask before
+// they report two records running opposite ways.
+//
+// It is the same question governs() asks one field over. Reporting a direction
+// conflict is asserting that the type is asymmetric, and nothing but an
+// ontology has ever been entitled to say what a relation type means; a type
+// nobody declared has no such claim attached, so there is no rule for two
+// ordinary facts to have broken. Over one customer's real code graph the
+// difference was 79 held questions with no right answer — two Java classes that
+// each import the other, recorded correctly, on a job §7.3 will not let finish.
+//
+// It deliberately does not consult governs(). governs() decides whether a
+// vocabulary is in force at all; this decides what one type in it says, and a
+// job whose ontology failed to arrive is one where nothing says anything —
+// which is the same answer for the same reason, reached without borrowing a
+// different rule's judgement.
+func (r *rules) runsOneWay(typ string) bool {
+	if v, seen := r.oneWay[typ]; seen {
+		return v
+	}
+	v := r.vocab.RunsOneWay(typ)
+	r.oneWay[typ] = v
+	return v
 }
 
 // allowsRelation answers the endpoint question, keeping the vocabulary's own

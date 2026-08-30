@@ -46,10 +46,12 @@ func (v Vocabulary) Prompt() string {
 		// can be prevented rather than detected. Without them a backwards
 		// relation is extracted, stored, and only then returned as a
 		// violation for a person to fix by hand.
-		b.WriteString("\nUse ONLY these relation types. Each line gives the ends the relation runs\n" +
-			"between; extract it in that direction and never the reverse:\n")
+		b.WriteString(relationHeader(v.Relations))
 		for _, r := range v.Relations {
 			fmt.Fprintf(&b, "  %s: %s -> %s", r.Name, promptEnd(r.From), promptEnd(r.To))
+			if r.BothWays {
+				b.WriteString(" (either direction)")
+			}
 			if r.Description != "" {
 				fmt.Fprintf(&b, " - %s", r.Description)
 			}
@@ -70,6 +72,39 @@ func (v Vocabulary) Prompt() string {
 		"a near-miss for a type on these lists, and leave out anything the text describes\n" +
 		"that this vocabulary has no type for.\n")
 	return b.String()
+}
+
+// relationHeader is the instruction above the relation list, and it says one
+// more sentence than it used to only when some relation needs it.
+//
+// "Never the reverse" is false for a relation the ontology declared BothWays,
+// and telling a model something false about the vocabulary it is constrained by
+// is the 74% mechanism running backwards: asked to extract `imports` under that
+// sentence, a model drops the second half of every mutual pair and the graph
+// silently disagrees with the source it was read from.
+//
+// The exception is not offered where nothing claims it. A prompt is a product
+// surface — it decides what comes back — so a vocabulary with no both-ways
+// relation renders exactly the bytes it always did, and no extraction already
+// in production changes because this field was added. A clause offered where
+// nothing needs it would also be an invitation to go looking for permission.
+//
+// The last clause is the one that keeps BothWays from being read as symmetry.
+// "Both may be true at once" is not "one implies the other": a model that
+// materialised the reverse of an edge the text never stated would be writing an
+// edge no source asserted, which is the one thing §5b promises a reader it can
+// always attribute.
+func relationHeader(relations []RelationType) string {
+	const opening = "\nUse ONLY these relation types. Each line gives the ends the relation runs\n" +
+		"between; extract it in that direction and never the reverse"
+	for _, r := range relations {
+		if r.BothWays {
+			return opening + ". A line marked\n" +
+				"(either direction) may run either way and both ways may be true at once, but\n" +
+				"extract only the direction the text states:\n"
+		}
+	}
+	return opening + ":\n"
 }
 
 // promptEnd renders one end of a relation for the model.

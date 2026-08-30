@@ -85,6 +85,38 @@ func (v Vocabulary) CanonicalRelation(t string) (string, bool) {
 	return "", false
 }
 
+// RunsBothWays reports whether this part declares relType and declares that it
+// may run either way between one pair — see RelationType.BothWays.
+//
+// An undeclared type is false, which is not the same answer as a declared
+// one-way type gives: it means the question does not apply, and a caller that
+// needs "was this type claimed to be one-way" must ask RunsOneWay rather than
+// negate this.
+func (v Vocabulary) RunsBothWays(relType string) bool {
+	r, ok := v.relation(relType)
+	return ok && r.BothWays
+}
+
+// RunsOneWay reports whether this part declares relType and leaves it running
+// in one direction only.
+//
+// It is the question verify's direction check has to ask before it reports two
+// records running opposite ways as a contradiction, because that report is an
+// assertion that the type is asymmetric, and only an ontology can make one. An
+// undeclared type is false for the same reason an absent ontology breaks no
+// rules: nobody claimed it, so there is nothing to have been broken, and
+// holding a job on it would ask a person a question the vocabulary gave them no
+// way to answer.
+//
+// The undeclared type is not thereby ignored — where a vocabulary is in force
+// it is already an alchemy.ViolationUnknownRelationType, which names it,
+// attributes it, and leaves the rest of the graph usable (§7.3). That is the
+// finding it was always owed; a conflict was one it was not.
+func (v Vocabulary) RunsOneWay(relType string) bool {
+	r, ok := v.relation(relType)
+	return ok && !r.BothWays
+}
+
 func (v Vocabulary) relation(t string) (RelationType, bool) {
 	for _, r := range v.Relations {
 		if fold(r.Name) == fold(t) {
@@ -119,13 +151,31 @@ func (v Vocabulary) AllowsRelation(relType, fromType, toType string) (bool, stri
 				end.typ, end.field, r.Name)
 		}
 	}
-	fromOK := matchesEnd(r.From, fromType)
-	toOK := matchesEnd(r.To, toType)
-	if fromOK && toOK {
+	if matchesEnd(r.From, fromType) && matchesEnd(r.To, toType) {
 		return true, ""
 	}
-	return false, fmt.Sprintf("relation type %q is declared, but not from %q to %q; it runs %s -> %s",
-		r.Name, fromType, toType, endList(r.From), endList(r.To))
+	// A both-ways relation is allowed with its ends swapped, because that is
+	// what the declaration says. Refusing it here would let the ontology
+	// contradict the checker that read it one field over: the direction
+	// conflict would stop firing and every reverse edge of a mutual pair would
+	// come back as a violation instead — the same noise under a different
+	// heading, and this time one that says a rule was broken when the rule
+	// itself permits it.
+	if r.BothWays && matchesEnd(r.From, toType) && matchesEnd(r.To, fromType) {
+		return true, ""
+	}
+	return false, fmt.Sprintf("relation type %q is declared, but not from %q to %q; it runs %s -> %s%s",
+		r.Name, fromType, toType, endList(r.From), endList(r.To), eitherWay(r.BothWays))
+}
+
+// eitherWay tells the person acting on a refusal that the ends may be swapped,
+// so they do not read "it runs file -> class" as the reason and reverse an edge
+// that was never the problem.
+func eitherWay(bothWays bool) string {
+	if bothWays {
+		return " (either direction)"
+	}
+	return ""
 }
 
 // matchesEnd reports whether typ may sit on this end.

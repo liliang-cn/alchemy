@@ -130,7 +130,7 @@ func parallelEdges(relations []alchemy.Relation) map[relationKey]bool {
 	return out
 }
 
-func relationConflicts(relations []alchemy.Relation) []alchemy.Conflict {
+func relationConflicts(relations []alchemy.Relation, rs *rules) []alchemy.Conflict {
 	var out []alchemy.Conflict
 	parallel := parallelEdges(relations)
 	groups := make(map[edgeKey]*relationGroup, len(relations))
@@ -149,11 +149,33 @@ func relationConflicts(relations []alchemy.Relation) []alchemy.Conflict {
 		det := r.Provenance.Producer.Deterministic()
 		opposite := 1 - dir
 
+		// Both reversal findings below — the contradiction and the plain
+		// direction conflict — are one claim wearing two labels: that this
+		// relation type is asymmetric, so the two records cannot both be true.
+		// An ontology is the only thing that has ever been entitled to say what
+		// a relation type means, and where none said it, two records running
+		// opposite ways are two ordinary facts with no question in them for a
+		// person: a Java class importing another that imports it back is legal,
+		// ordinary, and was recorded correctly. Over one customer's real code
+		// graph that was 79 questions with no right answer, on a job §7.3 will
+		// not let finish. See rules.runsOneWay, and pkg/ontology's
+		// RelationType.BothWays for the word an ontology says it with.
+		//
+		// It gates these two branches and nothing else. Everything else this
+		// loop finds is about what a record says rather than which way it
+		// points, so the attribute comparisons below run untouched: two sources
+		// disagreeing about what one edge *is* is a question whichever way the
+		// edge runs.
+		//
+		// Asked after the partner check rather than before it, because the
+		// partner is the rare case and a clean job should not pay a lookup per
+		// record for a question it never reaches.
+		//
 		// The contradiction is checked before the plain reversal and wins when
 		// both apply: §5c ranks "a schema says otherwise" above "two documents
 		// disagree", because the deterministic side almost always settles it and
 		// the rare time it does not is where the interesting bug lives.
-		if partner := g.first[opposite][class(!det)]; partner != nil && !g.reportedContradiction {
+		if partner := g.first[opposite][class(!det)]; partner != nil && !g.reportedContradiction && rs.runsOneWay(r.Type) {
 			g.reportedContradiction = true
 			// The deterministic claim goes on the left: a reviewer reads left to
 			// right, and the side that read a statement belongs first.
@@ -171,7 +193,7 @@ func relationConflicts(relations []alchemy.Relation) []alchemy.Conflict {
 				Right: claim(edgeOf(key, rightDir), right),
 			})
 		}
-		if partner := g.first[opposite][class(det)]; partner != nil && !g.reportedDirection {
+		if partner := g.first[opposite][class(det)]; partner != nil && !g.reportedDirection && rs.runsOneWay(r.Type) {
 			g.reportedDirection = true
 			out = append(out, alchemy.Conflict{
 				Kind:    alchemy.ConflictRelationDirection,

@@ -127,3 +127,41 @@ func malformed(source string, b []byte, err error) *MalformedError {
 	}
 	return &MalformedError{Source: source, Offset: offset, Line: line, Column: column, Err: err}
 }
+
+// DirectionError refuses an edge whose "direction" member says something this
+// package cannot read.
+//
+// The field is a real one: Understand-Anything writes it on every edge, and it
+// says which way the record runs relative to the endpoints it wrote down. Only
+// "forward" has ever been observed — all 21854 edges of the graph in
+// pkg/verify/testdata say it — and "forward" states what this package already
+// assumed, that the edge runs source -> target.
+//
+// Any other value is refused rather than ignored, and the alternative is what
+// this package used to do: leave it among the attributes and import the edge as
+// written. "backward" would most likely mean the edge runs the other way;
+// "both" or "undirected" would mean it runs each way; every reading produces a
+// different graph and nothing in the document says which was meant. An edge
+// read backwards is not locally excludable the way a dangling one is — it
+// points somewhere plausible and wrong, which is §2.1's bug with a three-month
+// fuse — so this is AmbiguityError's rule applied to a slot spelled once and
+// meant unknowably: refuse the document, keep a person in the loop.
+//
+// Guessing a meaning for a value no tool is known to emit would be worse than
+// refusing it: this package accepts only spellings real documents contain,
+// because a tolerated spelling nobody writes can only ever misread a document
+// that meant something else by it.
+type DirectionError struct {
+	// Location is "edge 12", by position, for the same reason AmbiguityError
+	// names a position: an edge has no id of its own in most documents.
+	Location string
+	// Value is what the member said, verbatim.
+	Value string
+}
+
+func (e *DirectionError) Error() string {
+	return fmt.Sprintf("%s: direction %q, which this package cannot read — it could mean the edge runs "+
+		"the other way, or that it runs both, and those are different graphs. Only %q is understood, "+
+		"and it states what the endpoints already say; the document is refused rather than read under a "+
+		"coin flip", e.Location, e.Value, directionForward)
+}

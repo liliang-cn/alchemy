@@ -59,6 +59,37 @@ type RelationType struct {
 	Description string   `json:"description,omitempty"`
 	From        []string `json:"from,omitempty"`
 	To          []string `json:"to,omitempty"`
+	// BothWays says this relation may run either way between one pair of
+	// things, and that both directions may be true at once.
+	//
+	// It exists because verify reads two records running opposite ways as two
+	// sources contradicting each other, and that reading is an assertion about
+	// the *type* — that it is asymmetric — which nothing here had a way to make
+	// or to withhold. Over one customer's real code graph it produced 79
+	// questions with no right answer: two Java classes that each import the
+	// other is ordinary, legal, and correctly recorded, and §7.3 holds a job on
+	// every one of them.
+	//
+	// It is deliberately not called Symmetric. Symmetric would be the claim
+	// that A -> B *implies* B -> A, the way SIBLING_OF does — and an extractor
+	// or a verifier that believed it would be entitled to write the reverse
+	// edge itself, which is an edge no source ever asserted and no producer can
+	// honestly be named for (§5b). `imports` is not that: the two directions
+	// are two independent facts about two files, either may hold without the
+	// other, and what the ontology needs a word for is only that neither
+	// forbids the other. So this field licenses nothing to be added; it
+	// withholds a contradiction.
+	//
+	// False is the default and it is the honest one. Every ontology written
+	// before this field existed says nothing, and what its prompt has always
+	// told the model is "extract it in that direction and never the reverse" —
+	// so silence already meant one-way on the model's side, and reading it as
+	// one-way on the checker's side is what keeps the two sides the same list
+	// (§5b). It also keeps §5c's own example alive: a foreign key that says
+	// orders -> customer against a document that says the customer owns the
+	// orders is still a question for a person, and a permissive default would
+	// have quietly retired it for every ontology in production.
+	BothWays bool `json:"both_ways,omitempty"`
 }
 
 // Vocabulary is one part's closed list of types.

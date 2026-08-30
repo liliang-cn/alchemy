@@ -13,7 +13,7 @@ import (
 // understandAnything is the shape oss-agent's internal/graphimport consumes,
 // reduced to the fields this package reads.
 const understandAnything = `{
-  "name": "ledger-reactor",
+  "name": "tessera-reactor",
   "nodes": [
     {"id": "file:src/main.go", "type": "file", "name": "main.go",
      "filePath": "src/main.go", "summary": "Entry point.", "complexity": "low"},
@@ -268,8 +268,18 @@ func TestExtraMembersBecomeAttributes(t *testing.T) {
 		t.Errorf("a node stating nothing extra gets no attribute map, got %#v", res.Entities[1].Attributes)
 	}
 	edge := res.Relations[0].Attributes
-	if edge["direction"] != "forward" || edge["weight"] != 1.0 {
-		t.Errorf("edge attributes = %#v", edge)
+	if edge["weight"] != 1.0 {
+		t.Errorf("edge attributes = %#v, want the members no slot claimed", edge)
+	}
+	// "direction" used to be here, and the property this test pins is not that
+	// it was — it is that a member no slot claimed survives and one that a slot
+	// claimed does not, which is the same rule "id", "type" and "name" are
+	// checked against three lines up. It is now read into a slot, so it belongs
+	// on the other side of that rule; see direction_test.go.
+	for _, consumed := range []string{"source", "target", "type", "direction"} {
+		if _, ok := edge[consumed]; ok {
+			t.Errorf("edge attributes carry %q, which was already read into a field", consumed)
+		}
 	}
 }
 

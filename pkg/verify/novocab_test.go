@@ -63,9 +63,10 @@ func TestADanglingRelationIsStillReportedWithoutAVocabulary(t *testing.T) {
 	}
 }
 
-// Conflicts are not an ontology rule either. §7.3 holds a job on two sources
+// Almost no conflict is an ontology rule. §7.3 holds a job on two sources
 // disagreeing whether or not a vocabulary was ever declared — there is nothing
-// in an ontology that could decide between them anyway.
+// in an ontology that could decide between them anyway. Two sources stating
+// different columns for one table is that: a question, and no rule.
 func TestConflictsAreStillFoundWithoutAVocabulary(t *testing.T) {
 	rep := Check(Input{
 		Entities: []alchemy.Entity{
@@ -75,5 +76,38 @@ func TestConflictsAreStillFoundWithoutAVocabulary(t *testing.T) {
 	})
 	if len(rep.Conflicts) != 1 {
 		t.Fatalf("conflicts = %d, want 1: %+v", len(rep.Conflicts), rep.Conflicts)
+	}
+}
+
+// The one exception, and the boundary belongs written down next to the rule it
+// qualifies. A direction conflict is not "two sources disagree", it is "these
+// two records cannot both be true because this relation type runs one way" —
+// and the second half of that sentence is an ontology's to say. With no
+// ontology nothing said it, so two edges running opposite ways are two facts,
+// exactly as an absent vocabulary means no ontology rules rather than no
+// declared types.
+//
+// This is what the deployed service met: a code graph in which two Java classes
+// each import the other, 79 times, on a job §7.3 would never let finish. See
+// codegraph_test.go for the customer's own graph, and direction_test.go for
+// what a declared type still buys.
+func TestOppositeDirectionsWithoutAVocabularyAreNotAConflict(t *testing.T) {
+	rep := Check(Input{
+		Entities: []alchemy.Entity{
+			{ID: "a.java", Type: "file", Provenance: prov("kg.json", alchemy.ProducerGraphImport)},
+			{ID: "b.java", Type: "file", Provenance: prov("kg.json", alchemy.ProducerGraphImport)},
+		},
+		Relations: []alchemy.Relation{
+			{From: "a.java", To: "b.java", Type: "imports", Provenance: prov("kg.json", alchemy.ProducerGraphImport)},
+			{From: "b.java", To: "a.java", Type: "imports", Provenance: prov("kg.json", alchemy.ProducerGraphImport)},
+		},
+	})
+	if len(rep.Conflicts) != 0 {
+		t.Fatalf("conflicts = %+v, want none: nothing declared %q asymmetric", rep.Conflicts, "imports")
+	}
+	// And nothing is dropped for it. §5b: not silently dropped and not silently
+	// kept — here there is nothing wrong, so both facts are simply kept.
+	if len(rep.Relations) != 2 {
+		t.Fatalf("relations = %d, want both kept", len(rep.Relations))
 	}
 }

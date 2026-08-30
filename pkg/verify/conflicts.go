@@ -26,9 +26,9 @@ import (
 // measured against the first claim recorded for its key, so a key carrying a
 // thousand records costs a thousand lookups and yields one question per
 // distinct disagreement rather than half a million pairs.
-func conflicts(entities []alchemy.Entity, relations []alchemy.Relation) []alchemy.Conflict {
+func conflicts(entities []alchemy.Entity, relations []alchemy.Relation, rs *rules) []alchemy.Conflict {
 	out := entityConflicts(entities)
-	return append(out, relationConflicts(relations)...)
+	return append(out, relationConflicts(relations, rs)...)
 }
 
 // slot remembers the first claim made about one key and which later values have
