@@ -15,7 +15,7 @@ import (
 // that goes green because its evidence is absent is worse than no check, since
 // it reports the same colour as one that was actually made.
 
-const howNorthgate = "ALCHEMY_TOKEN=... go run ./cmd/measure <addr> <fixtures-dir>"
+const howSuite = "ALCHEMY_TOKEN=... go run ./cmd/measure <addr> <fixtures-dir>"
 
 func load(t *testing.T, name, how string) claims.Claim {
 	t.Helper()
@@ -50,7 +50,7 @@ func value(t *testing.T, c claims.Claim, key string) float64 {
 // without breaking anything else: the jobs would still succeed, the graph
 // would still load, and six jobs would sit at NEEDS_REVIEW instead.
 func TestTheRealCorpusImportsWithoutAConflict(t *testing.T) {
-	c := load(t, "evaluation-suite.json", howNorthgate)
+	c := load(t, "evaluation-suite.json", howSuite)
 	if c.Provenance != claims.Measured {
 		t.Fatalf("the evaluation suite is %q; a claim about what this product does on real input "+
 			"cannot be inherited from elsewhere", c.Provenance)
@@ -70,7 +70,7 @@ func TestTheRealCorpusImportsWithoutAConflict(t *testing.T) {
 // once not, which is how "an ontology nobody claimed has no rules to break"
 // gets tested on real input rather than on a fixture.
 func TestEverySourceKindImportedAndEveryJobFinished(t *testing.T) {
-	c := load(t, "evaluation-suite.json", howNorthgate)
+	c := load(t, "evaluation-suite.json", howSuite)
 	if got, want := value(t, c, "source_kinds"), 4.0; got != want {
 		t.Fatalf("the suite covered %v source kinds, want %v", got, want)
 	}
@@ -94,7 +94,7 @@ func TestEverySourceKindImportedAndEveryJobFinished(t *testing.T) {
 // if the governed run ever reported zero, the vocabulary would have stopped
 // being checked and every other number here would look better for it.
 func TestGoverningASchemaIsWhatMakesItsGapsVisible(t *testing.T) {
-	c := load(t, "evaluation-suite.json", howNorthgate)
+	c := load(t, "evaluation-suite.json", howSuite)
 	governed := value(t, c, "ddl_governed.violations")
 	ungoverned := value(t, c, "ddl_no_ontology.violations")
 	if ungoverned != 0 {

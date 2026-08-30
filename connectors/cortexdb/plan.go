@@ -335,7 +335,7 @@ func (p *plan) checkParallelEdges() error {
 		// The finding this connector exists to make visible. Relation.Key is
 		// the producer saying "these are two edges, and here is what I call
 		// each"; CortexDB's identity is (from, to, type, document) and has
-		// nowhere to put the name. a customer schema's NODE_CONNECTIONS is the ordinary
+		// nowhere to put the name. NODE_CONNECTIONS is the ordinary
 		// case: one table, two foreign keys to the same table, two constraint
 		// names.
 		sort.Strings(g.keys)

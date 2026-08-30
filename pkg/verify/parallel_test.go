@@ -33,7 +33,7 @@ func checkDDL(t *testing.T, sql string) verify.Report {
 
 // A table that models a relationship between two rows of one table references
 // that table twice, and both references are correct. This is the reduced shape
-// of a customer schema's NODE_CONNECTIONS and of four more of its tables.
+// of NODE_CONNECTIONS and of four more tables in the same schema.
 func TestTwoForeignKeysOntoOneTableAreTwoEdges(t *testing.T) {
 	got := checkDDL(t, `
 CREATE TABLE nodes (name VARCHAR(24) NOT NULL, PRIMARY KEY (name));

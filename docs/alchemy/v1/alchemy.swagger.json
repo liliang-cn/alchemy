@@ -899,7 +899,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Other names this thing is known by, as the source stated them. What SKOS\ncalls altLabel and Wikidata calls aliases.\n\nEvidence, not an instruction: an alias matching another node's name is\nDUPLICATE_SIGNAL_ALIAS, which is a question. Two people can both be called\nPhil. What the alias removes is the guessing, not the decision."
+          "description": "Other names this thing is known by, as the source stated them. What SKOS\ncalls altLabel and Wikidata calls aliases.\n\nEvidence, not an instruction: an alias matching another node's name is\nDUPLICATE_SIGNAL_ALIAS, which is a question. Two people can both be called\nTheo. What the alias removes is the guessing, not the decision."
         }
       }
     },

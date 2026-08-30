@@ -1,4 +1,4 @@
-// Command measure runs the Northgate evaluation against a deployed alchemy and
+// Command measure runs the evaluation corpus against a deployed alchemy and
 // writes what it found to docs/claims/, where internal/claims checks it.
 //
 // Every source kind the product supports, each under the part of the ontology
@@ -8,9 +8,10 @@
 // It is in the repository rather than in somebody's shell history for the
 // reason the Makefile's generate target is: DESIGN.md §9 makes claims about
 // what a real corpus does, and a claim whose command cannot be re-run is a
-// claim nobody can check. The corpus itself is not committed -- it is Northgate's
-// published schema, documentation and code, and the file below says where each
-// piece came from -- so this takes the directory holding it as an argument.
+// claim nobody can check. The corpus itself is not committed -- it is a
+// customer's published schema, documentation and code, and naming the customer
+// is not this repository's to do -- so this takes the directory holding it as
+// an argument.
 //
 //	ALCHEMY_TOKEN=... go run ./cmd/measure <addr> <fixtures-dir>
 //
@@ -72,12 +73,12 @@ func main() {
 	must(err)
 
 	jobs := []job{
-		{"ddl (no ontology)", []file{{"freight-schema.sql", v1.SourceKind_SOURCE_KIND_DDL}}, "", false},
-		{"ddl (governed)", []file{{"freight-schema.sql", v1.SourceKind_SOURCE_KIND_DDL}}, "tabular", true},
+		{"ddl (no ontology)", []file{{"schema.sql", v1.SourceKind_SOURCE_KIND_DDL}}, "", false},
+		{"ddl (governed)", []file{{"schema.sql", v1.SourceKind_SOURCE_KIND_DDL}}, "tabular", true},
 		{"tabular", []file{{"inventory.csv", v1.SourceKind_SOURCE_KIND_TABULAR}}, "tabular", true},
-		{"document (md)", []file{{"ravel-docs.md", v1.SourceKind_SOURCE_KIND_DOCUMENT}}, "prose", true},
-		{"document (pdf)", []file{{"northgate-profile.pdf", v1.SourceKind_SOURCE_KIND_DOCUMENT}}, "prose", true},
-		{"graph", []file{{"service-code-graph.json", v1.SourceKind_SOURCE_KIND_GRAPH}}, "code", true},
+		{"document (md)", []file{{"docs.md", v1.SourceKind_SOURCE_KIND_DOCUMENT}}, "prose", true},
+		{"document (pdf)", []file{{"profile.pdf", v1.SourceKind_SOURCE_KIND_DOCUMENT}}, "prose", true},
+		{"graph", []file{{"code-graph.json", v1.SourceKind_SOURCE_KIND_GRAPH}}, "code", true},
 	}
 
 	fmt.Printf("%-20s %-10s %7s %8s %6s %6s %5s %5s %6s %6s\n",

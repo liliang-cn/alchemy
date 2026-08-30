@@ -42,7 +42,7 @@
 // # Why every method takes the load
 //
 // It is not tidiness. A store keeps every load it was given, so a corpus
-// imported twice is in it twice: northgate-profile.pdf was present under an old
+// imported twice is in it twice: one company profile PDF was present under an old
 // import with no byte offsets and under the current one, and a citation lookup
 // written without a load filter resolved against the wrong import and returned
 // the wrong text — under a claim extracted from the right one. Nothing about

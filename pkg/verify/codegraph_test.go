@@ -36,16 +36,16 @@ func directionConflicts(cs []alchemy.Conflict) []alchemy.Conflict {
 	return out
 }
 
-// A whole code graph imports without a single question for a
-// person.
+// A whole code graph imports without a single question for a person.
 //
 // This is the test the defect was found by. Two Java classes that each import
 // the other is ordinary and legal, the tool recorded both facts correctly, and
 // this package read every one of them as two sources contradicting each other
-// about which way the edge runs — 79 of them over the whole graph, on a job
+// about which way the edge runs — 79 of them over the customer's whole graph,
+// which the fixture reproduces the shape of, on a job
 // §7.3 will not let finish. Nothing had declared `imports` asymmetric; nothing
 // had declared it at all.
-func TestTheRavelCodeGraphImportsWithoutDirectionConflicts(t *testing.T) {
+func TestACodeGraphImportsWithoutDirectionConflicts(t *testing.T) {
 	res := codeGraph(t)
 
 	got := verify.Check(verify.Input{Entities: res.Entities, Relations: res.Relations})

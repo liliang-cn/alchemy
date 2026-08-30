@@ -245,8 +245,8 @@ type Relation struct {
 	// never had one, and the asymmetry looked harmless because from, to and
 	// type are usually enough. They are not enough for the most ordinary thing
 	// in SQL: a table that models a relationship between two rows of one table
-	// references that table twice, once per end, and a customer schema's NODE_CONNECTIONS
-	// does exactly that. Both foreign keys are correct, they say different
+	// references that table twice, once per end, and a customer schema's
+	// NODE_CONNECTIONS did exactly that. Both foreign keys are correct, they say different
 	// things about themselves — different columns, different constraint names —
 	// and a verifier keying identity on {from, to, type} alone reads them as
 	// two sources contradicting each other about one edge. Five of that

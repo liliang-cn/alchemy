@@ -12,7 +12,7 @@ import (
 // nodeConnections is the shape Relation.Key exists for, in the words of its own
 // doc comment: "a table that models a relationship between two rows of one
 // table references that table twice, once per end, and Ravel's
-// NODE_CONNECTIONS does exactly that. Both foreign keys are correct, they say
+// A schema's NODE_CONNECTIONS does exactly that. Both foreign keys are correct, they say
 // different things about themselves — different columns, different constraint
 // names."
 func nodeConnections() alchemy.Result {
@@ -39,7 +39,7 @@ func nodeConnections() alchemy.Result {
 // of which 61,197 were distinct. Alchemy added Relation.Key for the same
 // question and answered it differently: identity is (from, to, type) plus the
 // producer's own name for the edge, precisely because {from, to, type} could not
-// tell the two foreign keys apart.
+// tell Ravel's two foreign keys apart.
 //
 // The two answers agree everywhere except here, and here they cannot both be
 // right: CortexDB has nowhere to put the key, so one of the two edges would win

@@ -141,7 +141,7 @@ type Result struct {
 	// and until this list existed only the first had a shape. The second
 	// arrived as a new edge beside the old one and the graph reported itself
 	// clean while holding both, which is measured rather than argued: one
-	// Northgate profile and one correction in a single job, conflicts zero, two
+	// company profile and one correction in a single job, conflicts zero, two
 	// CTOs.
 	//
 	// It is beside the graph rather than a field on the record that supersedes

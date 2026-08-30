@@ -1,1143 +1,972 @@
 {
  "_fixture": {
-  "extracted_from": ".understand-anything/knowledge-graph.json in Northgate's ravel-server (the customer's repository), produced by the understand-anything skill over that repository. That file is 9.1 MB and describes GPLv3 third-party code; it is not checked in. This is a subgraph of it, node and edge members verbatim.",
-  "of_the_whole": "6980 nodes, 21854 edges, of which 79 undirected pairs are recorded in both directions with direction \"forward\" \u2014 77 imports and 2 depends_on.",
-  "why": "Two Java classes that each import the other is ordinary and legal, and the tool recorded both facts correctly. verify used to read every one of them as two sources contradicting each other about which way the edge runs, which held the job at NEEDS_REVIEW on 79 questions with no right answer. Neither imports nor depends_on is declared by any ontology in that job, so nothing had claimed either type runs one way.",
-  "kept": "every mutual pair listed below, plus one hop of neighbours so the ordinary one-way edges (contains, exports, imports in one direction only) are here to be told apart from them.",
-  "mutual_pairs": [
-   "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java -[imports]- file:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java -[imports]- file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java -[imports]- file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java -[depends_on]- file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java -[imports]- file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java -[depends_on]- service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java"
-  ]
+  "what": "A synthetic Java-shaped code graph. Every path, class and method name here was written for this file; it describes no real repository.",
+  "why": "Two classes that each import the other is ordinary and legal, and a code-graph tool records both facts correctly. verify used to read every one of them as two sources contradicting each other about which way the edge runs, which held the job at NEEDS_REVIEW on questions with no right answer. Neither imports nor depends_on is declared by any ontology in that job, so nothing had said the type was asymmetric -- nothing had said anything about it at all.",
+  "shape": "41 nodes and 67 edges, of which 6 undirected pairs are stated in both directions: 5 import pairs between files, 1 depends_on pair between the two services.",
+  "counts": {
+   "nodes": {
+    "file": 14,
+    "class": 12,
+    "function": 13,
+    "service": 2
+   },
+   "edges": {
+    "contains": 24,
+    "exports": 13,
+    "imports": 25,
+    "depends_on": 4,
+    "calls": 1
+   },
+   "mutual_pairs": 6
+  }
  },
  "nodes": [
   {
-   "id": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/DeviceHandlerImpl.java",
+   "id": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
    "type": "file",
-   "name": "DeviceHandlerImpl.java",
-   "filePath": "satellite/src/main/java/com/northgate/ravel/core/devmgr/DeviceHandlerImpl.java",
-   "summary": "Core layer-processing engine of the satellite: groups dispatched resources by layer, calculates gross sizes, prepares layers, processes resources and snapshots top-down, orchestrates clone operations and reports results and events back to the controller.",
+   "name": "RouteDispatcher.java",
+   "filePath": "dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "summary": "Source file RouteDispatcher.java.",
    "tags": [
-    "device-manager",
-    "layer-stack",
-    "orchestration",
-    "satellite"
+    "java"
    ],
-   "complexity": "complex"
+   "complexity": 3
   },
   {
-   "id": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
+   "id": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
    "type": "file",
-   "name": "SuspendManager.java",
-   "filePath": "satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "summary": "Manages suspend-io/resume-io of resources around device manager runs: decides which resources need suspending, executes layer-specific suspend and resumes IO bottom-up afterwards.",
+   "name": "RouteTable.java",
+   "filePath": "dispatch/src/main/java/net/example/router/RouteTable.java",
+   "summary": "Source file RouteTable.java.",
    "tags": [
-    "device-manager",
-    "suspend-io",
-    "tessera",
-    "satellite"
+    "java"
    ],
-   "complexity": "moderate"
+   "complexity": 4
   },
   {
-   "id": "class:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java:SuspendManager",
+   "id": "file:dispatch/src/main/java/net/example/router/HopResolver.java",
+   "type": "file",
+   "name": "HopResolver.java",
+   "filePath": "dispatch/src/main/java/net/example/router/HopResolver.java",
+   "summary": "Source file HopResolver.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 5
+  },
+  {
+   "id": "file:dispatch/src/main/java/net/example/router/LinkWatcher.java",
+   "type": "file",
+   "name": "LinkWatcher.java",
+   "filePath": "dispatch/src/main/java/net/example/router/LinkWatcher.java",
+   "summary": "Source file LinkWatcher.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 6
+  },
+  {
+   "id": "file:dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "type": "file",
+   "name": "WorkQueue.java",
+   "filePath": "dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "summary": "Source file WorkQueue.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 7
+  },
+  {
+   "id": "file:dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "type": "file",
+   "name": "QueueDrainer.java",
+   "filePath": "dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "summary": "Source file QueueDrainer.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 3
+  },
+  {
+   "id": "file:core/src/main/java/net/example/model/Station.java",
+   "type": "file",
+   "name": "Station.java",
+   "filePath": "core/src/main/java/net/example/model/Station.java",
+   "summary": "Source file Station.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 4
+  },
+  {
+   "id": "file:core/src/main/java/net/example/model/Shipment.java",
+   "type": "file",
+   "name": "Shipment.java",
+   "filePath": "core/src/main/java/net/example/model/Shipment.java",
+   "summary": "Source file Shipment.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 5
+  },
+  {
+   "id": "file:core/src/main/java/net/example/model/Container.java",
+   "type": "file",
+   "name": "Container.java",
+   "filePath": "core/src/main/java/net/example/model/Container.java",
+   "summary": "Source file Container.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 6
+  },
+  {
+   "id": "file:core/src/main/java/net/example/store/StationStore.java",
+   "type": "file",
+   "name": "StationStore.java",
+   "filePath": "core/src/main/java/net/example/store/StationStore.java",
+   "summary": "Source file StationStore.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 7
+  },
+  {
+   "id": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "type": "file",
+   "name": "ShipmentStore.java",
+   "filePath": "core/src/main/java/net/example/store/ShipmentStore.java",
+   "summary": "Source file ShipmentStore.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 3
+  },
+  {
+   "id": "file:core/src/main/java/net/example/api/PlanEndpoint.java",
+   "type": "file",
+   "name": "PlanEndpoint.java",
+   "filePath": "core/src/main/java/net/example/api/PlanEndpoint.java",
+   "summary": "Source file PlanEndpoint.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 4
+  },
+  {
+   "id": "file:core/src/main/java/net/example/api/EventEndpoint.java",
+   "type": "file",
+   "name": "EventEndpoint.java",
+   "filePath": "core/src/main/java/net/example/api/EventEndpoint.java",
+   "summary": "Source file EventEndpoint.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 5
+  },
+  {
+   "id": "file:core/src/main/java/net/example/util/Retry.java",
+   "type": "file",
+   "name": "Retry.java",
+   "filePath": "core/src/main/java/net/example/util/Retry.java",
+   "summary": "Source file Retry.java.",
+   "tags": [
+    "java"
+   ],
+   "complexity": 6
+  },
+  {
+   "id": "class:dispatch/src/main/java/net/example/router/RouteDispatcher.java:RouteDispatcher",
    "type": "class",
-   "name": "SuspendManager",
-   "filePath": "satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "lineRange": [
-    27,
-    275
-   ],
-   "summary": "Helper invoked by the device manager to toggle suspended IO states with exception handling per resource.",
+   "name": "RouteDispatcher",
+   "filePath": "dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "summary": "Class RouteDispatcher.",
    "tags": [
-    "device-manager",
-    "suspend-io"
+    "java",
+    "class"
    ],
-   "complexity": "moderate"
+   "complexity": 2
   },
   {
-   "id": "function:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java:manageSuspendIo",
-   "type": "function",
-   "name": "manageSuspendIo",
-   "filePath": "satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "lineRange": [
-    44,
-    136
-   ],
-   "summary": "Iterates dispatched resources, suspending or resuming IO where the desired state differs from the current one and collecting failures.",
-   "tags": [
-    "suspend-io",
-    "orchestration"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "function:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java:resumeIoBottomUp",
-   "type": "function",
-   "name": "resumeIoBottomUp",
-   "filePath": "satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "lineRange": [
-    141,
-    162
-   ],
-   "summary": "Resumes IO on a resource's layer tree from the lowest layer upwards.",
-   "tags": [
-    "suspend-io"
-   ],
-   "complexity": "simple"
-  },
-  {
-   "id": "file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "type": "file",
-   "name": "DeviceLayer.java",
-   "filePath": "satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "summary": "Core interface implemented by every storage layer (Tessera, LUKS, cache, NVMe, storage); defines the prepare/process/clearCache lifecycle plus suspend-IO, storage-pool check and clone hooks.",
-   "tags": [
-    "interface",
-    "layer",
-    "device-management",
-    "lifecycle"
-   ],
-   "complexity": "complex",
-   "languageNotes": "Defines nested AbortLayerProcessingException and BlockedPortsException plus the NotificationListener callback interface used by all layer implementations."
-  },
-  {
-   "id": "class:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java:DeviceLayer",
+   "id": "class:dispatch/src/main/java/net/example/router/RouteTable.java:RouteTable",
    "type": "class",
-   "name": "DeviceLayer",
-   "filePath": "satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "lineRange": [
-    38,
-    303
-   ],
-   "summary": "Core interface implemented by every storage layer (Tessera, LUKS, cache, NVMe, storage); defines the prepare/process/clearCache lifecycle plus suspend-IO, storage-pool check and clone hooks.",
+   "name": "RouteTable",
+   "filePath": "dispatch/src/main/java/net/example/router/RouteTable.java",
+   "summary": "Class RouteTable.",
    "tags": [
-    "interface",
-    "layer",
-    "device-management",
-    "lifecycle"
+    "java",
+    "class"
    ],
-   "complexity": "complex"
+   "complexity": 3
   },
   {
-   "id": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "type": "file",
-   "name": "CtrlRscDeleteApiCallHandler.java",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "summary": "Orchestrates resource deletion: prepares delete (in-use and last-disk checks), handles ZFS rename quirks, resumes paused Tessera deletes, updates peers and activates a tiebreaker if the last resource vanishes.",
-   "tags": [
-    "api-handler",
-    "resource-deletion",
-    "tessera",
-    "controller"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java:CtrlRscDeleteApiCallHandler",
+   "id": "class:dispatch/src/main/java/net/example/router/HopResolver.java:HopResolver",
    "type": "class",
-   "name": "CtrlRscDeleteApiCallHandler",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "lineRange": [
-    63,
-    581
-   ],
-   "summary": "Orchestrates resource deletion: prepares delete (in-use and last-disk checks), handles ZFS rename quirks, resumes paused Tessera deletes, updates peers and activates a tiebreaker if the last resource vanishes.",
+   "name": "HopResolver",
+   "filePath": "dispatch/src/main/java/net/example/router/HopResolver.java",
+   "summary": "Class HopResolver.",
    "tags": [
-    "api-handler",
-    "resource-deletion",
-    "tessera",
-    "controller"
+    "java",
+    "class"
    ],
-   "complexity": "complex"
+   "complexity": 4
   },
   {
-   "id": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java:deleteResourceOnPeersInTransaction",
-   "type": "function",
-   "name": "deleteResourceOnPeersInTransaction",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "lineRange": [
-    471,
-    541
-   ],
-   "summary": "Removes the deleted resource from peer satellites and finalizes DB cleanup, activating a tiebreaker if needed.",
+   "id": "class:dispatch/src/main/java/net/example/router/LinkWatcher.java:LinkWatcher",
+   "type": "class",
+   "name": "LinkWatcher",
+   "filePath": "dispatch/src/main/java/net/example/router/LinkWatcher.java",
+   "summary": "Class LinkWatcher.",
    "tags": [
-    "deletion",
-    "satellite-update",
+    "java",
+    "class"
+   ],
+   "complexity": 5
+  },
+  {
+   "id": "class:dispatch/src/main/java/net/example/queue/WorkQueue.java:WorkQueue",
+   "type": "class",
+   "name": "WorkQueue",
+   "filePath": "dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "summary": "Class WorkQueue.",
+   "tags": [
+    "java",
+    "class"
+   ],
+   "complexity": 2
+  },
+  {
+   "id": "class:dispatch/src/main/java/net/example/queue/QueueDrainer.java:QueueDrainer",
+   "type": "class",
+   "name": "QueueDrainer",
+   "filePath": "dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "summary": "Class QueueDrainer.",
+   "tags": [
+    "java",
+    "class"
+   ],
+   "complexity": 3
+  },
+  {
+   "id": "class:core/src/main/java/net/example/model/Station.java:Station",
+   "type": "class",
+   "name": "Station",
+   "filePath": "core/src/main/java/net/example/model/Station.java",
+   "summary": "Class Station.",
+   "tags": [
+    "java",
+    "class"
+   ],
+   "complexity": 4
+  },
+  {
+   "id": "class:core/src/main/java/net/example/model/Shipment.java:Shipment",
+   "type": "class",
+   "name": "Shipment",
+   "filePath": "core/src/main/java/net/example/model/Shipment.java",
+   "summary": "Class Shipment.",
+   "tags": [
+    "java",
+    "class"
+   ],
+   "complexity": 5
+  },
+  {
+   "id": "class:core/src/main/java/net/example/model/Container.java:Container",
+   "type": "class",
+   "name": "Container",
+   "filePath": "core/src/main/java/net/example/model/Container.java",
+   "summary": "Class Container.",
+   "tags": [
+    "java",
+    "class"
+   ],
+   "complexity": 2
+  },
+  {
+   "id": "class:core/src/main/java/net/example/store/StationStore.java:StationStore",
+   "type": "class",
+   "name": "StationStore",
+   "filePath": "core/src/main/java/net/example/store/StationStore.java",
+   "summary": "Class StationStore.",
+   "tags": [
+    "java",
+    "class"
+   ],
+   "complexity": 3
+  },
+  {
+   "id": "class:core/src/main/java/net/example/store/ShipmentStore.java:ShipmentStore",
+   "type": "class",
+   "name": "ShipmentStore",
+   "filePath": "core/src/main/java/net/example/store/ShipmentStore.java",
+   "summary": "Class ShipmentStore.",
+   "tags": [
+    "java",
+    "class"
+   ],
+   "complexity": 4
+  },
+  {
+   "id": "class:core/src/main/java/net/example/api/PlanEndpoint.java:PlanEndpoint",
+   "type": "class",
+   "name": "PlanEndpoint",
+   "filePath": "core/src/main/java/net/example/api/PlanEndpoint.java",
+   "summary": "Class PlanEndpoint.",
+   "tags": [
+    "java",
+    "class"
+   ],
+   "complexity": 5
+  },
+  {
+   "id": "function:dispatch/src/main/java/net/example/router/RouteDispatcher.java:dispatch",
+   "type": "function",
+   "name": "dispatch",
+   "filePath": "dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "summary": "Method dispatch.",
+   "tags": [
+    "java",
     "method"
    ],
-   "complexity": "moderate"
+   "complexity": 1
   },
   {
-   "id": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java:handleZfsRenameIfNeeded",
+   "id": "function:dispatch/src/main/java/net/example/router/RouteDispatcher.java:shutdown",
    "type": "function",
-   "name": "handleZfsRenameIfNeeded",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "lineRange": [
-    385,
-    442
-   ],
-   "summary": "Renames ZFS volumes to a deletion namespace so a new resource with the same name can be created immediately.",
+   "name": "shutdown",
+   "filePath": "dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "summary": "Method shutdown.",
    "tags": [
-    "zfs",
-    "deletion",
+    "java",
     "method"
    ],
-   "complexity": "moderate"
+   "complexity": 1
   },
   {
-   "id": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "type": "file",
-   "name": "ZfsChecks.java",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "summary": "Decision helpers around ZFS snapshot rollback and deletion: detects ZFS/LVM-thick backed resources, resolves rollback and delete strategies from properties, and validates snapshot sequence ordering and dependent snapshots.",
-   "tags": [
-    "zfs",
-    "snapshot",
-    "validation",
-    "utility"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:ZfsChecks",
-   "type": "class",
-   "name": "ZfsChecks",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "lineRange": [
-    34,
-    451
-   ],
-   "summary": "Decision and validation helpers for ZFS-backed snapshot rollback and deletion strategies.",
-   "tags": [
-    "zfs",
-    "snapshot",
-    "validation"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:getDeleteStrategy",
+   "id": "function:dispatch/src/main/java/net/example/router/RouteTable.java:lookup",
    "type": "function",
-   "name": "getDeleteStrategy",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "lineRange": [
-    288,
-    346
-   ],
-   "summary": "Resolves the effective ZFS delete strategy (DELETE vs RENAME) for a snapshot, honoring the DYNAMIC strategy by checking dependent clones.",
+   "name": "lookup",
+   "filePath": "dispatch/src/main/java/net/example/router/RouteTable.java",
+   "summary": "Method lookup.",
    "tags": [
-    "zfs",
-    "strategy",
-    "delete"
+    "java",
+    "method"
    ],
-   "complexity": "complex"
+   "complexity": 2
   },
   {
-   "id": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:ensureNoDependentSnapshots",
+   "id": "function:dispatch/src/main/java/net/example/router/HopResolver.java:resolve",
    "type": "function",
-   "name": "ensureNoDependentSnapshots",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "lineRange": [
-    348,
-    450
-   ],
-   "summary": "Validates that deleting a resource or rolling back a snapshot is not blocked by dependent (newer or cloned) ZFS snapshots.",
+   "name": "resolve",
+   "filePath": "dispatch/src/main/java/net/example/router/HopResolver.java",
+   "summary": "Method resolve.",
    "tags": [
-    "zfs",
-    "validation",
-    "delete"
+    "java",
+    "method"
    ],
-   "complexity": "complex"
+   "complexity": 3
   },
   {
-   "id": "class:controller/src/main/java/com/northgate/ravel/core/SpecialSatelliteProcessManager.java:SpecialSatelliteProcessManager",
-   "type": "class",
-   "name": "SpecialSatelliteProcessManager",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/SpecialSatelliteProcessManager.java",
-   "lineRange": [
-    40,
-    397
-   ],
-   "summary": "Manages the lifecycle of controller-local satellite processes used for special satellite node types.",
+   "id": "function:dispatch/src/main/java/net/example/router/LinkWatcher.java:onLinkUp",
+   "type": "function",
+   "name": "onLinkUp",
+   "filePath": "dispatch/src/main/java/net/example/router/LinkWatcher.java",
+   "summary": "Method onLinkUp.",
    "tags": [
-    "process-management",
-    "class",
+    "java",
+    "method"
+   ],
+   "complexity": 1
+  },
+  {
+   "id": "function:dispatch/src/main/java/net/example/queue/WorkQueue.java:offer",
+   "type": "function",
+   "name": "offer",
+   "filePath": "dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "summary": "Method offer.",
+   "tags": [
+    "java",
+    "method"
+   ],
+   "complexity": 2
+  },
+  {
+   "id": "function:dispatch/src/main/java/net/example/queue/QueueDrainer.java:drain",
+   "type": "function",
+   "name": "drain",
+   "filePath": "dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "summary": "Method drain.",
+   "tags": [
+    "java",
+    "method"
+   ],
+   "complexity": 3
+  },
+  {
+   "id": "function:core/src/main/java/net/example/store/StationStore.java:load",
+   "type": "function",
+   "name": "load",
+   "filePath": "core/src/main/java/net/example/store/StationStore.java",
+   "summary": "Method load.",
+   "tags": [
+    "java",
+    "method"
+   ],
+   "complexity": 1
+  },
+  {
+   "id": "function:core/src/main/java/net/example/store/StationStore.java:save",
+   "type": "function",
+   "name": "save",
+   "filePath": "core/src/main/java/net/example/store/StationStore.java",
+   "summary": "Method save.",
+   "tags": [
+    "java",
+    "method"
+   ],
+   "complexity": 1
+  },
+  {
+   "id": "function:core/src/main/java/net/example/store/ShipmentStore.java:load",
+   "type": "function",
+   "name": "load",
+   "filePath": "core/src/main/java/net/example/store/ShipmentStore.java",
+   "summary": "Method load.",
+   "tags": [
+    "java",
+    "method"
+   ],
+   "complexity": 2
+  },
+  {
+   "id": "function:core/src/main/java/net/example/api/PlanEndpoint.java:handlePlan",
+   "type": "function",
+   "name": "handlePlan",
+   "filePath": "core/src/main/java/net/example/api/PlanEndpoint.java",
+   "summary": "Method handlePlan.",
+   "tags": [
+    "java",
+    "method"
+   ],
+   "complexity": 3
+  },
+  {
+   "id": "function:core/src/main/java/net/example/api/EventEndpoint.java:handleEvent",
+   "type": "function",
+   "name": "handleEvent",
+   "filePath": "core/src/main/java/net/example/api/EventEndpoint.java",
+   "summary": "Method handleEvent.",
+   "tags": [
+    "java",
+    "method"
+   ],
+   "complexity": 1
+  },
+  {
+   "id": "function:core/src/main/java/net/example/util/Retry.java:withBackoff",
+   "type": "function",
+   "name": "withBackoff",
+   "filePath": "core/src/main/java/net/example/util/Retry.java",
+   "summary": "Method withBackoff.",
+   "tags": [
+    "java",
+    "method"
+   ],
+   "complexity": 2
+  },
+  {
+   "id": "service:dispatch-service",
+   "type": "service",
+   "name": "dispatch-service",
+   "filePath": "dispatch/src/main/java/net/example/router",
+   "summary": "Deployable unit dispatch-service.",
+   "tags": [
     "service"
    ],
-   "complexity": "complex"
+   "complexity": 6
   },
   {
-   "id": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "type": "file",
-   "name": "CtrlNodeApiCallHandler.java",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "summary": "Main node API handler: node creation (incl. special satellites), modification, type changes, listing, satellite config distribution, plus node restore, evict and evacuate flows.",
+   "id": "service:core-service",
+   "type": "service",
+   "name": "core-service",
+   "filePath": "core/src/main/java/net/example/api",
+   "summary": "Deployable unit core-service.",
    "tags": [
-    "api-handler",
-    "node-management",
-    "lifecycle",
-    "orchestration"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java:CtrlNodeApiCallHandler",
-   "type": "class",
-   "name": "CtrlNodeApiCallHandler",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "lineRange": [
-    135,
-    2028
-   ],
-   "summary": "Central handler implementing most node-level API operations of the controller, from creation to evacuation and eviction recovery.",
-   "tags": [
-    "node-management",
-    "class",
-    "api-handler"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java:checkProperties",
-   "type": "function",
-   "name": "checkProperties",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "lineRange": [
-    906,
-    1055
-   ],
-   "summary": "Validates node property changes including auto-eviction and connection-restriction settings.",
-   "tags": [
-    "node-management",
-    "validation",
-    "method"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "file:controller/src/main/java/com/northgate/ravel/transaction/ControllerK8sCrdTransactionMgr.java",
-   "type": "file",
-   "name": "ControllerK8sCrdTransactionMgr.java",
-   "filePath": "controller/src/main/java/com/northgate/ravel/transaction/ControllerK8sCrdTransactionMgr.java",
-   "summary": "TransactionMgr implementation for the Kubernetes CRD database backend: batches created/replaced/deleted CRDs per transaction, writes a rollback entry before applying them to the cluster, and restores state on failure.",
-   "tags": [
-    "transaction",
-    "kubernetes",
-    "database",
     "service"
    ],
-   "complexity": "complex"
-  },
-  {
-   "id": "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "type": "file",
-   "name": "PingTask.java",
-   "filePath": "controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "summary": "Periodically sends ping messages to all registered satellite peers and hands peers with overdue pong replies over to the ReconnectorTask for connection recovery.",
-   "tags": [
-    "scheduled-task",
-    "ping",
-    "connection-monitoring",
-    "controller"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "class:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java:PingTask",
-   "type": "class",
-   "name": "PingTask",
-   "filePath": "controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "lineRange": [
-    22,
-    189
-   ],
-   "summary": "Periodically sends ping messages to all registered satellite peers and hands peers with overdue pong replies over to the ReconnectorTask for connection recovery.",
-   "tags": [
-    "scheduled-task",
-    "ping",
-    "connection-monitoring",
-    "controller"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "function:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java:run",
-   "type": "function",
-   "name": "run",
-   "filePath": "controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "lineRange": [
-    64,
-    78
-   ],
-   "summary": "Scheduled entry point that snapshots the current peer list under lock and delegates to sendPingMessages.",
-   "tags": [
-    "scheduled-task",
-    "ping",
-    "method"
-   ],
-   "complexity": "simple"
-  },
-  {
-   "id": "function:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java:getCurrentPeers",
-   "type": "function",
-   "name": "getCurrentPeers",
-   "filePath": "controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "lineRange": [
-    167,
-    188
-   ],
-   "summary": "Returns the currently tracked peers, resolving each node's current active connection under read locks.",
-   "tags": [
-    "peer",
-    "utility",
-    "method"
-   ],
-   "complexity": "simple"
-  },
-  {
-   "id": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "type": "file",
-   "name": "ReconnectorTask.java",
-   "filePath": "controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "summary": "Central connection-recovery task of the controller: retries satellite connections, rotates through a node's configured network interfaces, tracks offline peers and initiates node eviction fluxes when peers stay unreachable.",
-   "tags": [
-    "scheduled-task",
-    "reconnect",
-    "eviction",
-    "high-availability",
-    "controller"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "class:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java:ReconnectorTask",
-   "type": "class",
-   "name": "ReconnectorTask",
-   "filePath": "controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "lineRange": [
-    56,
-    872
-   ],
-   "summary": "Central connection-recovery task of the controller: retries satellite connections, rotates through a node's configured network interfaces, tracks offline peers and initiates node eviction fluxes when peers stay unreachable.",
-   "tags": [
-    "scheduled-task",
-    "reconnect",
-    "eviction",
-    "high-availability"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "function:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java:add",
-   "type": "function",
-   "name": "add",
-   "filePath": "controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "lineRange": [
-    117,
-    206
-   ],
-   "summary": "Registers a peer for reconnection, optionally authenticating immediately and aborting in-progress backup shipments of the failing node.",
-   "tags": [
-    "reconnect",
-    "peer",
-    "method"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "function:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java:tesseraConnectionsOk",
-   "type": "function",
-   "name": "tesseraConnectionsOk",
-   "filePath": "controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "lineRange": [
-    737,
-    780
-   ],
-   "summary": "Checks via Tessera state tracking whether other cluster nodes still see the given node's Tessera connections as healthy.",
-   "tags": [
-    "tessera",
-    "monitoring",
-    "method"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "type": "file",
-   "name": "RavelConfigTool.java",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "summary": "Picocli-based `ravel-config` command line tool providing sub-commands to generate the database TOML config, run or check migrations, adjust listen ports and disable token authentication.",
-   "tags": [
-    "entry-point",
-    "cli",
-    "configuration",
-    "database",
-    "tooling"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "class:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java:RavelConfigTool",
-   "type": "class",
-   "name": "RavelConfigTool",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "lineRange": [
-    67,
-    629
-   ],
-   "summary": "Picocli command container of the ravel-config CLI with sub-commands for config generation and migration handling.",
-   "tags": [
-    "cli",
-    "entry-point",
-    "configuration"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "function:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java:disableTokenAuthSql",
-   "type": "function",
-   "name": "disableTokenAuthSql",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "lineRange": [
-    481,
-    496
-   ],
-   "summary": "Disables token authentication directly in an SQL database so a locked-out operator can regain access.",
-   "tags": [
-    "cli",
-    "security",
-    "database",
-    "recovery"
-   ],
-   "complexity": "simple"
-  },
-  {
-   "id": "function:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java:dbFromConfig",
-   "type": "function",
-   "name": "dbFromConfig",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "lineRange": [
-    574,
-    628
-   ],
-   "summary": "Resolves the configured database backend from the TOML file and returns a ready-to-use connection provider.",
-   "tags": [
-    "database",
-    "configuration",
-    "cli"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "file:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "type": "file",
-   "name": "CtrlTomlConfig.java",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "summary": "Typed representation of the controller's ravel.toml file; nested records mirror the TOML sections and are applied onto the runtime CtrlConfig.",
-   "tags": [
-    "configuration",
-    "data-model",
-    "toml",
-    "deserialization"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "class:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java:CtrlTomlConfig",
-   "type": "class",
-   "name": "CtrlTomlConfig",
-   "filePath": "controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "lineRange": [
-    7,
-    195
-   ],
-   "summary": "Object model of ravel.toml whose nested sections are applied onto CtrlConfig.",
-   "tags": [
-    "configuration",
-    "data-model",
-    "toml"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "file:satellite/src/main/java/com/northgate/ravel/core/DeviceManager.java",
-   "type": "file",
-   "name": "DeviceManager.java",
-   "filePath": "satellite/src/main/java/com/northgate/ravel/core/DeviceManager.java",
-   "summary": "Interface of the satellite device manager: receives update-applied notifications for every core object type, marks resources for dispatch, grants shared storage pool locks and exposes the update tracker and space info.",
-   "tags": [
-    "interface",
-    "satellite",
-    "device-manager",
-    "update-tracking",
-    "orchestration"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "file",
-   "name": "Nullable.java",
-   "filePath": "server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "summary": "Type-qualifier nickname annotation marking nullable fields, parameters, return values and type uses for static null analysis.",
-   "tags": [
-    "annotation",
-    "type-definition",
-    "static-analysis",
-    "nullability"
-   ],
-   "complexity": "simple",
-   "languageNotes": "A JSR-305 @TypeQualifierNickname for @CheckForNull, applicable to TYPE_USE positions."
-  },
-  {
-   "id": "file:server/src/main/java/com/northgate/ravel/transaction/K8sCrdTransaction.java",
-   "type": "file",
-   "name": "K8sCrdTransaction.java",
-   "filePath": "server/src/main/java/com/northgate/ravel/transaction/K8sCrdTransaction.java",
-   "summary": "Transaction implementation for the Kubernetes-CRD database backend, batching create/replace/delete operations against Kubernetes custom resources and applying them atomically via the K8s API when the transaction commits.",
-   "tags": [
-    "transaction",
-    "k8s",
-    "persistence",
-    "core-logic"
-   ],
-   "complexity": "complex"
-  },
-  {
-   "id": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "type": "service",
-   "name": "RavelVersionCrd.java",
-   "filePath": "server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "summary": "Fabric8 Kubernetes CustomResource representing the 'RavelVersion' CRD, which stores the current Ravel database schema version as a Kubernetes object when the K8s CRD database engine is in use.",
-   "tags": [
-    "kubernetes-crd",
-    "database-versioning",
-    "custom-resource",
-    "infrastructure"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "class:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java:RavelVersionCrd",
-   "type": "class",
-   "name": "RavelVersionCrd",
-   "filePath": "server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "lineRange": [
-    15,
-    73
-   ],
-   "summary": "Concrete Fabric8 CustomResource<RavelVersionSpec, Void>, annotated with the CRD's K8s group/version/kind, implementing RavelCrd to expose the schema-version spec as a Kubernetes object keyed by its Ravel key.",
-   "tags": [
-    "kubernetes-crd",
-    "custom-resource",
-    "database-versioning"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java",
-   "type": "service",
-   "name": "RavelVersionSpec.java",
-   "filePath": "server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java",
-   "summary": "Spec payload of the RavelVersion CRD, holding the integer database schema version and a back-reference to its parent CRD; the raw-parameter and column-access methods are unsupported since this CRD has no backing relational table.",
-   "tags": [
-    "kubernetes-crd",
-    "database-versioning",
-    "data-model"
-   ],
-   "complexity": "moderate"
-  },
-  {
-   "id": "class:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java:RavelVersionSpec",
-   "type": "class",
-   "name": "RavelVersionSpec",
-   "filePath": "server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java",
-   "lineRange": [
-    13,
-    67
-   ],
-   "summary": "Implements RavelSpec for the RavelVersion CRD, wrapping a single immutable 'version' int field; throws ImplementationError for the DatabaseTable-oriented methods since this spec has no relational table equivalent.",
-   "tags": [
-    "data-model",
-    "kubernetes-crd",
-    "database-versioning"
-   ],
-   "complexity": "moderate"
+   "complexity": 6
   }
  ],
  "edges": [
   {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "target": "class:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java:SuspendManager",
+   "source": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "target": "class:dispatch/src/main/java/net/example/router/RouteDispatcher.java:RouteDispatcher",
    "type": "contains",
    "direction": "forward",
    "weight": 1.0
   },
   {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "target": "class:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java:SuspendManager",
+   "source": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "target": "class:dispatch/src/main/java/net/example/router/RouteTable.java:RouteTable",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/HopResolver.java",
+   "target": "class:dispatch/src/main/java/net/example/router/HopResolver.java:HopResolver",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/LinkWatcher.java",
+   "target": "class:dispatch/src/main/java/net/example/router/LinkWatcher.java:LinkWatcher",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "target": "class:dispatch/src/main/java/net/example/queue/WorkQueue.java:WorkQueue",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "target": "class:dispatch/src/main/java/net/example/queue/QueueDrainer.java:QueueDrainer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/model/Station.java",
+   "target": "class:core/src/main/java/net/example/model/Station.java:Station",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/model/Shipment.java",
+   "target": "class:core/src/main/java/net/example/model/Shipment.java:Shipment",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/model/Container.java",
+   "target": "class:core/src/main/java/net/example/model/Container.java:Container",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/StationStore.java",
+   "target": "class:core/src/main/java/net/example/store/StationStore.java:StationStore",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "target": "class:core/src/main/java/net/example/store/ShipmentStore.java:ShipmentStore",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/api/PlanEndpoint.java",
+   "target": "class:core/src/main/java/net/example/api/PlanEndpoint.java:PlanEndpoint",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "target": "function:dispatch/src/main/java/net/example/router/RouteDispatcher.java:dispatch",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "target": "function:dispatch/src/main/java/net/example/router/RouteDispatcher.java:shutdown",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "target": "function:dispatch/src/main/java/net/example/router/RouteTable.java:lookup",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/HopResolver.java",
+   "target": "function:dispatch/src/main/java/net/example/router/HopResolver.java:resolve",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/LinkWatcher.java",
+   "target": "function:dispatch/src/main/java/net/example/router/LinkWatcher.java:onLinkUp",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "target": "function:dispatch/src/main/java/net/example/queue/WorkQueue.java:offer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "target": "function:dispatch/src/main/java/net/example/queue/QueueDrainer.java:drain",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/StationStore.java",
+   "target": "function:core/src/main/java/net/example/store/StationStore.java:load",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/StationStore.java",
+   "target": "function:core/src/main/java/net/example/store/StationStore.java:save",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "target": "function:core/src/main/java/net/example/store/ShipmentStore.java:load",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/api/PlanEndpoint.java",
+   "target": "function:core/src/main/java/net/example/api/PlanEndpoint.java:handlePlan",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/api/EventEndpoint.java",
+   "target": "function:core/src/main/java/net/example/api/EventEndpoint.java:handleEvent",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "target": "class:dispatch/src/main/java/net/example/router/RouteDispatcher.java:RouteDispatcher",
    "type": "exports",
    "direction": "forward",
-   "weight": 0.8
+   "weight": 0.5
   },
   {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "target": "function:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java:manageSuspendIo",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "target": "function:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java:resumeIoBottomUp",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/DeviceHandlerImpl.java",
-   "target": "file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/DeviceHandlerImpl.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "target": "file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "target": "class:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java:DeviceLayer",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "target": "class:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java:DeviceLayer",
+   "source": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "target": "class:dispatch/src/main/java/net/example/router/RouteTable.java:RouteTable",
    "type": "exports",
    "direction": "forward",
-   "weight": 0.8
+   "weight": 0.5
   },
   {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "target": "file:satellite/src/main/java/com/northgate/ravel/core/devmgr/SuspendManager.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java:CtrlRscDeleteApiCallHandler",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java:CtrlRscDeleteApiCallHandler",
+   "source": "file:dispatch/src/main/java/net/example/router/HopResolver.java",
+   "target": "class:dispatch/src/main/java/net/example/router/HopResolver.java:HopResolver",
    "type": "exports",
    "direction": "forward",
-   "weight": 0.8
+   "weight": 0.5
   },
   {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java:deleteResourceOnPeersInTransaction",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java:handleZfsRenameIfNeeded",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "target": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:ZfsChecks",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:ZfsChecks",
+   "source": "file:dispatch/src/main/java/net/example/router/LinkWatcher.java",
+   "target": "class:dispatch/src/main/java/net/example/router/LinkWatcher.java:LinkWatcher",
    "type": "exports",
    "direction": "forward",
-   "weight": 0.8
+   "weight": 0.5
   },
   {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:getDeleteStrategy",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:getDeleteStrategy",
+   "source": "file:dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "target": "class:dispatch/src/main/java/net/example/queue/WorkQueue.java:WorkQueue",
    "type": "exports",
    "direction": "forward",
-   "weight": 0.8
+   "weight": 0.5
   },
   {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:ensureNoDependentSnapshots",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java:ensureNoDependentSnapshots",
+   "source": "file:dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "target": "class:dispatch/src/main/java/net/example/queue/QueueDrainer.java:QueueDrainer",
    "type": "exports",
    "direction": "forward",
-   "weight": 0.8
+   "weight": 0.5
   },
   {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "target": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlRscDeleteApiCallHandler.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/utils/ZfsChecks.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java:CtrlNodeApiCallHandler",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java:CtrlNodeApiCallHandler",
+   "source": "file:core/src/main/java/net/example/model/Station.java",
+   "target": "class:core/src/main/java/net/example/model/Station.java:Station",
    "type": "exports",
    "direction": "forward",
-   "weight": 0.8
+   "weight": 0.5
   },
   {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java:checkProperties",
-   "type": "contains",
+   "source": "file:core/src/main/java/net/example/model/Shipment.java",
+   "target": "class:core/src/main/java/net/example/model/Shipment.java:Shipment",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:core/src/main/java/net/example/model/Container.java",
+   "target": "class:core/src/main/java/net/example/model/Container.java:Container",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/StationStore.java",
+   "target": "class:core/src/main/java/net/example/store/StationStore.java:StationStore",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "target": "class:core/src/main/java/net/example/store/ShipmentStore.java:ShipmentStore",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:core/src/main/java/net/example/api/PlanEndpoint.java",
+   "target": "class:core/src/main/java/net/example/api/PlanEndpoint.java:PlanEndpoint",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "service:core-service",
+   "target": "class:core/src/main/java/net/example/api/PlanEndpoint.java:PlanEndpoint",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "target": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "type": "imports",
    "direction": "forward",
    "weight": 1.0
   },
   {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "target": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
+   "source": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "target": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
    "type": "imports",
    "direction": "forward",
-   "weight": 0.7
+   "weight": 1.0
   },
   {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
+   "source": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "target": "file:dispatch/src/main/java/net/example/router/HopResolver.java",
    "type": "imports",
    "direction": "forward",
-   "weight": 0.7
+   "weight": 1.0
   },
   {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/SpecialSatelliteProcessManager.java:SpecialSatelliteProcessManager",
+   "source": "file:dispatch/src/main/java/net/example/router/HopResolver.java",
+   "target": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "target": "file:dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "target": "file:dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/StationStore.java",
+   "target": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "target": "file:core/src/main/java/net/example/store/StationStore.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/api/PlanEndpoint.java",
+   "target": "file:core/src/main/java/net/example/api/EventEndpoint.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/api/EventEndpoint.java",
+   "target": "file:core/src/main/java/net/example/api/PlanEndpoint.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "target": "file:dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "target": "file:core/src/main/java/net/example/store/StationStore.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "target": "file:core/src/main/java/net/example/model/Station.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/HopResolver.java",
+   "target": "file:core/src/main/java/net/example/model/Station.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/LinkWatcher.java",
+   "target": "file:dispatch/src/main/java/net/example/router/RouteTable.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/queue/QueueDrainer.java",
+   "target": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/model/Shipment.java",
+   "target": "file:core/src/main/java/net/example/model/Container.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/model/Container.java",
+   "target": "file:core/src/main/java/net/example/util/Retry.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/StationStore.java",
+   "target": "file:core/src/main/java/net/example/model/Station.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "target": "file:core/src/main/java/net/example/model/Shipment.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/api/PlanEndpoint.java",
+   "target": "file:core/src/main/java/net/example/store/StationStore.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/api/EventEndpoint.java",
+   "target": "file:core/src/main/java/net/example/store/ShipmentStore.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/util/Retry.java",
+   "target": "file:dispatch/src/main/java/net/example/queue/WorkQueue.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:core/src/main/java/net/example/model/Station.java",
+   "target": "file:core/src/main/java/net/example/model/Shipment.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:dispatch/src/main/java/net/example/router/HopResolver.java",
+   "target": "file:core/src/main/java/net/example/util/Retry.java",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "service:dispatch-service",
+   "target": "service:core-service",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "service:core-service",
+   "target": "service:dispatch-service",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "service:dispatch-service",
+   "target": "file:dispatch/src/main/java/net/example/router/RouteDispatcher.java",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "service:core-service",
+   "target": "file:core/src/main/java/net/example/api/PlanEndpoint.java",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "function:dispatch/src/main/java/net/example/router/RouteDispatcher.java:dispatch",
+   "target": "function:dispatch/src/main/java/net/example/router/RouteTable.java:lookup",
    "type": "calls",
    "direction": "forward",
-   "weight": 0.8
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/transaction/ControllerK8sCrdTransactionMgr.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java:PingTask",
-   "type": "contains",
-   "direction": "forward",
    "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java:PingTask",
-   "type": "exports",
-   "direction": "forward",
-   "weight": 0.8
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java:run",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java:getCurrentPeers",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "target": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "type": "depends_on",
-   "direction": "forward",
-   "weight": 0.6
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java:ReconnectorTask",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java:ReconnectorTask",
-   "type": "exports",
-   "direction": "forward",
-   "weight": 0.8
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java:add",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java:tesseraConnectionsOk",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "target": "file:controller/src/main/java/com/northgate/ravel/core/apicallhandler/controller/CtrlNodeApiCallHandler.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/tasks/ReconnectorTask.java",
-   "target": "file:controller/src/main/java/com/northgate/ravel/tasks/PingTask.java",
-   "type": "depends_on",
-   "direction": "forward",
-   "weight": 0.6
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java:RavelConfigTool",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java:RavelConfigTool",
-   "type": "exports",
-   "direction": "forward",
-   "weight": 0.8
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java:disableTokenAuthSql",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "target": "function:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java:dbFromConfig",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "target": "file:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java:CtrlTomlConfig",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "target": "class:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java:CtrlTomlConfig",
-   "type": "exports",
-   "direction": "forward",
-   "weight": 0.8
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "target": "file:controller/src/main/java/com/northgate/ravel/core/RavelConfigTool.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/core/cfg/CtrlTomlConfig.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:satellite/src/main/java/com/northgate/ravel/core/DeviceManager.java",
-   "target": "file:satellite/src/main/java/com/northgate/ravel/layer/DeviceLayer.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:server/src/main/java/com/northgate/ravel/transaction/K8sCrdTransaction.java",
-   "target": "file:server/src/main/java/com/northgate/ravel/annotation/Nullable.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "target": "class:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java:RavelVersionCrd",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "target": "class:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java:RavelVersionCrd",
-   "type": "exports",
-   "direction": "forward",
-   "weight": 0.8
-  },
-  {
-   "source": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java",
-   "target": "class:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java:RavelVersionSpec",
-   "type": "contains",
-   "direction": "forward",
-   "weight": 1.0
-  },
-  {
-   "source": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java",
-   "target": "class:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java:RavelVersionSpec",
-   "type": "exports",
-   "direction": "forward",
-   "weight": 0.8
-  },
-  {
-   "source": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "target": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java",
-   "type": "depends_on",
-   "direction": "forward",
-   "weight": 0.6
-  },
-  {
-   "source": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java",
-   "target": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "type": "depends_on",
-   "direction": "forward",
-   "weight": 0.6
-  },
-  {
-   "source": "file:controller/src/main/java/com/northgate/ravel/transaction/ControllerK8sCrdTransactionMgr.java",
-   "target": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:server/src/main/java/com/northgate/ravel/transaction/K8sCrdTransaction.java",
-   "target": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionCrd.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
-  },
-  {
-   "source": "file:server/src/main/java/com/northgate/ravel/transaction/K8sCrdTransaction.java",
-   "target": "service:server/src/main/java/com/northgate/ravel/dbdrivers/k8s/crd/RavelVersionSpec.java",
-   "type": "imports",
-   "direction": "forward",
-   "weight": 0.7
   }
  ]
 }

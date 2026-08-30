@@ -22,17 +22,18 @@ func schemaVocab() ontology.Vocabulary {
 
 // A whole schema imports without a single question for a person.
 //
-// This is the test the defect was found by: Ravel's own schema, run through
-// the deployed service, came back with 89 conflicts and a job stuck in
+// This is the test the defect was found by. A customer's own schema, run
+// through the deployed service, came back with 89 conflicts and a job stuck in
 // NEEDS_REVIEW. Every one of them was this package inventing a disagreement
 // between two foreign keys that agree about everything they are actually about
-// — NODE_CONNECTIONS references NODES twice, once for each end of a
-// connection, and both constraints are correct.
+// — STATION_LINKS references STATIONS twice, once for each end of a link, and
+// both constraints are correct.
 //
-// It is asserted on the whole file rather than on an excerpt because that is
-// what the defect was: no rule was broken by any one statement, so nothing
-// smaller than a schema exhibits it in the shape a buyer met.
-func TestTheRavelSchemaImportsWithoutConflicts(t *testing.T) {
+// The fixture is synthetic and reproduces that schema's shape rather than its
+// content; see testdata. It is asserted on a whole schema rather than on an
+// excerpt because that is what the defect was: no rule was broken by any one
+// statement, so nothing smaller than a schema exhibits it.
+func TestTheSchemaImportsWithoutConflicts(t *testing.T) {
 	text, err := os.ReadFile("testdata/freight-schema.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -61,10 +62,10 @@ func TestTheRavelSchemaImportsWithoutConflicts(t *testing.T) {
 	}
 }
 
-// The two ends of a node connection survive as two edges. Zero conflicts is
-// also what deleting one of them would produce, so the count above is only
-// half the claim.
-func TestTheTwoEndsOfANodeConnectionAreTwoEdges(t *testing.T) {
+// The two ends of a link survive as two edges. Zero conflicts is also what
+// deleting one of them would produce, so the count above is only half the
+// claim.
+func TestTheTwoEndsOfALinkAreTwoEdges(t *testing.T) {
 	text, err := os.ReadFile("testdata/freight-schema.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -82,19 +83,19 @@ func TestTheTwoEndsOfANodeConnectionAreTwoEdges(t *testing.T) {
 
 	var ends []alchemy.Relation
 	for _, r := range got.Relations {
-		if r.From == "table:node_connections" && r.To == "table:nodes" {
+		if r.From == "table:station_links" && r.To == "table:stations" {
 			ends = append(ends, r)
 		}
 	}
 	if len(ends) != 2 {
-		t.Fatalf("node_connections -> nodes = %d edges, want 2: %+v", len(ends), ends)
+		t.Fatalf("station_links -> stations = %d edges, want 2: %+v", len(ends), ends)
 	}
 	names := map[string]bool{}
 	for _, r := range ends {
 		c, _ := r.Attributes["constraint"].(string)
 		names[c] = true
 	}
-	if !names["FK_NC_NODES_SRC"] || !names["FK_NC_NODES_DST"] {
-		t.Fatalf("constraints = %v, want both ends of the connection", names)
+	if !names["FK_SL_STATIONS_SRC"] || !names["FK_SL_STATIONS_DST"] {
+		t.Fatalf("constraints = %v, want both ends of the link", names)
 	}
 }
