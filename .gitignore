@@ -6,3 +6,4 @@
 
 # Agent worktrees are working state, not source.
 .claude/
+.playwright-mcp/
