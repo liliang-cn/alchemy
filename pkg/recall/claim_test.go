@@ -79,3 +79,33 @@ func TestACitationMarkerNamesTheFileAndTheChunkAClaimCameFrom(t *testing.T) {
 		}
 	}
 }
+
+// A page that does not say it is a page is the defect this type exists for.
+//
+// Measured on a real corpus: an anchor search for the name the whole graph was
+// about matched 14 entities and returned 12, and the entity the question was
+// actually about was thirteenth. Two agents on two different runtimes were
+// handed the truncated list with no sign it was truncated, and in seven runs
+// out of eight went on to invent an id or answer from their own prior
+// knowledge -- under a prompt whose first rule was to use only what the tools
+// returned.
+func TestAPageSaysWhenItIsOne(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		found Found
+		want  bool
+	}{
+		{"more matched than shown", Found{Nodes: make([]Node, 12), Total: 14}, true},
+		{"everything that matched", Found{Nodes: make([]Node, 3), Total: 3}, false},
+		{"nothing matched", Found{}, false},
+		// Total below the page cannot happen from a correct implementation,
+		// and the honest answer to an impossible pair is the safe one: do not
+		// tell a reader something is missing when nothing is.
+		{"a total that disagrees downward", Found{Nodes: make([]Node, 5), Total: 2}, false},
+	} {
+		if got := tc.found.Truncated(); got != tc.want {
+			t.Errorf("%s: Truncated() = %v, want %v (%d of %d)",
+				tc.name, got, tc.want, len(tc.found.Nodes), tc.found.Total)
+		}
+	}
+}

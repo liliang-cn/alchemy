@@ -35,30 +35,38 @@ var _ recall.Reader = (*Loader)(nil)
 // treat the underscore as "any character", and one for "50%" would match
 // nothing in a way nobody would think to look at. Escaping it would work and
 // would put the rule in this package rather than in Postgres.
-func (l *Loader) Find(ctx context.Context, load, name string, limit int) ([]recall.Node, error) {
+func (l *Loader) Find(ctx context.Context, load, name string, limit int) (recall.Found, error) {
 	if limit <= 0 {
-		return nil, fmt.Errorf("pgvector: limit = %d is not a number of anchors", limit)
+		return recall.Found{}, fmt.Errorf("pgvector: limit = %d is not a number of anchors", limit)
 	}
 	// Ordered before the limit, so that asking for ten of a hundred matches
 	// twice returns the same ten; without an ORDER BY that is the planner's
 	// choice, which is not an order at all.
-	const sql = `SELECT entity_id, type, name FROM {s}.loaded_entities
+	//
+	// The count comes back with the page, in one statement, because a second
+	// query would count a store that had moved. COUNT(*) OVER () is evaluated
+	// after the WHERE and before the LIMIT, which is exactly the number
+	// wanted: how many matched, not how many were returned.
+	const sql = `SELECT entity_id, type, name, count(*) OVER () AS total
+	FROM {s}.loaded_entities
 	WHERE load_id = $1 AND position(lower($2::text) in lower(name)) > 0
 	ORDER BY name, entity_id LIMIT $3`
 	rows, err := l.pool.Query(ctx, l.q(sql), load, name, limit)
 	if err != nil {
-		return nil, fmt.Errorf("pgvector: find %q in load %q: %w", name, load, err)
+		return recall.Found{}, fmt.Errorf("pgvector: find %q in load %q: %w", name, load, err)
 	}
 	defer rows.Close()
-	out := []recall.Node{}
+	found := recall.Found{Nodes: []recall.Node{}}
 	for rows.Next() {
 		var n recall.Node
-		if err := rows.Scan(&n.ID, &n.Type, &n.Name); err != nil {
-			return nil, fmt.Errorf("pgvector: find %q in load %q: %w", name, load, err)
+		var total int
+		if err := rows.Scan(&n.ID, &n.Type, &n.Name, &total); err != nil {
+			return recall.Found{}, fmt.Errorf("pgvector: find %q in load %q: %w", name, load, err)
 		}
-		out = append(out, n)
+		found.Nodes = append(found.Nodes, n)
+		found.Total = total
 	}
-	return out, rows.Err()
+	return found, rows.Err()
 }
 
 // Claims returns every relation touching one entity, in either direction, with

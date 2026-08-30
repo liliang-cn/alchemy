@@ -87,26 +87,36 @@ func (l *Loader) prop(name string) string {
 // worked for exactly the reason that no bookkeeping node happens to have a
 // plain `name` property — which is true, and is a property of the writer that
 // nothing was holding still.
-func (l *Loader) Find(ctx context.Context, load, name string, limit int) ([]recall.Node, error) {
+func (l *Loader) Find(ctx context.Context, load, name string, limit int) (recall.Found, error) {
 	if limit <= 0 {
-		return nil, fmt.Errorf("neo4j: limit = %d is not a number of anchors", limit)
+		return recall.Found{}, fmt.Errorf("neo4j: limit = %d is not a number of anchors", limit)
 	}
 	stmt, err := l.findCypher()
 	if err != nil {
-		return nil, err
+		return recall.Found{}, err
 	}
 	recs, err := l.read(ctx, stmt, map[string]any{
 		"run": load, "name": name, "limit": int64(limit),
 		"internal": toAny(l.opts.internalLabels()),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("neo4j: find %q in load %q: %w", name, load, err)
+		return recall.Found{}, fmt.Errorf("neo4j: find %q in load %q: %w", name, load, err)
 	}
-	out := make([]recall.Node, 0, len(recs))
+	found := recall.Found{Nodes: []recall.Node{}}
 	for _, r := range recs {
-		out = append(out, recall.Node{ID: str(r["id"]), Type: str(r["type"]), Name: str(r["name"])})
+		found.Total = num(r["total"])
+		page, _ := r["page"].([]any)
+		for _, item := range page {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			found.Nodes = append(found.Nodes, recall.Node{
+				ID: str(m["id"]), Type: str(m["type"]), Name: str(m["name"]),
+			})
+		}
 	}
-	return out, nil
+	return found, nil
 }
 
 // findCypher is the anchor query. The four builders in this file are separate
@@ -124,11 +134,18 @@ func (l *Loader) findCypher() (string, error) {
 		"MATCH (n:%[1]s {%[2]s: $run}) "+
 			"WHERE n.%[3]s IS NOT NULL AND NOT any(lbl IN labels(n) WHERE lbl IN $internal) "+
 			"AND toLower(n.%[3]s) CONTAINS toLower($name) "+
-			"RETURN DISTINCT n.%[4]s AS id, n.%[5]s AS type, n.%[3]s AS name "+
-			// Ordered before the limit, so that asking for ten of a hundred
-			// matches twice returns the same ten. Neo4j's natural order is the
-			// planner's, which is not an order at all.
-			"ORDER BY name, id LIMIT $limit",
+			"WITH DISTINCT n.%[4]s AS id, n.%[5]s AS type, n.%[3]s AS name "+
+			// The count travels with the page, collected in one statement,
+			// because a second query would count a store that had moved. The
+			// collect-then-slice shape is Cypher's way of saying "after the
+			// match, before the limit", which is the number wanted: how many
+			// matched, not how many came back.
+			"ORDER BY name, id "+
+			// `all` cannot be the variable: it is Cypher's own predicate
+			// function, and size(all) parses as a call to it with no
+			// arguments rather than as the size of a list.
+			"WITH collect({id: id, type: type, name: name}) AS matches "+
+			"RETURN size(matches) AS total, matches[0..$limit] AS page",
 		base, l.prop(keyRun), keyName, l.prop(keyID), l.prop(keyType)), nil
 }
 

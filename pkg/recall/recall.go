@@ -108,6 +108,22 @@ var ErrNoCitation = errors.New("recall: this citation does not resolve in this l
 // answer.
 var ErrNoLoad = errors.New("recall: no finished load of that name is in this store")
 
+// Found is a page of anchors and how many there were.
+//
+// Total is the number of matches, which may exceed len(Nodes). A consumer that
+// ignores it gets what it always got; one that reads it can say "fourteen
+// matched, twelve shown" and let a person or a model narrow the search instead
+// of reasoning over a silently truncated list as though it were complete.
+type Found struct {
+	Nodes []Node
+	Total int
+}
+
+// Truncated reports whether the page leaves matches unshown. It is a method
+// rather than a field so it cannot fall out of step with the two numbers it is
+// derived from.
+func (f Found) Truncated() bool { return f.Total > len(f.Nodes) }
+
 // Node is an entity as an anchor: the least a caller needs to ask the next
 // question.
 //
@@ -295,7 +311,17 @@ type Reader interface {
 	//
 	// No match is an empty slice and not an error, including for a load that
 	// is not in the store. See the package doc.
-	Find(ctx context.Context, load, name string, limit int) ([]Node, error)
+	//
+	// It returns a Found rather than a slice because the count matters as much
+	// as the page. Measured: an anchor search for the name a whole corpus was
+	// about matched fourteen entities and returned twelve, and the entity the
+	// question was actually about was thirteenth. Two agents on two runtimes
+	// were handed the truncated page with no sign it was one, and in seven
+	// runs out of eight they went on to invent an id or guess answers from
+	// their own prior knowledge -- under a prompt whose first rule was to use
+	// only what the tools returned. A page that does not say it is a page asks
+	// a reader to trust a list that is not the list.
+	Find(ctx context.Context, load, name string, limit int) (Found, error)
 
 	// Claims returns every claim adjacent to the entity with this ID, in
 	// either direction, each carrying its own provenance rather than its

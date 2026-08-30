@@ -116,13 +116,13 @@ func TestTheFourQuestionsBuildAContextPack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Find: %v", err)
 	}
-	if len(anchors) != 1 || anchors[0].ID != "e2" || anchors[0].Name != "CortexDB" || anchors[0].Type != "System" {
+	if len(anchors.Nodes) != 1 || anchors.Nodes[0].ID != "e2" || anchors.Nodes[0].Name != "CortexDB" || anchors.Nodes[0].Type != "System" {
 		t.Fatalf("Find(cortex) = %+v, want just the CortexDB node with its id and type", anchors)
 	}
 	// The bookkeeping nodes carry the base label too, and a run marker, a chunk
 	// and a finding are none of them anchors.
-	if got, err := l.Find(ctx, "recall-pack", "", 100); err != nil || len(got) != 3 {
-		t.Fatalf("Find(everything) = %d nodes (%v), want the 3 entities and nothing this connector wrote for itself", len(got), err)
+	if got, err := l.Find(ctx, "recall-pack", "", 100); err != nil || len(got.Nodes) != 3 {
+		t.Fatalf("Find(everything) = %d nodes (%v), want the 3 entities and nothing this connector wrote for itself", len(got.Nodes), err)
 	}
 
 	// 2. One hop, each claim with the provenance of the edge.
@@ -188,7 +188,7 @@ func TestALoadThatHasNotFinishedAnswersNothing(t *testing.T) {
 	l.mustQuery(t, "MATCH (r:"+mustQuote(t, l.internalLabel("Run"))+" {`_id`: $run}) SET r.`_complete` = false",
 		map[string]any{"run": "recall-partial"})
 
-	if got, err := l.Find(ctx, "recall-partial", "cortex", 10); err != nil || len(got) != 0 {
+	if got, err := l.Find(ctx, "recall-partial", "cortex", 10); err != nil || len(got.Nodes) != 0 {
 		t.Errorf("Find on an unfinished load = %+v (%v), want nothing", got, err)
 	}
 	if got, err := l.Claims(ctx, "recall-partial", "e1"); err != nil || len(got) != 0 {
