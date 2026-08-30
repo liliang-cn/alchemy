@@ -196,11 +196,19 @@ func TestARuleMadeMidRunReachesTheChunksThatHaveNotRunYet(t *testing.T) {
 	for _, e := range res.Entities {
 		byName[e.Name] = e
 	}
-	if got := byName["W1"].Provenance.Rules; got != "" {
-		t.Errorf("W1 was extracted before the rule existed but its provenance says %q", got)
+	if got := byName["W1"].Provenance.RuleSet; got != "" {
+		t.Errorf("W1 was extracted before the rule existed but its provenance names the rule set %q", got)
 	}
-	if got := byName["W2"].Provenance.Rules; !strings.Contains(got, rule.Shape) {
-		t.Errorf("W2's provenance = %q, want it to name the rule it was extracted under", got)
+	// W2 names the policy it was extracted under, and the result says what
+	// was in it. The record used to spell the shape out; it now points at a
+	// set that the result carries once, and the property under test is
+	// unchanged — a reader can still say which rule this chunk was asked
+	// under, and can still see that the chunk before it was asked under none.
+	if got := byName["W2"].Provenance.RuleSet; got == "" {
+		t.Errorf("W2 was extracted after the rule was made and names no rule set")
+	}
+	if !namedBy(underRules(t, res, byName["W2"].Provenance), rule.Name()) {
+		t.Errorf("the rule set W2 names does not contain %q, so a reader cannot say which rule it was extracted under", rule.Name())
 	}
 }
 
@@ -243,8 +251,8 @@ func TestARunWithNoStandingAnswersRecordsNone(t *testing.T) {
 		t.Fatal("nothing was extracted, so this proves nothing")
 	}
 	for _, e := range res.Entities {
-		if e.Provenance.Rules != "" {
-			t.Errorf("entity %q claims it was extracted under %q, and nobody decided anything", e.ID, e.Provenance.Rules)
+		if e.Provenance.RuleSet != "" {
+			t.Errorf("entity %q claims it was extracted under the rule set %q, and nobody decided anything", e.ID, e.Provenance.RuleSet)
 		}
 	}
 }

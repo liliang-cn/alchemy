@@ -68,6 +68,12 @@ func (s *Server) StreamResult(req *alchemyv1.GetResultRequest, stream grpc.Serve
 			page.ModelCalls = each(res.ModelCalls, modelCallToProto)
 			page.Unread = each(res.Unread, unreadToProto)
 			page.Rules = s.rulesOf(req.GetJobId())
+			// The policy rides once, with the summary, for the reason the
+			// summary does: a reader deciding whether to trust a graph too
+			// large for one message is deciding on what the model was told,
+			// and repeating it per page would be the per-record mistake one
+			// level up.
+			page.RuleSets = each(res.RuleSets, ruleSetToProto)
 		}
 		if err := stream.Send(page); err != nil {
 			return err

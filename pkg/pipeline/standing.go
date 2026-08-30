@@ -1,8 +1,7 @@
 package pipeline
 
 import (
-	"fmt"
-	"strings"
+	"sort"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/extract"
@@ -75,17 +74,71 @@ func (r *run) standing() extract.Standing {
 	}
 	return func() extract.Settled {
 		rules := r.rules()
-		if len(rules) == 0 {
+		// One rendering, asked for once, and everything about this chunk comes
+		// out of it: the lines the model is shown, the name its records will
+		// carry, and the set the result will resolve that name through. That
+		// is extract.Settled's own argument taken one step further — a chunk
+		// whose provenance named a policy its prompt never carried is the
+		// failure, and it is impossible when the prompt and the name are two
+		// halves of one object.
+		set := review.InForce(rules)
+		if set.Name == "" {
+			// No rule with a shape is in force, which is a run nobody has
+			// decided anything for. It gets the zero snapshot rather than a
+			// filter that would match nothing: see the comment on standing for
+			// why an empty run and a run with an empty policy are different
+			// runs to reason about.
 			return extract.Settled{}
 		}
+		r.remember(set)
 		return extract.Settled{
-			Told:  toldOf(rules),
-			Named: namedOf(rules),
+			Told:  toldOf(set),
+			Named: set.Name,
 			Filter: func(_ alchemy.Chunk, ents []alchemy.Entity, rels []alchemy.Relation) ([]alchemy.Entity, []alchemy.Relation) {
 				return r.settle(rules, ents, rels)
 			},
 		}
 	}
+}
+
+// remember files a policy this job actually asked a chunk under.
+//
+// Recorded here rather than assembled at the end from the inbox, because the
+// inbox at the end is not the policy any particular chunk ran under: §6's
+// whole point is that the set grows while the job runs, so the last reading of
+// it would describe the last chunk and misdescribe every earlier one. What a
+// record names has to be a set that was really in force at the moment it was
+// asked, and this is the only moment that is known.
+//
+// Locked because chunks are extracted concurrently, and by name because the
+// same policy is asked for once per chunk and is one set however many chunks
+// saw it — which is the entire saving.
+func (r *run) remember(set alchemy.RuleSet) {
+	r.setsMu.Lock()
+	defer r.setsMu.Unlock()
+	if r.sets == nil {
+		r.sets = map[string]alchemy.RuleSet{}
+	}
+	r.sets[set.Name] = set
+}
+
+// ruleSets is every policy this job's records were extracted under.
+//
+// Ordered by name, which is not the order they came into force. Chunks are
+// extracted concurrently, so the order two policies were first *observed* in
+// depends on a scheduler, and a result field that came back in a different
+// order on every run would make two runs of one corpus look different for no
+// reason anybody could act on. The order they came into force is recoverable
+// anyway, by a reader who cares: a set is a subset of the ones that follow it.
+func (r *run) ruleSets() []alchemy.RuleSet {
+	r.setsMu.Lock()
+	defer r.setsMu.Unlock()
+	out := make([]alchemy.RuleSet, 0, len(r.sets))
+	for _, set := range r.sets {
+		out = append(out, set)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
 // settle is the guarantee half of §6's sentence: a proposal a standing rule
@@ -156,97 +209,19 @@ func (r *run) settle(rules []review.Rule, ents []alchemy.Entity, rels []alchemy.
 	return out.Entities, out.Relations
 }
 
-// toldOf renders the standing answers as the lines the model is shown.
+// toldOf is the standing answers as the lines the model is shown.
 //
-// Rule.Because is the sentence the reviewer was looking at when they decided,
-// which §5c put on the rule precisely so it could be read after the item it
-// came from is gone. It is what a model needs too: "entity W1 has type Widget,
-// which sds@3 does not declare" says more about what to stop doing than any
-// paraphrase of the shape string would.
-func toldOf(rules []review.Rule) []string {
-	out := make([]string, 0, len(rules))
-	for _, rule := range rules {
-		out = append(out, told(rule))
+// They are read off the set rather than rendered again from the rules, so the
+// sentences in the prompt are the same objects the result records as having
+// been told. The system prompt is part of the cache address (§8.2), and taking
+// the lines from the set means one policy produces one prompt whatever order
+// the rules arrived in — so a resumed job (§8.3) that reads its policy back in
+// a different order is served the answers it already bought rather than made
+// to buy them again.
+func toldOf(set alchemy.RuleSet) []string {
+	out := make([]string, 0, len(set.Rules))
+	for _, rule := range set.Rules {
+		out = append(out, rule.Told)
 	}
 	return out
-}
-
-func told(rule review.Rule) string {
-	parts := []string{rule.Because}
-	// A rejection is the one standing answer whose sentence does not say what
-	// to do. "--flag is a switch, not an entity" is a reason; the instruction
-	// that follows from it — stop proposing these — is what the model needs,
-	// and leaving it to be inferred from a reason wastes the cheap half of
-	// §6's promise. The filter still runs either way; telling is the nudge and
-	// not believing it is the guarantee.
-	if rule.From.Verb == review.VerbReject {
-		parts = append(parts, "do not propose these at all")
-	}
-	if ed := rule.From.Edit; ed != nil {
-		if ed.Type != "" {
-			parts = append(parts, fmt.Sprintf("use the type %q for these instead", ed.Type))
-		}
-		if ed.Name != "" {
-			parts = append(parts, fmt.Sprintf("write the name %q for these instead", ed.Name))
-		}
-	}
-	if rule.From.Note != "" {
-		parts = append(parts, rule.From.Note)
-	}
-	if rule.From.By != "" {
-		// "declared by" rather than "decided by" for an authored rule, because
-		// the model is being told the truth about the sentence's standing: one
-		// came from somebody reading this corpus, the other from somebody
-		// stating policy about corpora like it.
-		parts = append(parts, verbOfOrigin(rule)+" by "+rule.From.By)
-	}
-	return strings.Join(parts, "; ")
-}
-
-func verbOfOrigin(rule review.Rule) string {
-	if rule.Authored() {
-		return "declared"
-	}
-	return "decided"
-}
-
-// namedOf is what alchemy.Provenance.Rules records.
-//
-// Shapes, not the rendered sentences: the shape is the rule's identity — the
-// thing Rule.Covers matches on — so a reader comparing two runs can say which
-// rule, not merely that there was one. It is what a person auditing a graph
-// would have to be given anyway to check the claim.
-//
-// Each shape is prefixed with the rule's origin, because the two are different
-// claims about the same suppression and this string is where a reader meets
-// them. "reviewed" says a person looked at this exact finding and generalised
-// from it; "authored" says a person declared it in advance, having seen no
-// instance at all. The second is the weaker warrant, and a provenance that
-// rendered them identically would let it be read as the stronger.
-//
-// Both are marked rather than only the new one. A scheme where silence meant
-// "reviewed" would make an authored rule that lost its marker indistinguishable
-// from a reviewer's — the failure this whole field exists to prevent — and it
-// is the same argument pkg/review makes for not treating a confidence of zero
-// as a model expressing doubt. An unprefixed entry in an old graph is then
-// visibly an older run rather than a claim about who decided.
-func namedOf(rules []review.Rule) string {
-	shapes := make([]string, 0, len(rules))
-	for _, rule := range rules {
-		if rule.Shape != "" {
-			shapes = append(shapes, string(originOf(rule))+":"+rule.Shape)
-		}
-	}
-	return strings.Join(shapes, "; ")
-}
-
-// originOf spells out the origin a rule carries, including the zero value.
-// review.Origin's zero is a reviewer's rule — every rule that could exist
-// before the field did was minted from a decision — and writing that out here
-// is what keeps the rendered string from having a meaning nobody stated.
-func originOf(rule review.Rule) review.Origin {
-	if rule.Authored() {
-		return review.OriginAuthored
-	}
-	return review.OriginReviewed
 }

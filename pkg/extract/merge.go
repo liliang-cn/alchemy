@@ -56,7 +56,7 @@ func provenanceFor(c alchemy.Chunk, opts Options, confidence float64) alchemy.Pr
 		// after chunk forty was extracted under a rule: the two chunks are
 		// carrying two different readings of the same conversation, and both
 		// are true.
-		Rules: opts.settled.Named,
+		RuleSet: opts.settled.Named,
 	}
 }
 

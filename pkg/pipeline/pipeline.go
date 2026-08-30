@@ -26,6 +26,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 	"sync/atomic"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
@@ -227,6 +228,16 @@ type run struct {
 	// is accumulated rather than recomputed because a record a rule removed
 	// leaves nothing behind to count (see alchemy.Counts.Dropped).
 	dropped atomic.Int64
+
+	// setsMu guards sets, which is written by every chunk's extraction and
+	// read once at the end.
+	setsMu sync.Mutex
+	// sets is every standing policy a chunk of this job was actually asked
+	// under, by name (see standing.go). It is a map because the same policy is
+	// asked for once per chunk and is one set however many chunks saw it: the
+	// whole point of naming a policy instead of copying it onto every record
+	// is that the job carries it once.
+	sets map[string]alchemy.RuleSet
 }
 
 // docSource is one document's chunks, waiting for the extract stage.
@@ -342,6 +353,11 @@ func (r *run) stopped(ctx context.Context) error {
 func (r *run) finish(res alchemy.Result) alchemy.Result {
 	res.Unread = r.unread
 	res.ModelCalls = aggregate(r.modelCalls)
+	// The policies the records were extracted under, so that the name every
+	// record carries resolves inside the result that carries it. A graph whose
+	// provenance points at something the reader has to be handed separately is
+	// a graph that explains itself only to whoever already knows (§5b).
+	res.RuleSets = r.ruleSets()
 	res.Counts = r.counts(res)
 	return res
 }

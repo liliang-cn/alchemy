@@ -781,9 +781,13 @@
           "type": "string",
           "description": "§5c: review adds to provenance, it does not overwrite it — a reviewed edge\nstill says a model proposed it."
         },
-        "rules": {
+        "rule_set": {
           "type": "string",
-          "description": "The standing `always` rules (§5c) already in force when this record was\nextracted, by shape. Distinct from reviewed_by: a rule is applied to\neverything it covers at the end of the job, so reviewed_by lands on the\nchunk that ran before the rule existed too. This says the model that\nproposed *this* record had already been told."
+          "description": "Names the standing `always` policy (§5c) already in force when this\nrecord was extracted: the name of the set, resolved through\nResult.rule_sets, not the set itself. Distinct from reviewed_by: a rule is\napplied to everything it covers at the end of the job, so reviewed_by\nlands on the chunk that ran before the rule existed too. This says the\nmodel that proposed *this* record had already been told.\n\nIt carries a name because the shapes are identical on every record and\nthis field is on every record: a fifty-rule policy spelled out is four\nkilobytes, §8's import is four hundred thousand records, and the correct\nanswer weighed more than the graph. The name is fixed-width, so a run\nunder fifty rules costs a record exactly what a run under one does.\n\nField 9 held those spelled-out shapes. It keeps the number and changes\nits name because the meaning changed: a client still reading `rules` gets\na decoding failure it can see rather than a digest it would go on\nsplitting on \"; \". Nothing persists a result (§4), so the only readers\nare live ones, and a loud break is the one to give them."
+        },
+        "ruled_by": {
+          "type": "string",
+          "description": "The one rule that actually acted on this record — retyped it, renamed it,\nor answered the question it raised — by the name rule_sets uses.\n\nrule_set says which rules were in the room; this says which one moved.\nEmpty means none did, which is not the same as none being in force."
         }
       },
       "description": "Provenance says where a fact came from and how it was produced. Every entity\nand every relation carries one; §5b makes this a product guarantee rather\nthan a debugging aid."
@@ -918,6 +922,14 @@
             "$ref": "#/definitions/v1ReviewRule"
           },
           "description": "The `always` rules this job's review produced. They are returned rather\nthan kept because §4 means the service holds no policy between jobs: the\ncaller keeps them and supplies them on the next job, which is how a\npipeline that started attended becomes one that runs itself without ever\nhaving guessed (§7.3)."
+        },
+        "rule_sets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RuleSet"
+          },
+          "description": "Every standing policy this job's records were extracted under, each named\nonce. Provenance.rule_set is a name into this list.\n\nA second field rather than a widening of `rules`, and the difference is\nthe whole point. `rules` is this job's output: what its review decided,\nfor the caller to keep and hand to the next job. This is its input:\nwhatever the model had already been told, including an authored rule that\nwas in force and matched nothing — which will never appear in `rules` and\nis exactly the rule a reader chasing a name from a record needs to\nresolve. Widening `rules` to cover both would leave a caller round-tripping\nit as their policy while re-declaring somebody else's rules as their own\njob's finding, and would leave every existing reader holding a field whose\nmeaning had quietly changed underneath them."
         }
       }
     },
@@ -1005,6 +1017,14 @@
             "type": "object",
             "$ref": "#/definitions/v1ReviewRule"
           }
+        },
+        "rule_sets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RuleSet"
+          },
+          "description": "The policies the records on every page were extracted under. They ride on\nthe first page with the rest of the summary, and for the same reason: a\nreader deciding whether to trust a paged graph is deciding on what the\nmodel was told, and making them pay for every entity first would be making\nthe answer arrive after the decision."
         }
       },
       "description": "ResultPage is one page of a large result (§8.4). The summary rides on the\nfirst page rather than the last: an operator who wants the numbers needed to\ndistrust the graph should get them before deciding whether to read it, not\nafter paying for every entity."
@@ -1163,6 +1183,23 @@
       "default": "RULE_ORIGIN_UNSPECIFIED",
       "description": "RuleOrigin is which warrant a rule has. They are different claims about the\nsame suppression: REVIEWED says a person looked at this exact finding and\ngeneralised from it, AUTHORED says a person declared it in advance having\nseen no instance. A reader who cannot tell them apart reads the weaker one\nas the stronger.\n\n - RULE_ORIGIN_UNSPECIFIED: UNSPECIFIED is read as REVIEWED, and that is a decision rather than a\nplaceholder: every rule that could exist before this field did was minted\nfrom a decision on an item, so the wire default has to mean what the\ncallers who wrote it meant. An authored rule has to say so, which is the\ndirection that fails safe — a lost marker under-claims."
     },
+    "v1RuleSet": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "A digest over exactly the members below, computed the way a cache address\nis (§8.2): length-prefixed framing, SHA-256, byte-exact across processes\nand architectures, so that two nodes running halves of one job (§8.3) name\none policy one way. A reader can recompute it from the members and check."
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1StandingRule"
+          }
+        }
+      },
+      "description": "RuleSet is the standing policy in force at one moment of a job, named so a\nrecord can point at it rather than repeat it.\n\nThere is more than one per job because the set changes while the job runs:\n§6 chose a stream so that \"a person working a queue wants their decisions to\ntake effect on work still running\", so a rule made in minute three is in\nforce for minute four and was not in force for minute two."
+    },
     "v1Source": {
       "type": "object",
       "properties": {
@@ -1215,6 +1252,20 @@
       ],
       "default": "SOURCE_KIND_UNSPECIFIED",
       "description": "SourceKind is which of the four readers handles a source (§2)."
+    },
+    "v1StandingRule": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The rule's identity: its origin and its shape, as\n\"authored:violation/unknown_entity_type/type=Flag/producer=llm-extract\".\nThe origin is in the name because \"a person decided this finding\" and \"a\nperson declared this in advance\" are different warrants for the same\nsuppression, and a name that rendered them identically would let the\nweaker be read as the stronger."
+        },
+        "told": {
+          "type": "string",
+          "description": "The sentence the model was shown: the stated reason, what to do about it,\nand who said so. A shape says which class was suppressed; only this says\nwhat the model was asked to stop doing and on whose word."
+        }
+      },
+      "description": "StandingRule is one rule of a set: what it is called, and what the model was\ntold about it."
     },
     "v1Unread": {
       "type": "object",

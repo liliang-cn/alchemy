@@ -386,12 +386,31 @@ message Provenance {
   // §5c: review adds to provenance, it does not overwrite it — a reviewed edge
   // still says a model proposed it.
   string reviewed_by = 8;
-  // The standing `always` rules (§5c) already in force when this record was
-  // extracted, by shape. Distinct from reviewed_by: a rule is applied to
-  // everything it covers at the end of the job, so reviewed_by lands on the
-  // chunk that ran before the rule existed too. This says the model that
-  // proposed *this* record had already been told.
-  string rules = 9;
+  // Names the standing `always` policy (§5c) already in force when this
+  // record was extracted: the name of the set, resolved through
+  // Result.rule_sets, not the set itself. Distinct from reviewed_by: a rule is
+  // applied to everything it covers at the end of the job, so reviewed_by
+  // lands on the chunk that ran before the rule existed too. This says the
+  // model that proposed *this* record had already been told.
+  //
+  // It carries a name because the shapes are identical on every record and
+  // this field is on every record: a fifty-rule policy spelled out is four
+  // kilobytes, §8's import is four hundred thousand records, and the correct
+  // answer weighed more than the graph. The name is fixed-width, so a run
+  // under fifty rules costs a record exactly what a run under one does.
+  //
+  // Field 9 held those spelled-out shapes. It keeps the number and changes
+  // its name because the meaning changed: a client still reading `rules` gets
+  // a decoding failure it can see rather than a digest it would go on
+  // splitting on "; ". Nothing persists a result (§4), so the only readers
+  // are live ones, and a loud break is the one to give them.
+  string rule_set = 9;
+  // The one rule that actually acted on this record — retyped it, renamed it,
+  // or answered the question it raised — by the name rule_sets uses.
+  //
+  // rule_set says which rules were in the room; this says which one moved.
+  // Empty means none did, which is not the same as none being in force.
+  string ruled_by = 10;
 }
 
 message Entity {
@@ -519,6 +538,52 @@ message Result {
   // pipeline that started attended becomes one that runs itself without ever
   // having guessed (§7.3).
   repeated ReviewRule rules = 11;
+  // Every standing policy this job's records were extracted under, each named
+  // once. Provenance.rule_set is a name into this list.
+  //
+  // A second field rather than a widening of `rules`, and the difference is
+  // the whole point. `rules` is this job's output: what its review decided,
+  // for the caller to keep and hand to the next job. This is its input:
+  // whatever the model had already been told, including an authored rule that
+  // was in force and matched nothing — which will never appear in `rules` and
+  // is exactly the rule a reader chasing a name from a record needs to
+  // resolve. Widening `rules` to cover both would leave a caller round-tripping
+  // it as their policy while re-declaring somebody else's rules as their own
+  // job's finding, and would leave every existing reader holding a field whose
+  // meaning had quietly changed underneath them.
+  repeated RuleSet rule_sets = 12;
+}
+
+// StandingRule is one rule of a set: what it is called, and what the model was
+// told about it.
+message StandingRule {
+  // The rule's identity: its origin and its shape, as
+  // "authored:violation/unknown_entity_type/type=Flag/producer=llm-extract".
+  // The origin is in the name because "a person decided this finding" and "a
+  // person declared this in advance" are different warrants for the same
+  // suppression, and a name that rendered them identically would let the
+  // weaker be read as the stronger.
+  string name = 1;
+  // The sentence the model was shown: the stated reason, what to do about it,
+  // and who said so. A shape says which class was suppressed; only this says
+  // what the model was asked to stop doing and on whose word.
+  string told = 2;
+}
+
+// RuleSet is the standing policy in force at one moment of a job, named so a
+// record can point at it rather than repeat it.
+//
+// There is more than one per job because the set changes while the job runs:
+// §6 chose a stream so that "a person working a queue wants their decisions to
+// take effect on work still running", so a rule made in minute three is in
+// force for minute four and was not in force for minute two.
+message RuleSet {
+  // A digest over exactly the members below, computed the way a cache address
+  // is (§8.2): length-prefixed framing, SHA-256, byte-exact across processes
+  // and architectures, so that two nodes running halves of one job (§8.3) name
+  // one policy one way. A reader can recompute it from the members and check.
+  string name = 1;
+  repeated StandingRule rules = 2;
 }
 
 // ResultPage is one page of a large result (§8.4). The summary rides on the
@@ -543,6 +608,12 @@ message ResultPage {
   repeated ModelCall model_calls = 11;
   repeated Unread unread = 12;
   repeated ReviewRule rules = 13;
+  // The policies the records on every page were extracted under. They ride on
+  // the first page with the rest of the summary, and for the same reason: a
+  // reader deciding whether to trust a paged graph is deciding on what the
+  // model was told, and making them pay for every entity first would be making
+  // the answer arrive after the decision.
+  repeated RuleSet rule_sets = 14;
 }
 
 // ---------------------------------------------------------------------------

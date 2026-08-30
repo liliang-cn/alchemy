@@ -75,9 +75,9 @@ func TestAStandingAnswerIsToldToTheModelAndNamedInProvenance(t *testing.T) {
 	if !strings.Contains(sys, "Widget is not an entity type here.") {
 		t.Errorf("the model was never told the standing answer:\n%s", sys)
 	}
-	if got.Entities[0].Provenance.Rules != "violation/unknown_entity_type/type=Widget" {
-		t.Errorf("provenance rules = %q, want the standing answer this chunk was extracted under",
-			got.Entities[0].Provenance.Rules)
+	if got.Entities[0].Provenance.RuleSet != "violation/unknown_entity_type/type=Widget" {
+		t.Errorf("provenance rule set = %q, want the standing answer this chunk was extracted under",
+			got.Entities[0].Provenance.RuleSet)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestACachedAnswerIsStillPutThroughTheStandingAnswers(t *testing.T) {
 			t.Fatalf("the cache served a proposal a standing answer settles: %+v", got.Entities)
 		}
 	}
-	if got.Entities[0].Provenance.Rules == "" {
+	if got.Entities[0].Provenance.RuleSet == "" {
 		t.Error("a cache hit lost the fact that this chunk was extracted under a standing answer")
 	}
 }

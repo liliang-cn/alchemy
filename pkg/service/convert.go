@@ -140,7 +140,8 @@ func provenanceToProto(p alchemy.Provenance) *alchemyv1.Provenance {
 		Chunking:   p.Chunking,
 		Confidence: p.Confidence,
 		ReviewedBy: p.ReviewedBy,
-		Rules:      p.Rules,
+		RuleSet:    p.RuleSet,
+		RuledBy:    p.RuledBy,
 	}
 }
 
@@ -157,7 +158,8 @@ func provenanceFromProto(p *alchemyv1.Provenance) alchemy.Provenance {
 		Chunking:   p.GetChunking(),
 		Confidence: p.GetConfidence(),
 		ReviewedBy: p.GetReviewedBy(),
-		Rules:      p.GetRules(),
+		RuleSet:    p.GetRuleSet(),
+		RuledBy:    p.GetRuledBy(),
 	}
 }
 
@@ -280,7 +282,22 @@ func resultToProto(r alchemy.Result) *alchemyv1.Result {
 		Counts:     countsToProto(r.Counts),
 		ModelCalls: each(r.ModelCalls, modelCallToProto),
 		Unread:     each(r.Unread, unreadToProto),
+		RuleSets:   each(r.RuleSets, ruleSetToProto),
 	}
+}
+
+// ruleSetToProto carries the policy a job's records were extracted under.
+//
+// It is the resolution table for Provenance.rule_set, and the reason both
+// halves are on the same message: a record naming a set the reader has to be
+// handed separately is a graph that explains itself only to whoever already
+// has the operator's rule file, which is not what §5b promises.
+func ruleSetToProto(s alchemy.RuleSet) *alchemyv1.RuleSet {
+	return &alchemyv1.RuleSet{Name: s.Name, Rules: each(s.Rules, standingRuleToProto)}
+}
+
+func standingRuleToProto(r alchemy.StandingRule) *alchemyv1.StandingRule {
+	return &alchemyv1.StandingRule{Name: r.Name, Told: r.Told}
 }
 
 func refToProto(r review.Ref) *alchemyv1.Ref {

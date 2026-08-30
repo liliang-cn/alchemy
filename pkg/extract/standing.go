@@ -30,10 +30,17 @@ type Settled struct {
 	// (§8.2), so a chunk asked under a rule can never be served the answer to
 	// the question asked without it.
 	Told []string
-	// Named is what alchemy.Provenance.Rules records for every record this
+	// Named is what alchemy.Provenance.RuleSet records for every record this
 	// chunk produced. It names the answers rather than restating them: the
 	// prompt is prose for a model and this is an identifier for a reader
 	// comparing two runs.
+	//
+	// One identifier for the whole set, not one per answer. The answers are
+	// the same on every record a run produces and this lands on every record;
+	// spelling them out cost a fifty-rule policy four kilobytes per record,
+	// which at the volume §8 is about weighed more than the graph. What the
+	// name resolves to is the caller's to carry — the pipeline puts it in the
+	// result, once.
 	Named string
 	// Filter settles the proposals the snapshot already answers, before they
 	// enter the graph. Nil settles nothing.

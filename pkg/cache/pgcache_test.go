@@ -39,7 +39,8 @@ func richEntry() cache.Entry {
 		Chunking:   "heading",
 		Confidence: 0.82,
 		ReviewedBy: "ll@example.com",
-		Rules:      "System USES System; always",
+		RuleSet:    "9c1f2ad0b7e34a15",
+		RuledBy:    "authored:violation/unknown_entity_type/type=Widget/producer=llm-extract",
 	}
 	// A second provenance that differs in every field, so a store that filled
 	// one row's provenance in from another's would be caught.

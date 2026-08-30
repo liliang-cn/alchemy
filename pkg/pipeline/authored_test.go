@@ -143,11 +143,15 @@ func TestProvenanceSaysWhetherARuleWasAuthoredOrReviewed(t *testing.T) {
 	if len(res.Entities) != 1 {
 		t.Fatalf("entities = %+v, want the one the rule retyped", res.Entities)
 	}
-	got := res.Entities[0].Provenance.Rules
-	if !strings.Contains(got, rule.Shape) {
-		t.Fatalf("provenance rules = %q, want it to name the rule the chunk was extracted under", got)
+	// The record names the policy; the result says what was in it. Both
+	// halves of the claim are still checked — which rule, and on whose
+	// warrant — they are now read off the set the record points at rather
+	// than off a copy of the set carried by every record.
+	told := underRules(t, res, res.Entities[0].Provenance)
+	if !namedBy(told, rule.Name()) {
+		t.Fatalf("the rule set the record names is %+v, want it to contain the rule the chunk was extracted under, %q", told, rule.Name())
 	}
-	if !strings.Contains(got, "authored") {
-		t.Errorf("provenance rules = %q, want it to say this rule was declared in advance rather than decided on a finding", got)
+	if !strings.HasPrefix(rule.Name(), string(review.OriginAuthored)+":") {
+		t.Errorf("the rule is named %q, want it to say this rule was declared in advance rather than decided on a finding", rule.Name())
 	}
 }

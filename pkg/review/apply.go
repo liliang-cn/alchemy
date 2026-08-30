@@ -57,12 +57,18 @@ type answered struct {
 	item     Item
 	decision Decision
 	// byRule says the answer came from a standing rule rather than from
-	// somebody looking at the item. It is only used to count what a rule
-	// removed (alchemy.Counts.Dropped) — a record a person threw away was
-	// thrown away by somebody who saw it, and a record a written policy
-	// removed before any queue was shown is the one this design can otherwise
-	// lose without a number anywhere.
+	// somebody looking at the item. It is used to count what a rule removed
+	// (alchemy.Counts.Dropped) — a record a person threw away was thrown away
+	// by somebody who saw it, and a record a written policy removed before any
+	// queue was shown is the one this design can otherwise lose without a
+	// number anywhere — and to name the rule on the records it left standing.
 	byRule bool
+	// rule is the standing rule that answered this item, when one did. It is
+	// what Provenance.RuledBy is written from: Covers' own comment says a
+	// queue three items shorter than the findings should be able to say which
+	// rule took each of the three away, and a record a rule retyped and left
+	// in the graph is owed the same answer.
+	rule *Rule
 }
 
 // resolve matches decisions to items and refuses the two ways a caller can be
@@ -123,7 +129,7 @@ func resolve(items []Item, byID map[string]Item, decisions []Decision) ([]answer
 		if err := check(it, d); err != nil {
 			return nil, fmt.Errorf("rule %q: %w", it.SuppressedBy.Shape, err)
 		}
-		out = append(out, answered{item: it, decision: d, byRule: true})
+		out = append(out, answered{item: it, decision: d, byRule: true, rule: it.SuppressedBy})
 	}
 	// Sorted by item ID so that everything downstream — error messages
 	// included — reads the same whichever order the decisions arrived in.
@@ -172,17 +178,25 @@ type plan struct {
 	// Counts.Dropped reports; a person's explicit decision on the same record
 	// takes it out of that number, because then somebody did read it.
 	asked map[Ref]bool
+	// ruled is the rule that acted on each record, by name. A record only
+	// reaches this map on a rule's word: an item somebody answered explicitly
+	// is answered by a person, and crediting the rule they overrode would put
+	// a policy's name on a judgement a person made.
+	ruled map[Ref]string
 	// dropped is how many records the walk removed on a rule's word alone.
 	dropped int
 }
 
 func newPlan(decided []answered) (*plan, error) {
-	p := &plan{remove: map[Ref]bool{}, edit: map[Ref]Edit{}, stamp: map[Ref]string{}, asked: map[Ref]bool{}}
+	p := &plan{remove: map[Ref]bool{}, edit: map[Ref]Edit{}, stamp: map[Ref]string{}, asked: map[Ref]bool{}, ruled: map[Ref]string{}}
 	for _, a := range decided {
 		for _, ref := range a.item.Targets {
 			p.stamp[ref] = a.decision.By
 			if !a.byRule {
 				p.asked[ref] = true
+			}
+			if a.rule != nil {
+				p.ruled[ref] = appendName(p.ruled[ref], a.rule.Name())
 			}
 			switch a.decision.Verb {
 			case VerbReject:
@@ -234,6 +248,9 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 		if by, ok := p.stamp[ref]; ok {
 			e.Provenance.ReviewedBy = reviewedBy(e.Provenance.ReviewedBy, by)
 		}
+		if name, ok := p.ruled[ref]; ok {
+			e.Provenance.RuledBy = appendName(e.Provenance.RuledBy, name)
+		}
 		out.Entities = append(out.Entities, e)
 	}
 
@@ -258,6 +275,9 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 		}
 		if by, ok := p.stamp[ref]; ok {
 			r.Provenance.ReviewedBy = reviewedBy(r.Provenance.ReviewedBy, by)
+		}
+		if name, ok := p.ruled[ref]; ok {
+			r.Provenance.RuledBy = appendName(r.Provenance.RuledBy, name)
 		}
 		out.Relations = append(out.Relations, r)
 	}
@@ -311,14 +331,31 @@ func editRelation(r alchemy.Relation, ed Edit) alchemy.Relation {
 // provenance, it does not overwrite it — and a record that two rounds of
 // review touched was looked at by two people, which is worth more than either
 // name alone.
-func reviewedBy(existing, by string) string {
+func reviewedBy(existing, by string) string { return appendName(existing, by) }
+
+// appendName adds a name to a comma-separated list without adding it twice.
+//
+// Adding rather than replacing is §5c's rule about provenance, and the
+// repetition matters for both fields it serves. A record two rounds of review
+// touched was looked at by two people. A record two rules acted on — a chunk
+// settled as it was extracted (§6) and settled again over the whole result at
+// the end — was acted on by whatever answered it each time, and a field that
+// kept only the last would say the first never happened.
+//
+// Adding it twice is what is refused: the same rule answering the same record
+// at both ends of a job is one rule, and a list that grew a duplicate every
+// pass would be one nobody can read.
+func appendName(existing, add string) string {
+	if add == "" {
+		return existing
+	}
 	if existing == "" {
-		return by
+		return add
 	}
 	for _, name := range strings.Split(existing, ", ") {
-		if name == by {
+		if name == add {
 			return existing
 		}
 	}
-	return existing + ", " + by
+	return existing + ", " + add
 }
