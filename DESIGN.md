@@ -158,6 +158,45 @@ before there are two real consumers is a guess about a shape, and a wrong
 interface is harder to change than no interface. When a second consumer exists,
 its needs will define the interface. Until then the JSON is the contract.
 
+### 4.1 The deferral ended, and what it bought
+
+Four consumers now exist — Neo4j, pgvector, Qdrant and CortexDB — each written
+against the JSON alone, none able to see the others. The wait was worth what it
+was supposed to be worth: they disagreed about things an interface written
+first would have guessed wrong, and they agreed about things it would have
+missed.
+
+**Where they disagreed.** All four needed to know when two edges are the same
+edge, and all four answered differently: a hash of the whole assertion, the
+record's position in the slice, a composite of the endpoints and the key, and
+the tuple the store itself already used. The same result therefore had
+different edge cardinality in four stores. That is not four mistakes; it is one
+missing field, and no amount of thinking about it in advance would have
+produced the evidence that it was missing. `Relation` had no identity because
+`Entity.ID` had always been there and nobody noticed the asymmetry.
+
+**Where they agreed, without coordinating.** Two of them wrote near-identical
+functions to check that a result's vectors share one width and name real
+chunks. Two independently invented domain-separated content fingerprints to
+answer "have I loaded this already", with the same reasoning about `Entity.ID`
+meaning nothing across runs. Two independently invented the same convention for
+attribute values a store cannot hold natively. All four had to reach into
+another package to ask whether a result was held, which means a fifth would
+eventually forget and ship a self-contradicting graph past §7.3.
+
+That is the shape of the interface, and it is a fact rather than a preference:
+**what every sink had to write for itself belongs above the interface, and what
+they each answered differently belongs to the store.** Pre-flight refusal,
+result identity, and the streaming envelope are the first; batching mechanics,
+index policy, dimension binding and the query surface are the second.
+
+One thing only one of them needed is in anyway. A vector store cannot hold a
+traversal, so loading a graph into Qdrant loads its records and not its shape —
+and a connector that returned success without saying so would be lying by
+omission. Every load reports what the store could not keep. It is in the
+interface because a guarantee that only holds where it is convenient is not a
+guarantee, and because the next store nobody has thought of will need it too.
+
 ---
 
 ## 5. Scope of the first release
