@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/liliang-cn/alchemy/pkg/review"
 )
 
 // settings is everything an operator can change about this process. It is a
@@ -25,6 +27,16 @@ type settings struct {
 	spool     string
 	store     string
 	tokenFile string
+	// rulesFile is the standing policy this process runs every job under
+	// (§5c's `always`, written by a person rather than produced by a queue).
+	// Empty is no policy, which is the default: a service that suppressed
+	// findings nobody had configured it to suppress would be the unexplainable
+	// policy §5c refuses, arriving as a default.
+	rulesFile string
+	// rules is how many rules that file held, for the startup line. The rules
+	// themselves are not kept here: settings is what an operator can change,
+	// and readRules is what turns one of these into policy.
+	rules int
 
 	capacity   int
 	sweepEvery time.Duration
@@ -80,6 +92,39 @@ func readToken(s settings, getenv func(string) string) (string, error) {
 	return "", errNoToken
 }
 
+// envRules is where the rule set is read from when no file is named on the
+// command line.
+const envRules = "ALCHEMY_RULES"
+
+// readRules loads the standing policy, or refuses to start.
+//
+// Refused at startup and not at the first job, which is the whole reason this
+// is here rather than in the runner: a server that comes up, reports itself
+// healthy, and then refuses the night's import hours later has failed at the
+// one moment nobody is watching. An operator who typed -rules is told about
+// their typo while they are still at the keyboard.
+//
+// A named file that cannot be read is an error rather than a fall back to no
+// policy, for the same reason readToken does not fall back to the environment:
+// an operator who named a file meant that file, and starting with no policy
+// because it could not be read is the configuration mistake that is only
+// discovered by the graph being wrong.
+func readRules(s settings) ([]review.Rule, error) {
+	if s.rulesFile == "" {
+		return nil, nil
+	}
+	f, err := os.Open(s.rulesFile)
+	if err != nil {
+		return nil, fmt.Errorf("alchemy: reading -rules: %w", err)
+	}
+	defer f.Close()
+	rules, err := review.LoadRules(f)
+	if err != nil {
+		return nil, fmt.Errorf("alchemy: -rules %s: %w", s.rulesFile, err)
+	}
+	return rules, nil
+}
+
 // storeMemory is the only job store that exists. §8.3 designs a Postgres one
 // for a cluster and defers it; naming it here would be a promise the binary
 // cannot keep.
@@ -125,6 +170,7 @@ func parseFlags(args []string, getenv func(string) string, out io.Writer) (setti
 	fs.StringVar(&s.store, "store", envString(getenv, "ALCHEMY_STORE", storeMemory), "job store: only \"memory\" exists")
 	// Note what is missing: there is no -token. See readToken.
 	fs.StringVar(&s.tokenFile, "token-file", getenv(envTokenFile), "file containing the bearer token")
+	fs.StringVar(&s.rulesFile, "rules", envString(getenv, envRules, ""), "file holding the standing `always` rules every job runs under (empty: no policy)")
 
 	capacity := fs.Int("capacity", 0, "how many live jobs to hold before refusing more")
 	sweep := fs.Duration("sweep", 0, "how often expired work is swept")

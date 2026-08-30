@@ -21,6 +21,7 @@ import (
 	"github.com/liliang-cn/alchemy/pkg/budget"
 	"github.com/liliang-cn/alchemy/pkg/cache"
 	"github.com/liliang-cn/alchemy/pkg/pipeline"
+	"github.com/liliang-cn/alchemy/pkg/review"
 	"github.com/liliang-cn/alchemy/pkg/service"
 )
 
@@ -57,6 +58,22 @@ type Config struct {
 	// off, which is deliberate — a cache is an operator's decision about money,
 	// and pkg/cache guarantees it cannot change what a job returns.
 	Cache cache.Cache
+	// Rules is the standing policy this deployment carries: §5c's `always`
+	// rules written down by a person rather than produced by a queue, in force
+	// on every job this runner executes.
+	//
+	// Per process rather than per job, and that is the point of it. §4 says the
+	// service stores no policy between jobs, and it still does not — this is
+	// configuration the operator started the process with, the same as the
+	// budget and the cache, and it lives only as long as the process. What it
+	// buys is the case a per-job rule list cannot reach: a nightly import that
+	// nobody attends, whose policy has to live somewhere other than in the
+	// request a scheduler writes.
+	//
+	// Unlike the cache, this does change what a job returns, so every rule in
+	// it is refused at New unless it can explain itself, and every record it
+	// removes is counted in alchemy.Counts.Dropped.
+	Rules []review.Rule
 }
 
 // Runner implements service.Runner on top of pipeline.Run.
@@ -68,6 +85,15 @@ type Runner struct {
 func New(cfg Config) (*Runner, error) {
 	if cfg.Factory == nil {
 		return nil, ErrNoFactory
+	}
+	// Checked here for the same reason the factory is: a policy that cannot
+	// explain itself must stop the process rather than the first job that
+	// meets it, by which time the person who could fix it has gone home and
+	// the night's import has not run.
+	for i, rule := range cfg.Rules {
+		if err := rule.Validate(); err != nil {
+			return nil, fmt.Errorf("runner: configured rule %d: %w", i+1, err)
+		}
 	}
 	return &Runner{cfg: cfg}, nil
 }
@@ -94,7 +120,7 @@ var _ service.Runner = (*Runner)(nil)
 // stage it was about. See buildRequest's inboxOf, and run_test.go for the
 // contract that pins it.
 func (r *Runner) Run(ctx context.Context, jobID string, spec service.JobSpec, events chan<- service.Event, in service.Inbox) (alchemy.Result, error) {
-	req, err := buildRequest(spec, in)
+	req, err := buildRequest(spec, in, r.cfg.Rules)
 	if err != nil {
 		return alchemy.Result{}, err
 	}

@@ -43,6 +43,13 @@ func (r *run) counts(res alchemy.Result) alchemy.Counts {
 		// the corpus — §5b reads a high number as "the extraction is failing
 		// quietly" — and it is honest at that job.
 		ChunksEmpty: r.chunksEmpty,
+		// Dropped is the second number that cannot be recomputed from the
+		// result, and for the same reason: a record a standing rule removed is
+		// not in the slices this function counts, and by the time anything
+		// gets here there is nothing left to subtract. Every stage that lets a
+		// rule act — the settle inside extraction, and the review at the end —
+		// adds to it as it goes.
+		Dropped: int(r.dropped.Load()),
 	}
 	for _, rel := range res.Relations {
 		if rel.Provenance.Producer.Deterministic() {

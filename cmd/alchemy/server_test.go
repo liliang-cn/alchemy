@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuildRefusesWithoutAToken(t *testing.T) {
-	if _, err := build(settings{spool: t.TempDir()}, ""); !errors.Is(err, service.ErrNoToken) {
+	if _, err := build(settings{spool: t.TempDir()}, "", nil); !errors.Is(err, service.ErrNoToken) {
 		t.Fatalf("build with no token: %v, want service.ErrNoToken", err)
 	}
 }
@@ -24,7 +24,7 @@ func TestBuildRefusesWithoutAToken(t *testing.T) {
 // GracefulStop — stop accepting, let what is running see a cancelled ctx — and
 // serve returning rather than the process being killed from under it.
 func TestServeStopsGracefullyOnACancelledContext(t *testing.T) {
-	sv, err := build(settings{spool: t.TempDir(), capacity: 4, sweepEvery: time.Minute}, "tok")
+	sv, err := build(settings{spool: t.TempDir(), capacity: 4, sweepEvery: time.Minute}, "tok", nil)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

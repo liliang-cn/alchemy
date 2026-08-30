@@ -56,6 +56,13 @@ func indexItems(items []Item) (map[string]Item, error) {
 type answered struct {
 	item     Item
 	decision Decision
+	// byRule says the answer came from a standing rule rather than from
+	// somebody looking at the item. It is only used to count what a rule
+	// removed (alchemy.Counts.Dropped) — a record a person threw away was
+	// thrown away by somebody who saw it, and a record a written policy
+	// removed before any queue was shown is the one this design can otherwise
+	// lose without a number anywhere.
+	byRule bool
 }
 
 // resolve matches decisions to items and refuses the two ways a caller can be
@@ -116,7 +123,7 @@ func resolve(items []Item, byID map[string]Item, decisions []Decision) ([]answer
 		if err := check(it, d); err != nil {
 			return nil, fmt.Errorf("rule %q: %w", it.SuppressedBy.Shape, err)
 		}
-		out = append(out, answered{item: it, decision: d})
+		out = append(out, answered{item: it, decision: d, byRule: true})
 	}
 	// Sorted by item ID so that everything downstream — error messages
 	// included — reads the same whichever order the decisions arrived in.
@@ -160,13 +167,23 @@ type plan struct {
 	remove map[Ref]bool
 	edit   map[Ref]Edit
 	stamp  map[Ref]string
+	// asked is the records somebody was actually asked about. A record in
+	// remove but not in asked was removed by a rule alone, which is what
+	// Counts.Dropped reports; a person's explicit decision on the same record
+	// takes it out of that number, because then somebody did read it.
+	asked map[Ref]bool
+	// dropped is how many records the walk removed on a rule's word alone.
+	dropped int
 }
 
 func newPlan(decided []answered) (*plan, error) {
-	p := &plan{remove: map[Ref]bool{}, edit: map[Ref]Edit{}, stamp: map[Ref]string{}}
+	p := &plan{remove: map[Ref]bool{}, edit: map[Ref]Edit{}, stamp: map[Ref]string{}, asked: map[Ref]bool{}}
 	for _, a := range decided {
 		for _, ref := range a.item.Targets {
 			p.stamp[ref] = a.decision.By
+			if !a.byRule {
+				p.asked[ref] = true
+			}
 			switch a.decision.Verb {
 			case VerbReject:
 				p.remove[ref] = true
@@ -208,6 +225,7 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 		ref := entityRef(e)
 		if p.remove[ref] {
 			gone[e.ID] = true
+			p.count(ref)
 			continue
 		}
 		if ed, ok := p.edit[ref]; ok {
@@ -228,6 +246,11 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 		// and §5b's promise is that a violation names a source that said
 		// something, not one this stage invented.
 		if p.remove[ref] || gone[r.From] || gone[r.To] {
+			// An edge removed only because a rule took an endpoint away is
+			// counted too: it left the graph on the same rule's word, and a
+			// count that reported the entity and not the edge it stranded
+			// would understate what the policy did.
+			p.count(ref)
 			continue
 		}
 		if ed, ok := p.edit[ref]; ok {
@@ -242,8 +265,20 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 	if err := stampFindings(&out, decided); err != nil {
 		return alchemy.Result{}, err
 	}
-	out.Counts = recount(out, res.Counts)
+	out.Counts = recount(out, res.Counts, p.dropped)
 	return out, nil
+}
+
+// count records a removal that no person was asked about.
+//
+// It is counted here, during the walk, rather than by subtracting lengths
+// afterwards: the two are the same number only until an edge is dropped for
+// two reasons at once, and a count that has to reason about overlaps is the
+// kind that drifts away from its subject and then lies forever.
+func (p *plan) count(ref Ref) {
+	if !p.asked[ref] {
+		p.dropped++
+	}
 }
 
 // editEntity applies only what the reviewer set. §5c lists "retype an entity

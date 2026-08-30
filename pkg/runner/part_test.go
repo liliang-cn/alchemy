@@ -40,7 +40,7 @@ func TestThePartAJobIsExtractedUnder(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req, err := buildRequest(service.JobSpec{Part: tc.spec}, nil)
+			req, err := buildRequest(service.JobSpec{Part: tc.spec}, nil, nil)
 			if err != nil {
 				t.Fatalf("buildRequest: %v", err)
 			}

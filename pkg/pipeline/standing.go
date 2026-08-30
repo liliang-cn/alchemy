@@ -136,6 +136,15 @@ func (r *run) settle(rules []review.Rule, ents []alchemy.Entity, rels []alchemy.
 		return ents, rels
 	}
 	out, _, err := review.Apply(res, answered, nil)
+	if err == nil {
+		// §5: the numbers needed to distrust the graph. A rule that removes a
+		// chunk's proposal removes it here, before the record ever reaches the
+		// job, so this is the only place that can count it — by the end of the
+		// run there is nothing left to subtract. Counted with an atomic
+		// because chunks are extracted concurrently and this is the one piece
+		// of run state a chunk writes.
+		r.dropped.Add(int64(out.Counts.Dropped))
+	}
 	if err != nil {
 		// The proposal goes through untouched. A rule that cannot be applied
 		// to this chunk is a rule that will fail the same way over the whole
@@ -164,6 +173,15 @@ func toldOf(rules []review.Rule) []string {
 
 func told(rule review.Rule) string {
 	parts := []string{rule.Because}
+	// A rejection is the one standing answer whose sentence does not say what
+	// to do. "--flag is a switch, not an entity" is a reason; the instruction
+	// that follows from it — stop proposing these — is what the model needs,
+	// and leaving it to be inferred from a reason wastes the cheap half of
+	// §6's promise. The filter still runs either way; telling is the nudge and
+	// not believing it is the guarantee.
+	if rule.From.Verb == review.VerbReject {
+		parts = append(parts, "do not propose these at all")
+	}
 	if ed := rule.From.Edit; ed != nil {
 		if ed.Type != "" {
 			parts = append(parts, fmt.Sprintf("use the type %q for these instead", ed.Type))
@@ -176,9 +194,20 @@ func told(rule review.Rule) string {
 		parts = append(parts, rule.From.Note)
 	}
 	if rule.From.By != "" {
-		parts = append(parts, "decided by "+rule.From.By)
+		// "declared by" rather than "decided by" for an authored rule, because
+		// the model is being told the truth about the sentence's standing: one
+		// came from somebody reading this corpus, the other from somebody
+		// stating policy about corpora like it.
+		parts = append(parts, verbOfOrigin(rule)+" by "+rule.From.By)
 	}
 	return strings.Join(parts, "; ")
+}
+
+func verbOfOrigin(rule review.Rule) string {
+	if rule.Authored() {
+		return "declared"
+	}
+	return "decided"
 }
 
 // namedOf is what alchemy.Provenance.Rules records.
@@ -187,12 +216,37 @@ func told(rule review.Rule) string {
 // thing Rule.Covers matches on — so a reader comparing two runs can say which
 // rule, not merely that there was one. It is what a person auditing a graph
 // would have to be given anyway to check the claim.
+//
+// Each shape is prefixed with the rule's origin, because the two are different
+// claims about the same suppression and this string is where a reader meets
+// them. "reviewed" says a person looked at this exact finding and generalised
+// from it; "authored" says a person declared it in advance, having seen no
+// instance at all. The second is the weaker warrant, and a provenance that
+// rendered them identically would let it be read as the stronger.
+//
+// Both are marked rather than only the new one. A scheme where silence meant
+// "reviewed" would make an authored rule that lost its marker indistinguishable
+// from a reviewer's — the failure this whole field exists to prevent — and it
+// is the same argument pkg/review makes for not treating a confidence of zero
+// as a model expressing doubt. An unprefixed entry in an old graph is then
+// visibly an older run rather than a claim about who decided.
 func namedOf(rules []review.Rule) string {
 	shapes := make([]string, 0, len(rules))
 	for _, rule := range rules {
 		if rule.Shape != "" {
-			shapes = append(shapes, rule.Shape)
+			shapes = append(shapes, string(originOf(rule))+":"+rule.Shape)
 		}
 	}
 	return strings.Join(shapes, "; ")
+}
+
+// originOf spells out the origin a rule carries, including the zero value.
+// review.Origin's zero is a reviewer's rule — every rule that could exist
+// before the field did was minted from a decision — and writing that out here
+// is what keeps the rendered string from having a meaning nobody stated.
+func originOf(rule review.Rule) review.Origin {
+	if rule.Authored() {
+		return review.OriginAuthored
+	}
+	return review.OriginReviewed
 }

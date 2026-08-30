@@ -91,6 +91,19 @@ var refKinds = map[review.RefKind]alchemyv1.RefKind{
 
 var wireRefKinds = invert(refKinds)
 
+// origins map review's two warrants onto the wire. UNSPECIFIED is deliberately
+// absent from wireOrigins so that it decodes to review's zero value, which is
+// a reviewer's rule: every rule that could exist before this field did was
+// minted from a decision, and the wire default has to mean what the callers
+// who wrote it meant. It is also the direction that fails safe — a lost marker
+// under-claims a rule's warrant rather than over-claiming it.
+var origins = map[review.Origin]alchemyv1.RuleOrigin{
+	review.OriginReviewed: alchemyv1.RuleOrigin_RULE_ORIGIN_REVIEWED,
+	review.OriginAuthored: alchemyv1.RuleOrigin_RULE_ORIGIN_AUTHORED,
+}
+
+var wireOrigins = invert(origins)
+
 // invert builds the other direction of a table, so the two halves of a mapping
 // cannot drift apart by somebody editing one of them.
 func invert[K, V comparable](in map[K]V) map[V]K {
@@ -232,7 +245,7 @@ func countsToProto(c alchemy.Counts) *alchemyv1.Counts {
 		Deterministic: int32(c.Deterministic), Inferred: int32(c.Inferred),
 		Violations: int32(c.Violations), Conflicts: int32(c.Conflicts),
 		Guesses: int32(c.Guesses), ChunksEmpty: int32(c.ChunksEmpty),
-		ChunksUnread: int32(c.ChunksUnread),
+		ChunksUnread: int32(c.ChunksUnread), Dropped: int32(c.Dropped),
 	}
 }
 
@@ -327,14 +340,30 @@ func ruleToProto(r *review.Rule) *alchemyv1.ReviewRule {
 	return &alchemyv1.ReviewRule{
 		Shape: r.Shape, Kind: reviewKinds[r.Kind],
 		From: decisionToProto("", r.From), Because: r.Because,
+		// Sent explicitly even for a reviewer's rule, rather than left at the
+		// default. A reader of the wire should not have to know which of two
+		// meanings the zero value carries in order to tell the two claims
+		// apart, and the whole point of the field is that they are different
+		// claims.
+		Origin: originToProto(r.Origin),
 	}
 }
 
 func ruleFromProto(r *alchemyv1.ReviewRule) review.Rule {
 	return review.Rule{
 		Shape: r.GetShape(), Kind: wireReviewKinds[r.GetKind()],
-		From: decisionFromProto(r.GetFrom()), Because: r.GetBecause(),
+		Origin: wireOrigins[r.GetOrigin()],
+		From:   decisionFromProto(r.GetFrom()), Because: r.GetBecause(),
 	}
+}
+
+// originToProto names a reviewer's rule on the wire even when the Go value
+// left it at the zero. See origins.
+func originToProto(o review.Origin) alchemyv1.RuleOrigin {
+	if o == review.OriginAuthored {
+		return alchemyv1.RuleOrigin_RULE_ORIGIN_AUTHORED
+	}
+	return alchemyv1.RuleOrigin_RULE_ORIGIN_REVIEWED
 }
 
 func itemToProto(jobID string, it review.Item) *alchemyv1.ReviewItem {

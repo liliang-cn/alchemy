@@ -33,7 +33,14 @@ func run(args []string, getenv func(string) string, stdout, stderr *os.File) err
 	if err != nil {
 		return err
 	}
-	sv, err := build(s, token)
+	// Before the port is bound and before anything is admitted: a policy that
+	// cannot explain itself stops the process, not the first job of the night.
+	rules, err := readRules(s)
+	if err != nil {
+		return err
+	}
+	s.rules = len(rules)
+	sv, err := build(s, token, rules)
 	if err != nil {
 		return err
 	}

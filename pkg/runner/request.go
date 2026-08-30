@@ -19,7 +19,7 @@ import (
 // refuses nothing that the pipeline already refuses: an absent ontology, a job
 // with no sources and an unknown source kind are all rules pipeline.validate
 // owns, and a second copy here would be a second place for them to drift.
-func buildRequest(spec service.JobSpec, in service.Inbox) (pipeline.Request, error) {
+func buildRequest(spec service.JobSpec, in service.Inbox, configured []review.Rule) (pipeline.Request, error) {
 	onto, err := ontologyOf(spec.Ontology)
 	if err != nil {
 		return pipeline.Request{}, err
@@ -34,7 +34,7 @@ func buildRequest(spec service.JobSpec, in service.Inbox) (pipeline.Request, err
 		MinConfidence: spec.Review.MinConfidence,
 		// Not a snapshot. The pipeline asks this while it runs, which is how a
 		// decision reaches an extraction that has not started (§6). See inbox.
-		Inbox: inboxOf(spec.Review.Rules, in),
+		Inbox: inboxOf(spec.Review.Rules, configured, in),
 	}, nil
 }
 
@@ -75,13 +75,21 @@ func chunkingOf(c service.Chunking) chunk.Options {
 	}
 }
 
-// inboxOf joins the two places a standing answer can come from.
+// inboxOf joins the places a standing answer can come from.
 //
 // The job's own rules were supplied when it was created: §4 says the service
 // holds no policy between jobs, so a caller that learned something last week
 // hands it back with this week's request, and those rules are in force before
-// the first chunk is read. The service's inbox is this job's conversation as
-// it happens. Both are `always` rules and both are answered the same way; what
+// the first chunk is read. Behind them come the rules this process was started
+// with — the operator's own policy, which a job that says nothing about rules
+// still runs under, and which is the only place an unattended nightly import
+// can carry policy at all. The service's inbox is this job's conversation as
+// it happens.
+//
+// The job's own come first because review takes the first rule that covers an
+// item, and that is what decides which rule the provenance credits. A policy
+// stated about this job is closer to the work than one stated about the
+// deployment, and is the one a reader chasing a suppression should be sent to. Both are `always` rules and both are answered the same way; what
 // differs is only when they were made, and by the time a chunk is measured
 // against one that no longer matters.
 //
@@ -89,11 +97,12 @@ func chunkingOf(c service.Chunking) chunk.Options {
 // the first run of a job that has never been held, or an unattended import —
 // and is not a failure. It is still an inbox, because the job's own rules
 // still apply.
-func inboxOf(given []review.Rule, in service.Inbox) pipeline.Inbox {
+func inboxOf(given, configured []review.Rule, in service.Inbox) pipeline.Inbox {
+	stated := append(append(make([]review.Rule, 0, len(given)+len(configured)), given...), configured...)
 	if in == nil {
-		return pipeline.Answered(nil, given)
+		return pipeline.Answered(nil, stated)
 	}
-	return inbox{given: given, live: in}
+	return inbox{given: stated, live: in}
 }
 
 // inbox is the service's live conversation with the job's own rules in front

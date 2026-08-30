@@ -260,6 +260,24 @@ type Counts struct {
 	// ChunksUnread is source text that could not be read at all — a scanned PDF
 	// page with no OCR model supplied. §5: never silently returned as empty.
 	ChunksUnread int `json:"chunks_unread"`
+	// Dropped is how many entities and relations a standing rule (§5c's
+	// `always`) removed without anybody being asked about them.
+	//
+	// It exists because a rule may now say "reject", and a rejection that
+	// leaves no trace is the one way this design can lose a record silently.
+	// Everything else a graph is missing is reported: an unread page is in
+	// Unread, an empty chunk is in ChunksEmpty, a record a person threw away
+	// was thrown away by somebody who saw it. A record a written policy
+	// removed before any queue was shown to anyone is invisible in the result
+	// — the graph simply comes back one record shorter — and §5's obligation
+	// to return "the numbers needed to distrust" the graph would be quietly
+	// false without this one.
+	//
+	// It deliberately does not count what a person rejected while working a
+	// queue. That number would conflate a judgement somebody made on a record
+	// they read with a policy applied to a record nobody read, and it is the
+	// second that a reader needs to be able to see.
+	Dropped int `json:"dropped,omitempty"`
 }
 
 // ModelCall records what a job spent, by model and stage. §7.2: cost is not

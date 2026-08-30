@@ -13,6 +13,7 @@ import (
 	"github.com/liliang-cn/alchemy/pkg/cache"
 	"github.com/liliang-cn/alchemy/pkg/gateway"
 	"github.com/liliang-cn/alchemy/pkg/job"
+	"github.com/liliang-cn/alchemy/pkg/review"
 	"github.com/liliang-cn/alchemy/pkg/runner"
 	"github.com/liliang-cn/alchemy/pkg/service"
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
@@ -43,12 +44,16 @@ type server struct {
 // build assembles the program. It is separate from main and from listening so
 // that a test can start the whole thing on a port the operating system picks
 // and stop it again.
-func build(s settings, token string) (*server, error) {
+func build(s settings, token string, rules []review.Rule) (*server, error) {
 	b, err := modelBudget(s)
 	if err != nil {
 		return nil, err
 	}
-	run, err := runner.New(runner.Config{Factory: modelFactory{}, Budget: b, Cache: extractCache(s)})
+	// The rule set is the runner's rather than the service's because it is
+	// policy about extraction, and it reaches a job the same way the budget
+	// and the cache do: as configuration the process was started with, in
+	// front of whatever the job itself supplied.
+	run, err := runner.New(runner.Config{Factory: modelFactory{}, Budget: b, Cache: extractCache(s), Rules: rules})
 	if err != nil {
 		return nil, err
 	}

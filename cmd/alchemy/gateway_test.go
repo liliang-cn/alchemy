@@ -66,7 +66,7 @@ func TestTheGatewayAddressComesFromTheFlagOrTheEnvironment(t *testing.T) {
 // program that starts, prints a green line, and answers a stranger.
 func TestTheGatewayServesAndCarriesTheCredential(t *testing.T) {
 	s := testSettings(t)
-	sv, err := build(s, "the-secret")
+	sv, err := build(s, "the-secret", nil)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

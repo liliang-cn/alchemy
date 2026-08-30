@@ -496,6 +496,11 @@
           "type": "integer",
           "format": "int32",
           "description": "Source text that could not be read at all — a scanned page with no OCR\nmodel supplied. §5: never silently returned as empty."
+        },
+        "dropped": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Records a standing rule (§5c's `always`) removed without anybody being\nasked about them. Everything else a graph is missing is reported\nsomewhere; a record a written policy dropped before any queue was shown\nwould otherwise leave the result one record shorter and say nothing."
         }
       },
       "description": "Counts is what makes the difference between a graph you can act on and one\nyou merely have (§5)."
@@ -1124,13 +1129,17 @@
           "$ref": "#/definitions/v1ReviewKind"
         },
         "from": {
-          "$ref": "#/definitions/v1ReviewDecision"
+          "$ref": "#/definitions/v1ReviewDecision",
+          "description": "For an authored rule this is the declaration itself — the same verb,\nperson, note and moment, asserted in advance rather than in answer to an\nitem, and carrying no item_id because no item was answered. An authored\nrule is refused unless it names a person, states a reason in `because` and\nsays when it was declared; and it may not be about a conflict, because\n§7.3's escape hatch is a rule made by somebody who had seen one."
         },
         "because": {
           "type": "string"
+        },
+        "origin": {
+          "$ref": "#/definitions/v1RuleOrigin"
         }
       },
-      "description": "ReviewRule is what `always` produced, and it carries the decision that\nproduced it: a rule without an origin is an unexplainable policy (§5c)."
+      "description": "ReviewRule is a class of question that has already been answered: either by\nan `always` on an item, or by a person who wrote the rule down before any\njob ran. Either way it carries what produced it: a rule without an origin is\nan unexplainable policy (§5c)."
     },
     "v1ReviewVerb": {
       "type": "string",
@@ -1143,6 +1152,16 @@
       ],
       "default": "REVIEW_VERB_UNSPECIFIED",
       "description": "ReviewVerb is what a reviewer did. §5c lists exactly four and the set is\nclosed: a fifth would be a way of disposing of a proposal that the\nprovenance of the result has no way to describe.\n\n - REVIEW_VERB_ALWAYS: ALWAYS accepts this one and stops the queue asking about ones like it."
+    },
+    "v1RuleOrigin": {
+      "type": "string",
+      "enum": [
+        "RULE_ORIGIN_UNSPECIFIED",
+        "RULE_ORIGIN_REVIEWED",
+        "RULE_ORIGIN_AUTHORED"
+      ],
+      "default": "RULE_ORIGIN_UNSPECIFIED",
+      "description": "RuleOrigin is which warrant a rule has. They are different claims about the\nsame suppression: REVIEWED says a person looked at this exact finding and\ngeneralised from it, AUTHORED says a person declared it in advance having\nseen no instance. A reader who cannot tell them apart reads the weaker one\nas the stronger.\n\n - RULE_ORIGIN_UNSPECIFIED: UNSPECIFIED is read as REVIEWED, and that is a decision rather than a\nplaceholder: every rule that could exist before this field did was minted\nfrom a decision on an item, so the wire default has to mean what the\ncallers who wrote it meant. An authored rule has to say so, which is the\ndirection that fails safe — a lost marker under-claims."
     },
     "v1Source": {
       "type": "object",

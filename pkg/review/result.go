@@ -108,7 +108,7 @@ func replace[T any](in []T, i int, v T) []T {
 // stage, and review neither reads chunks nor removes them. Rejecting an edge
 // does not turn its chunk into an empty one — the chunk still produced
 // something, and a person threw it away afterwards.
-func recount(res alchemy.Result, prior alchemy.Counts) alchemy.Counts {
+func recount(res alchemy.Result, prior alchemy.Counts, dropped int) alchemy.Counts {
 	c := alchemy.Counts{
 		Entities:     len(res.Entities),
 		Relations:    len(res.Relations),
@@ -117,6 +117,12 @@ func recount(res alchemy.Result, prior alchemy.Counts) alchemy.Counts {
 		Guesses:      len(res.Guesses),
 		ChunksEmpty:  prior.ChunksEmpty,
 		ChunksUnread: prior.ChunksUnread,
+		// Dropped accumulates rather than being recomputed, for the same
+		// reason ChunksEmpty is carried: a record a rule removed leaves
+		// nothing behind to count. It is the one number here that a later
+		// reader cannot derive from the slices next to it, which is exactly
+		// why it has to be carried honestly.
+		Dropped: prior.Dropped + dropped,
 	}
 	for _, r := range res.Relations {
 		if r.Provenance.Producer.Deterministic() {

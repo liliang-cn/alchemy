@@ -26,6 +26,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/budget"
@@ -220,6 +221,12 @@ type run struct {
 	// over the stages that can tell. §5 makes it one of the numbers a caller
 	// needs in order to distrust the graph.
 	chunksEmpty int
+	// dropped is how many records a standing rule removed without anybody
+	// being asked about them, over the whole job. It is atomic because the
+	// extract stage settles each chunk's proposal on its own goroutine, and it
+	// is accumulated rather than recomputed because a record a rule removed
+	// leaves nothing behind to count (see alchemy.Counts.Dropped).
+	dropped atomic.Int64
 }
 
 // docSource is one document's chunks, waiting for the extract stage.

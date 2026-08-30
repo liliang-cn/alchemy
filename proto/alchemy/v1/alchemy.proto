@@ -199,6 +199,22 @@ enum RefKind {
   REF_KIND_RELATION = 2;
 }
 
+// RuleOrigin is which warrant a rule has. They are different claims about the
+// same suppression: REVIEWED says a person looked at this exact finding and
+// generalised from it, AUTHORED says a person declared it in advance having
+// seen no instance. A reader who cannot tell them apart reads the weaker one
+// as the stronger.
+enum RuleOrigin {
+  // UNSPECIFIED is read as REVIEWED, and that is a decision rather than a
+  // placeholder: every rule that could exist before this field did was minted
+  // from a decision on an item, so the wire default has to mean what the
+  // callers who wrote it meant. An authored rule has to say so, which is the
+  // direction that fails safe — a lost marker under-claims.
+  RULE_ORIGIN_UNSPECIFIED = 0;
+  RULE_ORIGIN_REVIEWED = 1;
+  RULE_ORIGIN_AUTHORED = 2;
+}
+
 // ---------------------------------------------------------------------------
 // Job input. §6: models are supplied per job, not configured globally — a
 // buyer's LLM, embedding and OCR endpoints are their business, and a service
@@ -252,13 +268,22 @@ message ReviewOptions {
   repeated ReviewRule rules = 3;
 }
 
-// ReviewRule is what `always` produced, and it carries the decision that
-// produced it: a rule without an origin is an unexplainable policy (§5c).
+// ReviewRule is a class of question that has already been answered: either by
+// an `always` on an item, or by a person who wrote the rule down before any
+// job ran. Either way it carries what produced it: a rule without an origin is
+// an unexplainable policy (§5c).
 message ReviewRule {
   string shape = 1;
   ReviewKind kind = 2;
+  // For an authored rule this is the declaration itself — the same verb,
+  // person, note and moment, asserted in advance rather than in answer to an
+  // item, and carrying no item_id because no item was answered. An authored
+  // rule is refused unless it names a person, states a reason in `because` and
+  // says when it was declared; and it may not be about a conflict, because
+  // §7.3's escape hatch is a rule made by somebody who had seen one.
   ReviewDecision from = 3;
   string because = 4;
+  RuleOrigin origin = 5;
 }
 
 message CreateJobRequest {
@@ -451,6 +476,11 @@ message Counts {
   // Source text that could not be read at all — a scanned page with no OCR
   // model supplied. §5: never silently returned as empty.
   int32 chunks_unread = 9;
+  // Records a standing rule (§5c's `always`) removed without anybody being
+  // asked about them. Everything else a graph is missing is reported
+  // somewhere; a record a written policy dropped before any queue was shown
+  // would otherwise leave the result one record shorter and say nothing.
+  int32 dropped = 10;
 }
 
 // ModelCall records what a job spent. §7.2: cost is not optimised for, but it

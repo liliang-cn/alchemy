@@ -75,9 +75,20 @@ func (s *Server) specOf(req *alchemyv1.CreateJobRequest) (JobSpec, error) {
 		return JobSpec{}, invalid("create: min_confidence is a confidence, so it lies between 0 and 1")
 	}
 
+	// A rule that cannot explain itself is refused here rather than where it
+	// first matches something. §5c's argument is that an unexplainable policy
+	// is itself the failure — a queue that shrinks for reasons nobody can
+	// audit — and a job that accepted one would have applied it to a graph
+	// before anybody could object. It is the same reason the ontology is
+	// required at creation: the refusal has to come before the corpus is paid
+	// for, not after.
 	rules := make([]review.Rule, 0, len(req.GetReview().GetRules()))
-	for _, r := range req.GetReview().GetRules() {
-		rules = append(rules, ruleFromProto(r))
+	for i, r := range req.GetReview().GetRules() {
+		rule := ruleFromProto(r)
+		if err := rule.Validate(); err != nil {
+			return JobSpec{}, invalid("create: rule %d: %s", i+1, err)
+		}
+		rules = append(rules, rule)
 	}
 	return JobSpec{
 		Sources:  sources,

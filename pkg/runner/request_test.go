@@ -24,7 +24,7 @@ func TestRequestOpensSourcesLazily(t *testing.T) {
 	spec := service.JobSpec{Sources: []service.Source{
 		{ID: "s1", Name: "schema.sql", Kind: alchemy.SourceDDL, Path: path},
 	}}
-	req, err := buildRequest(spec, nil)
+	req, err := buildRequest(spec, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -63,7 +63,7 @@ const proseOntology = `{"id":"sds@1","parts":{"prose":{"entities":[{"name":"Clus
 // ontology is required for document sources — is enforced by pipeline.validate,
 // and a copy of it here would be a second place for it to drift.
 func TestRequestLeavesTheOntologyRuleToThePipeline(t *testing.T) {
-	req, err := buildRequest(service.JobSpec{}, nil)
+	req, err := buildRequest(service.JobSpec{}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest with no ontology: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestRequestLeavesTheOntologyRuleToThePipeline(t *testing.T) {
 }
 
 func TestRequestLoadsTheOntology(t *testing.T) {
-	req, err := buildRequest(service.JobSpec{Ontology: proseOntology}, nil)
+	req, err := buildRequest(service.JobSpec{Ontology: proseOntology}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestRequestLoadsTheOntology(t *testing.T) {
 // A malformed ontology is the caller's mistake and must arrive as one, before
 // a single byte of the corpus is read.
 func TestRequestRefusesAMalformedOntology(t *testing.T) {
-	_, err := buildRequest(service.JobSpec{Ontology: "{not json"}, nil)
+	_, err := buildRequest(service.JobSpec{Ontology: "{not json"}, nil, nil)
 	if err == nil {
 		t.Fatal("buildRequest accepted a malformed ontology")
 	}
@@ -105,7 +105,7 @@ func TestRequestRefusesAMalformedOntology(t *testing.T) {
 func TestRequestCarriesChunking(t *testing.T) {
 	req, err := buildRequest(service.JobSpec{
 		Chunking: service.Chunking{Strategy: "sentence", Size: 400, Overlap: 40},
-	}, nil)
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestRequestCarriesChunking(t *testing.T) {
 		t.Fatalf("chunking = %+v, want %+v", req.Chunking, want)
 	}
 
-	empty, err := buildRequest(service.JobSpec{}, nil)
+	empty, err := buildRequest(service.JobSpec{}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestRequestCarriesReviewAndDecisions(t *testing.T) {
 	}
 	req, err := buildRequest(service.JobSpec{
 		Review: review.Options{Reviewing: true, MinConfidence: 0.7, Rules: []review.Rule{stated}},
-	}, in)
+	}, in, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestRequestCarriesReviewAndDecisions(t *testing.T) {
 // — and not a job that loses the rules it was created with either.
 func TestRequestToleratesNoInbox(t *testing.T) {
 	stated := review.Rule{Shape: "violation/entity_type/Cluster"}
-	req, err := buildRequest(service.JobSpec{Review: review.Options{Rules: []review.Rule{stated}}}, nil)
+	req, err := buildRequest(service.JobSpec{Review: review.Options{Rules: []review.Rule{stated}}}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}

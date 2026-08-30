@@ -41,7 +41,7 @@ func authed(ctx context.Context) context.Context {
 // in production, which is the failure this file exists for.
 func serveForTest(t *testing.T, s settings) alchemyv1.AlchemyClient {
 	t.Helper()
-	sv, err := build(s, "the-secret")
+	sv, err := build(s, "the-secret", nil)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

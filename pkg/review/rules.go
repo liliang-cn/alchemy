@@ -2,15 +2,18 @@ package review
 
 import "github.com/liliang-cn/alchemy/pkg/alchemy"
 
-// A Rule is what `always` produced: a class of question the reviewer has
-// answered once and does not want asked again.
+// A Rule is a class of question that has already been answered: either by a
+// reviewer who pressed `always` on an item, or by a person who wrote the rule
+// down before any job ran (see authored.go).
 //
 // §5c is explicit that it is recorded with the decision that produced it. A
 // rule without an origin is an unexplainable policy — six months on, the only
 // available reading of "Widget entities are accepted" is that somebody must
 // have had a reason, and the queue quietly shrinks for reasons nobody can
 // audit. With the decision attached, the rule answers who, when, about what,
-// and with what note.
+// and with what note. An authored rule has no decision to point at, so the
+// same requirement lands on the author, the stated reason and the date, and
+// Validate refuses one that is missing any of them.
 type Rule struct {
 	// Shape is the class this rule covers. An item is suppressed when its
 	// Shape is equal to this one — see shapeOf for what that equality means.
@@ -18,11 +21,21 @@ type Rule struct {
 	// Kind is the kind of item the rule was made from, carried separately so a
 	// rule can be read without decomposing its shape.
 	Kind Kind `json:"kind"`
-	// From is the decision that produced the rule, whole.
+	// Origin is which warrant this rule has: a finding somebody decided, or a
+	// declaration somebody wrote. The zero value is a reviewer's rule; see
+	// Origin for why silence has to mean that one.
+	Origin Origin `json:"origin,omitempty"`
+	// From is the decision that produced the rule, whole. For an authored rule
+	// it is the declaration itself — the same four things, verb, person, note
+	// and moment, asserted in advance rather than in answer to an item, and
+	// carrying no ItemID because no item was answered.
 	From Decision `json:"from"`
-	// Because is the item the decision was made on, rendered. The item itself
-	// is gone by the time anybody reads the rule — the job it belonged to
-	// expired — so the sentence the reviewer was looking at travels with it.
+	// Because is why this rule exists, in a sentence. For a reviewer's rule it
+	// is the item the decision was made on, rendered: the item itself is gone
+	// by the time anybody reads the rule — the job it belonged to expired — so
+	// the sentence the reviewer was looking at travels with it. For an
+	// authored rule it is the reason the author stated, which is the whole of
+	// what a later reader has instead of a finding, and is required.
 	Because string `json:"because"`
 }
 
@@ -39,7 +52,20 @@ type Rule struct {
 // it, and "the queue got shorter and nobody changed anything" is exactly what
 // this package exists to prevent.
 func (r Rule) Covers(it Item) bool {
-	return r.Shape != "" && r.Shape == it.Shape
+	if r.Shape == "" || r.Shape != it.Shape {
+		return false
+	}
+	// §7.3's refusal, enforced in the matching and not only in the validator.
+	// A conflict is the one thing this design will not let a caller opt out of
+	// a person for, and the rule it permits came from somebody who had seen
+	// one. An authored rule about a conflict is a declaration about a
+	// disagreement nobody has read, so no route into the process — a rule
+	// file, the wire, a Rule literal built in Go — can use one to resolve a
+	// conflict. See conflictAuthored for the full argument.
+	if r.Authored() && it.Kind == KindConflict {
+		return false
+	}
+	return true
 }
 
 // ruleFor returns the first rule covering an item, or nil. First rather than

@@ -53,6 +53,11 @@ func (r *run) reviewJob(rep verify.Report, res alchemy.Result) (alchemy.Result, 
 	if err != nil {
 		return res, items, fmt.Errorf("pipeline: review: %w", err)
 	}
+	// What a rule removed at this stage joins what the rules removed during
+	// extraction. A record dropped here was covered by a rule and answered by
+	// nobody, which is the same fact as the one settle counts, arriving at the
+	// other end of the job.
+	r.dropped.Add(int64(out.Counts.Dropped))
 	out.Chunks = survivingChunks(res.Chunks, before, chunksWithRecords(out))
 	return out, items, nil
 }

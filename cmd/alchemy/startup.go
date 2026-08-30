@@ -24,6 +24,7 @@ func startupLine(s settings, token string) string {
 	fmt.Fprintf(&b, " store=%s capacity=%d sweep=%s", storeMemory, s.capacity, s.sweepEvery)
 	fmt.Fprintf(&b, " model-concurrency=%s", concurrencyLabel(s.modelConcurrency))
 	fmt.Fprintf(&b, " extract-cache=%s", cacheLabel(s.extractCache))
+	fmt.Fprintf(&b, " rules=%s", rulesLabel(s.rules))
 	// The only thing said about the token is that there is one.
 	fmt.Fprintf(&b, " auth=%s", authLabel(token))
 	return b.String()
@@ -63,6 +64,18 @@ func concurrencyLabel(n int) string {
 // opposite things. A budget of zero is no ceiling; a cache of zero is no cache.
 // Printing "0" for both would let one glance answer the wrong question.
 func cacheLabel(n int) string {
+	if n <= 0 {
+		return "off"
+	}
+	return fmt.Sprint(n)
+}
+
+// rulesLabel says how much standing policy is in force. It is on the startup
+// line because a rule set changes what a graph contains — it can drop records
+// (§5c's `reject`) — and that is not something an operator should have to read
+// a configuration file to discover. Zero is spelled out for the same reason
+// the other zeroes are: "0" reads as a truncated line rather than a decision.
+func rulesLabel(n int) string {
 	if n <= 0 {
 		return "off"
 	}
