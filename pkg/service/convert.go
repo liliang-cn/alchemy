@@ -204,6 +204,7 @@ func relationToProto(r alchemy.Relation) *alchemyv1.Relation {
 		From:       r.From,
 		To:         r.To,
 		Type:       r.Type,
+		Key:        r.Key,
 		Attributes: attributesToProto(r.Attributes),
 		Provenance: provenanceToProto(r.Provenance),
 	}
@@ -323,6 +324,7 @@ func standingRuleToProto(r alchemy.StandingRule) *alchemyv1.StandingRule {
 func refToProto(r review.Ref) *alchemyv1.Ref {
 	return &alchemyv1.Ref{
 		Kind: refKinds[r.Kind], Id: r.ID, From: r.From, To: r.To, Type: r.Type,
+		Key:        r.Key,
 		Provenance: provenanceToProto(r.Provenance),
 	}
 }
@@ -330,7 +332,8 @@ func refToProto(r review.Ref) *alchemyv1.Ref {
 func refFromProto(r *alchemyv1.Ref) review.Ref {
 	return review.Ref{
 		Kind: wireRefKinds[r.GetKind()], ID: r.GetId(), From: r.GetFrom(),
-		To: r.GetTo(), Type: r.GetType(), Provenance: provenanceFromProto(r.GetProvenance()),
+		To: r.GetTo(), Type: r.GetType(), Key: r.GetKey(),
+		Provenance: provenanceFromProto(r.GetProvenance()),
 	}
 }
 

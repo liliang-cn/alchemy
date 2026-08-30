@@ -128,6 +128,19 @@ func (r Result) Counts() alchemy.Counts {
 // The collections themselves are spelled two ways as well: nodes/entities and
 // edges/relations/links.
 var (
+	// edgeID is the edge's own name for itself, and only one spelling is
+	// accepted for the same reason nodeID accepts one: an id a document spells
+	// its own way is an id nothing else in the document refers to.
+	//
+	// It is read into alchemy.Relation.Key rather than left among the
+	// attributes because it is not something the edge says about the world, it
+	// is which edge this is. A document that states two call sites from one
+	// function to another writes two edges with two ids, and a verifier that
+	// saw only from/to/type would read them as two sources disagreeing about
+	// one edge's id — the same false conflict a schema's two foreign keys onto
+	// one table used to raise. Most graph documents state no edge ids at all,
+	// and those are unchanged: no key, and identity stays what it was.
+	edgeID      = []string{"id"}
 	edgeFrom    = []string{"source", "from", "subject"}
 	edgeTo      = []string{"target", "to", "object"}
 	edgeType    = []string{"type", "relation", "predicate", "label"}
@@ -294,6 +307,10 @@ func Parse(source string, r io.Reader) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
+		key, err := e.pick(where, "id", edgeID)
+		if err != nil {
+			return Result{}, err
+		}
 		// An edge missing an endpoint or a type is refused rather than
 		// reported. A dangling edge points at something and is kept because
 		// the claim survives its broken half (§7.3); an edge with no source
@@ -307,8 +324,8 @@ func Parse(source string, r io.Reader) (Result, error) {
 			}
 		}
 		res.Relations = append(res.Relations, alchemy.Relation{
-			From: from, To: to, Type: typ, Provenance: prov(source),
-			Attributes: e.rest(edgeFrom, edgeTo, edgeType),
+			From: from, To: to, Type: typ, Key: key, Provenance: prov(source),
+			Attributes: e.rest(edgeID, edgeFrom, edgeTo, edgeType),
 		})
 		// An edge naming a node the document does not contain is reported and
 		// kept. Dropping it would leave a graph that looks complete and is

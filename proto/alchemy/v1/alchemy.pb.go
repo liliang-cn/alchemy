@@ -1754,12 +1754,19 @@ func (x *Entity) GetProvenance() *Provenance {
 }
 
 type Relation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
-	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Attributes    *structpb.Struct       `protobuf:"bytes,4,opt,name=attributes,proto3" json:"attributes,omitempty"`
-	Provenance    *Provenance            `protobuf:"bytes,5,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	From       string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	To         string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	Type       string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Attributes *structpb.Struct       `protobuf:"bytes,4,opt,name=attributes,proto3" json:"attributes,omitempty"`
+	Provenance *Provenance            `protobuf:"bytes,5,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	// The producer's own name for this edge, and what makes two parallel edges
+	// two edges: a table that references another twice — once per end of a
+	// connection between two of its rows — states two foreign keys, and from,
+	// to and type cannot tell them apart. Empty when the producer has no name
+	// for its edges, which is every model-extracted graph. See
+	// alchemy.Relation.Key for the whole argument.
+	Key           string `protobuf:"bytes,6,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1827,6 +1834,13 @@ func (x *Relation) GetProvenance() *Provenance {
 		return x.Provenance
 	}
 	return nil
+}
+
+func (x *Relation) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
 }
 
 type Chunk struct {
@@ -3264,6 +3278,9 @@ type Ref struct {
 	From  string                 `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
 	To    string                 `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
 	Type  string                 `protobuf:"bytes,5,opt,name=type,proto3" json:"type,omitempty"`
+	// Which of several parallel edges this is; see Relation.key. Without it a
+	// decision about one end of a connection acts on both.
+	Key string `protobuf:"bytes,7,opt,name=key,proto3" json:"key,omitempty"`
 	// Narrows the Ref to the records one source produced. A conflict names two
 	// claims about one subject and a decision is about one of them, so without
 	// this a rejection would delete the side the reviewer kept.
@@ -3333,6 +3350,13 @@ func (x *Ref) GetTo() string {
 func (x *Ref) GetType() string {
 	if x != nil {
 		return x.Type
+	}
+	return ""
+}
+
+func (x *Ref) GetKey() string {
+	if x != nil {
+		return x.Key
 	}
 	return ""
 }
@@ -3759,7 +3783,7 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"attributes\x126\n" +
 	"\n" +
 	"provenance\x18\x05 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
-	"provenance\"\xb3\x01\n" +
+	"provenance\"\xc5\x01\n" +
 	"\bRelation\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x02 \x01(\tR\x02to\x12\x12\n" +
@@ -3769,7 +3793,8 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"attributes\x126\n" +
 	"\n" +
 	"provenance\x18\x05 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
-	"provenance\"\xa7\x01\n" +
+	"provenance\x12\x10\n" +
+	"\x03key\x18\x06 \x01(\tR\x03key\"\xa7\x01\n" +
 	"\x05Chunk\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x16\n" +
@@ -3905,13 +3930,14 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\vmodel_calls\x18\x06 \x01(\x03R\n" +
 	"modelCalls\x12F\n" +
 	"\x14model_calls_by_stage\x18\a \x03(\v2\x15.alchemy.v1.ModelCallR\x11modelCallsByStage\x12\x18\n" +
-	"\amessage\x18\b \x01(\tR\amessage\"\xae\x01\n" +
+	"\amessage\x18\b \x01(\tR\amessage\"\xc0\x01\n" +
 	"\x03Ref\x12'\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x13.alchemy.v1.RefKindR\x04kind\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x03 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x04 \x01(\tR\x02to\x12\x12\n" +
-	"\x04type\x18\x05 \x01(\tR\x04type\x126\n" +
+	"\x04type\x18\x05 \x01(\tR\x04type\x12\x10\n" +
+	"\x03key\x18\a \x01(\tR\x03key\x126\n" +
 	"\n" +
 	"provenance\x18\x06 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
 	"provenance\"\xf3\x02\n" +

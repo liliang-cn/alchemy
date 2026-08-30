@@ -29,10 +29,22 @@ func index(entities []alchemy.Entity, relations []alchemy.Relation) *records {
 	}
 	for _, r := range relations {
 		ref := relationRef(r)
-		idx.add(directed(r), ref)
+		idx.add(directed(r, r.Type), ref)
 		// The undirected form is what a direction conflict is filed under,
 		// because which arrow is drawn is the question being asked.
-		idx.add(undirected(r), ref)
+		idx.add(undirected(r, r.Type), ref)
+		// Both spellings again with the producer's key in them, because verify
+		// writes the key into a subject when — and only when — there is a
+		// sibling edge to be confused with, and this package cannot see the
+		// whole graph to know whether it did. Registering both costs two map
+		// entries on an edge that has a key and finds the record either way; a
+		// keyed subject that matched nothing would leave a conflict with no
+		// targets, which is a question §7.3 holds the job for and nobody can
+		// answer.
+		if r.Key != "" {
+			idx.add(directed(r, labelled(r)), ref)
+			idx.add(undirected(r, labelled(r)), ref)
+		}
 	}
 	return idx
 }
@@ -89,18 +101,39 @@ func entityRef(e alchemy.Entity) Ref {
 	return Ref{Kind: RefEntity, ID: e.ID, Type: e.Type, Provenance: e.Provenance}
 }
 
+// relationRef carries the key for the reason entityRef carries the type: it is
+// part of what the record claims. Two foreign keys onto one table are two
+// edges that agree about their ends, their type and their source and differ
+// only in which of them they are, and a Ref that could not tell them apart
+// would let a decision about one delete both.
 func relationRef(r alchemy.Relation) Ref {
-	return Ref{Kind: RefRelation, From: r.From, To: r.To, Type: r.Type, Provenance: r.Provenance}
+	return Ref{Kind: RefRelation, From: r.From, To: r.To, Type: r.Type, Key: r.Key, Provenance: r.Provenance}
 }
 
-func directed(r alchemy.Relation) string {
-	return fmt.Sprintf("%s -[%s]-> %s", r.From, r.Type, r.To)
+// labelled is the type with the producer's key after it, the spelling verify
+// uses for an edge that has a sibling. The two are built from the record in
+// both packages rather than parsed, so neither can drift into a format the
+// other does not write.
+func labelled(r alchemy.Relation) string { return r.Type + "#" + r.Key }
+
+// directedSubject is how an item names one edge: the arrow the record drew,
+// with the producer's key in it when the record has one, so that two parallel
+// edges are two subjects rather than one.
+func directedSubject(r alchemy.Relation) string {
+	if r.Key == "" {
+		return directed(r, r.Type)
+	}
+	return directed(r, labelled(r))
 }
 
-func undirected(r alchemy.Relation) string {
+func directed(r alchemy.Relation, label string) string {
+	return fmt.Sprintf("%s -[%s]-> %s", r.From, label, r.To)
+}
+
+func undirected(r alchemy.Relation, label string) string {
 	lo, hi := r.From, r.To
 	if lo > hi {
 		lo, hi = hi, lo
 	}
-	return fmt.Sprintf("%s -[%s]- %s", lo, r.Type, hi)
+	return fmt.Sprintf("%s -[%s]- %s", lo, label, hi)
 }

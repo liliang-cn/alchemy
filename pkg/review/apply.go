@@ -330,7 +330,12 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 			// reason: what the second assertion said is already said. The
 			// earliest is kept whole rather than blended, so the citation
 			// points at a reply some model actually gave.
-			key := r.From + "\x00" + r.Type + "\x00" + r.To
+			// The key is in here because two parallel edges never became the
+			// same edge: a table that references another twice states two
+			// foreign keys, and collapsing them because a merge happened
+			// elsewhere in the graph would delete one end of a connection
+			// nobody was asked about.
+			key := r.From + "\x00" + r.Type + "\x00" + r.To + "\x00" + r.Key
 			if edges[key] {
 				continue
 			}

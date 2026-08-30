@@ -28,7 +28,11 @@ func storedEntry() cache.Entry {
 			{ID: "e2", Type: "System", Name: "CortexDB", Provenance: prov},
 		},
 		Relations: []alchemy.Relation{
-			{From: "e1", To: "e2", Type: "USES", Attributes: map[string]any{"since": "2025"}, Provenance: prov},
+			// Key is on the fixture because it is on the record: an edge that
+			// came back without it would be an edge a resumed job could no
+			// longer tell from its parallel sibling, which is the one
+			// difference §8.2 says a cache must never introduce.
+			{From: "e1", To: "e2", Type: "USES", Key: "fk_e1_e2", Attributes: map[string]any{"since": "2025"}, Provenance: prov},
 		},
 		Tokens: 1731,
 	}
@@ -93,7 +97,7 @@ func assertEntryEqual(t *testing.T, got, want cache.Entry) {
 	}
 	for i := range want.Relations {
 		w, g := want.Relations[i], got.Relations[i]
-		if g.From != w.From || g.To != w.To || g.Type != w.Type {
+		if g.From != w.From || g.To != w.To || g.Type != w.Type || g.Key != w.Key {
 			t.Errorf("relation %d = %+v, want %+v", i, g, w)
 		}
 		if g.Provenance != w.Provenance {

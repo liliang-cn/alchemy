@@ -446,6 +446,13 @@ message Relation {
   string type = 3;
   google.protobuf.Struct attributes = 4;
   Provenance provenance = 5;
+  // The producer's own name for this edge, and what makes two parallel edges
+  // two edges: a table that references another twice — once per end of a
+  // connection between two of its rows — states two foreign keys, and from,
+  // to and type cannot tell them apart. Empty when the producer has no name
+  // for its edges, which is every model-extracted graph. See
+  // alchemy.Relation.Key for the whole argument.
+  string key = 6;
 }
 
 message Chunk {
@@ -715,6 +722,9 @@ message Ref {
   string from = 3;
   string to = 4;
   string type = 5;
+  // Which of several parallel edges this is; see Relation.key. Without it a
+  // decision about one end of a connection acts on both.
+  string key = 7;
   // Narrows the Ref to the records one source produced. A conflict names two
   // claims about one subject and a decision is about one of them, so without
   // this a rejection would delete the side the reviewer kept.

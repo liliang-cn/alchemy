@@ -137,10 +137,14 @@ type Ref struct {
 	Kind RefKind `json:"kind"`
 	// ID is the entity ID when Kind is RefEntity.
 	ID string `json:"id,omitempty"`
-	// From, To and Type identify a relation when Kind is RefRelation.
+	// From, To and Type identify a relation when Kind is RefRelation, and Key
+	// says which of several parallel edges it is — see alchemy.Relation.Key.
+	// Without it two foreign keys between one pair of tables produce one Ref,
+	// and a decision about the second end of a connection removes the first.
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
 	Type string `json:"type,omitempty"`
+	Key  string `json:"key,omitempty"`
 	// Provenance narrows the Ref to the records one source produced. A
 	// conflict names two claims about one subject and a decision is about one
 	// of them, so without this a rejection would delete the side the reviewer

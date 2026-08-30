@@ -869,6 +869,10 @@
         "type": {
           "type": "string"
         },
+        "key": {
+          "type": "string",
+          "description": "Which of several parallel edges this is; see Relation.key. Without it a\ndecision about one end of a connection acts on both."
+        },
         "provenance": {
           "$ref": "#/definitions/v1Provenance",
           "description": "Narrows the Ref to the records one source produced. A conflict names two\nclaims about one subject and a decision is about one of them, so without\nthis a rejection would delete the side the reviewer kept."
@@ -902,6 +906,10 @@
         },
         "provenance": {
           "$ref": "#/definitions/v1Provenance"
+        },
+        "key": {
+          "type": "string",
+          "description": "The producer's own name for this edge, and what makes two parallel edges\ntwo edges: a table that references another twice — once per end of a\nconnection between two of its rows — states two foreign keys, and from,\nto and type cannot tell them apart. Empty when the producer has no name\nfor its edges, which is every model-extracted graph. See\nalchemy.Relation.Key for the whole argument."
         }
       }
     },

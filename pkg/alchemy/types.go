@@ -133,7 +133,44 @@ type Relation struct {
 	To   string `json:"to"`
 	// Type must be a relation type the ontology declares between these entity
 	// types; anything else is a Violation.
-	Type       string         `json:"type"`
+	Type string `json:"type"`
+	// Key is the producer's own name for this edge, and it is what makes two
+	// parallel edges two edges rather than one edge described twice.
+	//
+	// An Entity has had an ID since the first line of this file; a Relation has
+	// never had one, and the asymmetry looked harmless because from, to and
+	// type are usually enough. They are not enough for the most ordinary thing
+	// in SQL: a table that models a relationship between two rows of one table
+	// references that table twice, once per end, and a customer schema's NODE_CONNECTIONS
+	// does exactly that. Both foreign keys are correct, they say different
+	// things about themselves — different columns, different constraint names —
+	// and a verifier keying identity on {from, to, type} alone reads them as
+	// two sources contradicting each other about one edge. Five of that
+	// customer's tables have the shape, and the job could never finish.
+	//
+	// Identity cannot be recovered from the attributes, either: the attributes
+	// are precisely what the conflict check compares, so promoting them to
+	// identity would make every disagreement a different edge and
+	// ConflictRelationAttributes could never fire again. The producer is the
+	// only party that knows. A DDL reader has the constraint name, which SQL
+	// itself requires to be unique among a table's constraints; a graph import
+	// has the edge's own id when the document carried one; a model reading
+	// prose has nothing — it cannot say whether the edge it just proposed is
+	// the one it proposed two chunks ago, and inventing a key for it would be
+	// exactly the inference wearing a producer's badge that §2.1 warns about.
+	//
+	// So it is optional, and empty is the honest default. Empty means "this
+	// producer cannot tell its edges apart", which is what identity keyed on
+	// {from, to, type} has always assumed — so an llm-extract graph behaves
+	// exactly as it did, and two sources of equal standing disagreeing about
+	// one edge is still the conflict it was built to be.
+	//
+	// It is scoped to the pair and the type, not global. A producer's ids are
+	// its own, and demanding they be unique across a whole job would make one
+	// document's edge id collide with another's; two records that carry the
+	// same key between the same two nodes are two claims about one edge, which
+	// is exactly the reading wanted.
+	Key        string         `json:"key,omitempty"`
 	Attributes map[string]any `json:"attributes,omitempty"`
 	Provenance Provenance     `json:"provenance"`
 }

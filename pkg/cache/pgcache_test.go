@@ -78,7 +78,7 @@ func richEntry() cache.Entry {
 			{ID: "e3", Type: "Store", Name: "Postgres", Provenance: prov},
 		},
 		Relations: []alchemy.Relation{
-			{From: "e1", To: "e2", Type: "USES", Attributes: map[string]any{"since": "2025"}, Provenance: prov},
+			{From: "e1", To: "e2", Type: "USES", Key: "fk_e1_e2", Attributes: map[string]any{"since": "2025"}, Provenance: prov},
 			{From: "e2", To: "e3", Type: "STORES_IN", Provenance: other},
 		},
 		Tokens: 1731,

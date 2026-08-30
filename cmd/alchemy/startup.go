@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"strings"
+
+	"github.com/liliang-cn/alchemy/pkg/gateway"
 )
 
 // startupLine is the one line an operator reads to know what they started.
@@ -20,6 +23,7 @@ func startupLine(s settings, token string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "alchemy listening on %s", s.addr)
 	fmt.Fprintf(&b, " http=%s", httpLabel(s.httpAddr))
+	fmt.Fprintf(&b, " ui=%s", uiLabel(s.httpAddr))
 	fmt.Fprintf(&b, " spool=%s", spoolLabel(s.spool))
 	fmt.Fprintf(&b, " store=%s capacity=%d sweep=%s", storeMemory, s.capacity, s.sweepEvery)
 	fmt.Fprintf(&b, " model-concurrency=%s", concurrencyLabel(s.modelConcurrency))
@@ -39,6 +43,31 @@ func httpLabel(addr string) string {
 		return "off"
 	}
 	return addr
+}
+
+// uiLabel is the URL a person opens.
+//
+// It is a whole URL rather than a path because the line is read by somebody
+// who is about to paste it somewhere, and a path is the half of the answer
+// they already had. A wildcard bind is rewritten to loopback for the reason
+// dialTarget rewrites it: 0.0.0.0 is an address to listen on and not one to
+// open, and a startup line that printed http://0.0.0.0:6759/ui/ would be
+// handing an operator a URL that fails on the platforms where it is not
+// routable — which reads as a broken view rather than as an address that was
+// never meant to be typed.
+func uiLabel(addr string) string {
+	if addr == "" {
+		return "off"
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://" + addr + gateway.ViewPrefix
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + gateway.ViewPrefix
 }
 
 func spoolLabel(dir string) string {

@@ -251,11 +251,11 @@ func lowConfidence(rep verify.Report, min float64, taken map[Ref]bool) []Item {
 			continue
 		}
 		out = append(out, Item{
-			ID:      fmt.Sprintf("low_confidence/relation/%s", directed(r)),
+			ID:      fmt.Sprintf("low_confidence/relation/%s", directedSubject(r)),
 			Kind:    KindLowConfidence,
-			Subject: directed(r),
+			Subject: directedSubject(r),
 			Summary: fmt.Sprintf("%s was proposed with confidence %.2f by %s",
-				directed(r), r.Provenance.Confidence, model(r.Provenance)),
+				directedSubject(r), r.Provenance.Confidence, model(r.Provenance)),
 			Shape:      lowConfidenceShape(string(RefRelation), r.Type, r.Provenance),
 			Provenance: r.Provenance,
 			Targets:    []Ref{ref},

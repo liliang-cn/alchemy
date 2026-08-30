@@ -145,3 +145,24 @@ func TestStartupLineSaysWhereTheGatewayIs(t *testing.T) {
 		t.Errorf("startup line %q does not say the gateway is off", off)
 	}
 }
+
+// The one line an operator reads has to tell them the view exists and where.
+//
+// It is on the startup line for the same reason http= and rules= are: a
+// surface that is listening and that nobody knows about is a surface nobody is
+// watching. The view is not a separate listener and not a separate flag — it
+// comes with the gateway — so the only thing that could be wrong is somebody
+// not knowing it is there, and one word on the line they already read fixes it.
+func TestStartupLineSaysWhereTheViewIs(t *testing.T) {
+	on := startupLine(settings{addr: "127.0.0.1:7431", httpAddr: "127.0.0.1:6759"}, "t")
+	if !strings.Contains(on, "ui=http://127.0.0.1:6759/ui/") {
+		t.Errorf("startup line %q does not say where the browser view is", on)
+	}
+	off := startupLine(settings{addr: "127.0.0.1:7431"}, "t")
+	if strings.Contains(off, "ui=http") {
+		t.Errorf("startup line %q offers a view URL with no gateway to serve it", off)
+	}
+	if !strings.Contains(off, "ui=off") {
+		t.Errorf("startup line %q does not say the view is off", off)
+	}
+}

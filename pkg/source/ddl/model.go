@@ -244,9 +244,33 @@ func relationFor(source string, from *table, fk foreignKey, to string) alchemy.R
 		From:       entityID(from.schema, from.name),
 		To:         to,
 		Type:       RelationType,
+		Key:        edgeKey(fk),
 		Attributes: attrs,
 		Provenance: prov(source),
 	}
+}
+
+// edgeKey is what tells one of a table's foreign keys from another, which is
+// what alchemy.Relation.Key is for. A table that references one table twice —
+// each end of a connection between two of its rows — is ordinary SQL, and both
+// edges are real; without this the verifier reads them as one edge two sources
+// disagree about, because the only thing separating them is what they say.
+//
+// The constraint name is the answer whenever the schema gave one: SQL requires
+// it to be unique among the table's constraints, so it is an identity the
+// source itself states rather than one this package invented.
+//
+// An unnamed foreign key is keyed by the columns it constrains, and that is not
+// a guess either. A second FOREIGN KEY clause over the same columns onto the
+// same table is the same constraint written twice, so collapsing those two is
+// right and separating any other pair is right. Falling back matters because
+// schemas that name no constraints are common, and a fix that only worked for
+// customers who name theirs would be half a fix.
+func edgeKey(fk foreignKey) string {
+	if fk.constraint != "" {
+		return fk.constraint
+	}
+	return "(" + strings.Join(fk.columns, ", ") + ")"
 }
 
 func entityFor(source string, t *table, ix tableIndex) alchemy.Entity {

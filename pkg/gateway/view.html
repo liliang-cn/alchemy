@@ -1,0 +1,989 @@
+<!doctype html>
+<!--
+  The browser view of one job's graph.
+
+  Three things make this a viewer for *this* product rather than a pretty graph
+  of nodes and edges, and each is a DESIGN.md obligation rather than a taste:
+
+    - Producer is the primary visual encoding, not a tooltip. §5b calls it "the
+      field that matters": ddl and graph-import mean a machine read something
+      that already said this, llm-extract means a model decided it. It is drawn
+      twice over — hue (cool for read, warm for guessed) and stroke (solid for
+      read, dashed for guessed) — because one channel is a channel somebody
+      cannot see, and "which half was guessed" has to survive a colour-blind
+      reader and a small window.
+
+    - The counts block is chrome, not a footnote. §5: "a run with 1180 edges
+      and 400 violations is a failure that looks like a success." It is pinned
+      to the top, it is never collapsible, and it turns red on its own when a
+      finding count is not zero, so the graph cannot be looked at without it.
+
+    - Findings are drawn on the graph. A violating record is ringed, the two
+      sides of a conflict are tethered, a duplicate pair is joined by a dotted
+      line, and clicking any record shows its whole provenance — source, chunk,
+      producer, model, ontology, chunking, confidence, and the rule set it was
+      proposed under.
+
+  Nothing here is fetched from anywhere. The force layout, the perspective
+  camera and the renderer are all below, in about six hundred lines, because
+  this runs on a private VM: a page that loads a graph library from a CDN
+  renders an empty rectangle on a machine with no route out, and does it
+  without an error anybody sees.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="5" cy="8" r="3.2" fill="%231668c9"/><circle cx="11.5" cy="8" r="2.6" fill="none" stroke="%23c2740b" stroke-width="1.6" stroke-dasharray="2 1.6"/></svg>'>
+<title>alchemy — graph</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#f4f6f9; --panel:rgba(255,255,255,.93); --line:#d6dae3; --ink:#161c27;
+    --dim:#657189; --accent:#2563eb;
+    --read:#1668c9;        /* deterministic: a machine read it */
+    --guess:#c2740b;       /* inferred: a model decided it */
+    --bad:#b42318; --warn:#a15c07; --dup:#7c4dbd;
+    --edge:#8f9bb0;
+    --canvas:#eef1f6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#080b12; --panel:rgba(15,20,32,.90); --line:#212a3d; --ink:#e7edf8; --dim:#8593ac;
+      --accent:#5b8cff;
+      --read:#4da6ff; --guess:#f5b23f;
+      --bad:#ff7b6b; --warn:#f0a43a; --dup:#b18cf0;
+      --edge:#41506b;
+      --canvas:#05070d;
+    }
+  }
+  *{box-sizing:border-box}
+  /* --barh is written by script from the bar's measured height. The counts
+     wrap onto two rows in a narrow window and onto one in a wide one, and
+     everything below has to sit under whichever it is — a constant here would
+     be a number that is wrong at exactly one window width. */
+  :root{--barh:52px;--topofs:52px}
+  html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+    font:13px/1.5 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  #scene{position:fixed;inset:0;background:var(--canvas)}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+
+  /* ---- the counts bar: pinned, never collapsible (§5) ---- */
+  #bar{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;
+    gap:2px 0;background:var(--panel);border-bottom:1px solid var(--line);backdrop-filter:blur(8px);
+    padding:8px 12px}
+  #bar.held{border-bottom:2px solid var(--bad);box-shadow:inset 0 3px 0 var(--bad)}
+  #ident{display:flex;align-items:baseline;gap:9px;margin-right:14px;min-width:0}
+  #ident b{font-size:13px;font-weight:600}
+  #jobid{font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);
+    overflow:hidden;text-overflow:ellipsis;max-width:26ch}
+  #state{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  #state.held{background:var(--bad);border-color:var(--bad);color:#fff}
+  #state.ok{border-color:var(--read);color:var(--read)}
+  #counts{display:flex;flex-wrap:wrap;gap:2px 16px;flex:1;min-width:0}
+  .c{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+  .c .n{font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+  .c .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+  .c.alarm .n{color:var(--bad)}
+  .c.alarm .k{color:var(--bad)}
+  .c.notice .n{color:var(--warn)}
+  #bar .tools{display:flex;gap:6px;margin-left:12px}
+
+  /* ---- banners: held, truncated, error. Never quiet. ---- */
+  #banners{position:fixed;top:var(--barh);left:0;right:0;z-index:19;pointer-events:none;
+    max-height:40vh;overflow:auto}
+  .banner{margin:6px 12px;padding:9px 12px;border-radius:9px;font-size:12.5px;line-height:1.5;
+    border:1px solid var(--line);background:var(--panel);pointer-events:auto;backdrop-filter:blur(8px)}
+  .banner.stop{border-color:var(--bad);border-left:4px solid var(--bad)}
+  .banner.cut{border-color:var(--warn);border-left:4px solid var(--warn)}
+  .banner b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px}
+  .banner.stop b{color:var(--bad)}
+  .banner.cut b{color:var(--warn)}
+
+  .panel{position:fixed;z-index:10;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;backdrop-filter:blur(8px);box-shadow:0 6px 24px rgba(0,0,0,.10)}
+  .panel h3{margin:0 0 7px;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);font-weight:600}
+
+  /* One left column rather than three independently placed panels: they must
+     never overlap each other and must all clear the bar, and a column is the
+     only arrangement of those two facts that survives a resize. */
+  #left{position:fixed;left:12px;top:calc(var(--topofs) + 10px);bottom:12px;width:236px;z-index:10;
+    display:flex;flex-direction:column;gap:10px;pointer-events:none}
+  #left>.panel{position:static;pointer-events:auto}
+  #legend{padding:11px 12px;overflow:auto;flex:0 1 auto}
+  .key{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12px}
+  .key svg{flex:none}
+  .key .t{color:var(--dim)}
+  .key .t b{color:var(--ink);font-weight:600}
+
+  #filters{padding:11px 12px;flex:none}
+  .toggle{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:12px;cursor:pointer;user-select:none}
+  .toggle input{margin:0;accent-color:var(--accent)}
+
+  #findings{padding:11px 12px;display:flex;flex-direction:column;flex:0 1 auto;min-height:0}
+  #findlist{max-height:26vh}
+  #findlist{overflow:auto;margin:0;padding:0;list-style:none;min-height:0}
+  #findlist li{padding:5px 6px;border-radius:6px;cursor:pointer;font-size:12px;border-left:3px solid transparent}
+  #findlist li:hover{background:rgba(127,127,127,.13)}
+  #findlist li.violation{border-left-color:var(--bad)}
+  #findlist li.conflict{border-left-color:var(--bad)}
+  #findlist li.duplicate{border-left-color:var(--dup)}
+  #findlist li.guess{border-left-color:var(--warn)}
+  #findlist .s{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #findlist .d{color:var(--dim);font-size:11px;display:block}
+
+  #detail{right:12px;top:calc(var(--topofs) + 10px);width:310px;padding:12px;
+    max-height:calc(100vh - var(--topofs) - 22px);overflow:auto;display:none}
+  #detail.on{display:block}
+  #detail .close{float:right;cursor:pointer;color:var(--dim);font-size:18px;line-height:1;border:0;background:none}
+  #detail .title{font-size:14px;font-weight:600;word-break:break-word;padding-right:20px}
+  #detail .sub{color:var(--dim);font-size:12px;margin-top:2px;word-break:break-word}
+  .field{display:grid;grid-template-columns:9.5ch 1fr;gap:4px 9px;margin-top:8px;font-size:12px}
+  .field dt{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding-top:2px}
+  .field dd{margin:0;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tag{display:inline-block;padding:1px 6px;border-radius:20px;font-size:10px;font-weight:700;
+    letter-spacing:.05em;text-transform:uppercase}
+  .tag.read{background:color-mix(in srgb,var(--read) 18%,transparent);color:var(--read)}
+  .tag.guess{background:color-mix(in srgb,var(--guess) 20%,transparent);color:var(--guess)}
+
+  button.btn{padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:transparent;
+    color:var(--ink);font:inherit;font-size:11.5px;cursor:pointer}
+  button.btn:hover{border-color:var(--accent);color:var(--accent)}
+  button.btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  #chooser{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
+    background:var(--bg);padding:24px}
+  #chooser.on{display:flex}
+  #chooser .box{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:20px}
+  #chooser input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
+    background:var(--bg);color:var(--ink);font:inherit;margin-top:8px}
+
+  #fail{position:fixed;inset:0;z-index:28;display:none;overflow:auto;padding:64px 16px 16px;background:var(--bg)}
+  #fail.on{display:block}
+  #fail .box{max-width:760px;margin:0 auto}
+  #fail pre{white-space:pre-wrap;word-break:break-word;font-size:12px;color:var(--dim)}
+  #fail table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}
+  #fail th,#fail td{text-align:left;padding:5px 7px;border-bottom:1px solid var(--line);vertical-align:top}
+  #fail th{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+
+  #hint{position:fixed;right:12px;bottom:12px;z-index:9;color:var(--dim);font-size:11px;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+
+  @media (max-width:860px){
+    #left{width:calc(50% - 18px);max-width:236px}
+    #findings{display:none}
+    #detail{right:12px;left:calc(50% + 6px);width:auto;max-height:44vh}
+  }
+  @media (max-width:560px){
+    #left{display:none}
+    #detail{left:12px;right:12px;top:auto;bottom:12px;max-height:46vh}
+    #hint{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="scene"><canvas id="cv"></canvas></div>
+
+<div id="bar">
+  <div id="ident">
+    <b>alchemy</b>
+    <span id="jobid"></span>
+    <span id="state">loading</span>
+  </div>
+  <!-- Every number §5 obliges a returned graph to carry. The keys are the
+       service's own, so what is on screen and what is in the JSON are the same
+       words. -->
+  <div id="counts">
+    <span class="c" data-count="entities"><span class="n">–</span><span class="k">entities</span></span>
+    <span class="c" data-count="relations"><span class="n">–</span><span class="k">relations</span></span>
+    <span class="c" data-count="deterministic"><span class="n">–</span><span class="k">deterministic</span></span>
+    <span class="c" data-count="inferred"><span class="n">–</span><span class="k">inferred</span></span>
+    <span class="c" data-count="violations"><span class="n">–</span><span class="k">violations</span></span>
+    <span class="c" data-count="conflicts"><span class="n">–</span><span class="k">conflicts</span></span>
+    <span class="c" data-count="duplicates"><span class="n">–</span><span class="k">duplicates</span></span>
+    <span class="c" data-count="guesses"><span class="n">–</span><span class="k">guesses</span></span>
+    <span class="c" data-count="chunks_empty"><span class="n">–</span><span class="k">chunks_empty</span></span>
+    <span class="c" data-count="chunks_unread"><span class="n">–</span><span class="k">chunks_unread</span></span>
+  </div>
+  <div class="tools">
+    <button class="btn" id="spin" title="Turn the graph on its own">Orbit</button>
+    <button class="btn" id="fit" title="Frame everything">Fit</button>
+    <button class="btn" id="out" title="Release this browser's session">Sign out</button>
+  </div>
+</div>
+
+<div id="banners"></div>
+
+<div id="left">
+<div class="panel" id="legend">
+  <h3>Producer — §5b's field that matters</h3>
+  <div class="key">
+    <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--read)" stroke-width="2.4"/></svg>
+    <span class="t"><b>ddl</b> · a CREATE TABLE said it</span>
+  </div>
+  <div class="key">
+    <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--read)" stroke-width="2.4"/></svg>
+    <span class="t"><b>graph-import</b> · a graph already asserted it</span>
+  </div>
+  <div class="key">
+    <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--guess)" stroke-width="2.4" stroke-dasharray="4 3"/></svg>
+    <span class="t"><b>tabular</b> · a mapping produced it</span>
+  </div>
+  <div class="key">
+    <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--guess)" stroke-width="2.4" stroke-dasharray="4 3"/></svg>
+    <span class="t"><b>llm-extract</b> · a model decided it</span>
+  </div>
+  <h3 style="margin-top:11px">Findings</h3>
+  <div class="key">
+    <svg width="34" height="12" aria-hidden="true"><circle cx="17" cy="6" r="4.5" fill="none" stroke="var(--bad)" stroke-width="2"/></svg>
+    <span class="t">violation or conflict</span>
+  </div>
+  <div class="key">
+    <svg width="34" height="12" aria-hidden="true"><line x1="1" y1="6" x2="33" y2="6" stroke="var(--dup)" stroke-width="2.4" stroke-dasharray="1.5 3"/></svg>
+    <span class="t">duplicate pair — may be one node</span>
+  </div>
+</div>
+
+<div class="panel" id="filters">
+  <h3>Show</h3>
+  <label class="toggle"><input type="checkbox" id="only-guessed"> Only what was guessed</label>
+  <label class="toggle"><input type="checkbox" id="only-findings"> Only records with findings</label>
+  <label class="toggle"><input type="checkbox" id="show-labels" checked> Names</label>
+</div>
+
+<div class="panel" id="findings">
+  <h3>Findings <span id="findcount" style="color:var(--dim);font-weight:400"></span></h3>
+  <ul id="findlist"></ul>
+</div>
+
+</div><!-- /#left -->
+
+<div class="panel" id="detail">
+  <button class="close" id="detailclose" aria-label="Close">&times;</button>
+  <div class="title" id="dtitle"></div>
+  <div class="sub" id="dsub"></div>
+  <dl class="field" id="dfields"></dl>
+</div>
+
+<div id="hint">drag to turn · wheel to zoom · click a record</div>
+
+<div id="chooser">
+  <div class="box">
+    <h3 style="margin-top:0">Which job?</h3>
+    <p style="color:var(--dim);font-size:12.5px;margin:0">
+      There is no list to offer: the service holds work in progress, not a catalogue.
+      Paste the job ID that <code>CreateJob</code> returned.
+    </p>
+    <form id="pick"><input id="pickid" placeholder="job id" autocomplete="off" spellcheck="false"></form>
+  </div>
+</div>
+
+<div id="fail">
+  <div class="box">
+    <h2 id="failtitle" style="margin:0 0 6px;font-size:16px"></h2>
+    <pre id="failtext"></pre>
+    <div id="failtable"></div>
+    <p><button class="btn" id="retry">Try again</button></p>
+  </div>
+</div>
+
+<noscript>
+  <div style="position:fixed;inset:0;z-index:60;background:#fff;color:#111;padding:32px;font:14px/1.6 sans-serif">
+    <h2>This view needs JavaScript.</h2>
+    <p>It draws the graph in three dimensions in the browser; there is no server-rendered
+      picture to fall back to. The same information is available without a browser:</p>
+    <pre>curl -H "Authorization: Bearer $ALCHEMY_TOKEN" http://HOST/v1/jobs/JOB_ID/result</pre>
+    <p>and, for a job held on a conflict, <code>/v1/jobs/JOB_ID/events</code>.</p>
+  </div>
+</noscript>
+
+<script>
+"use strict";
+/* =======================================================================
+   Everything below runs inside one try/catch. A renderer that throws must
+   not leave a blank rectangle: the catch swaps in a plain HTML table of the
+   findings and the error, which is worse to look at and still answers the
+   question the page was opened to answer.
+   ======================================================================= */
+
+var DOM = function (id) { return document.getElementById(id); };
+var G = null;              // the loaded viewGraph document
+var NODES = [], EDGES = []; // what is drawn
+var BY_ID = {};
+var selected = null;
+var spinning = false;
+var showLabels = true, onlyGuessed = false, onlyFindings = false;
+
+/* ---------- palette, re-read when the system theme flips ---------- */
+var P = {};
+function readPalette() {
+  var cs = getComputedStyle(document.documentElement);
+  ["read", "guess", "bad", "warn", "dup", "edge", "ink", "dim", "canvas"].forEach(function (k) {
+    P[k] = cs.getPropertyValue("--" + k).trim() || "#888";
+  });
+}
+readPalette();
+if (window.matchMedia) {
+  var mq = window.matchMedia("(prefers-color-scheme: dark)");
+  var onTheme = function () { readPalette(); draw(); };
+  if (mq.addEventListener) { mq.addEventListener("change", onTheme); }
+  else if (mq.addListener) { mq.addListener(onTheme); }
+}
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+function num(n) { return (n == null ? "–" : Number(n).toLocaleString()); }
+
+/* ---------- producer: the primary encoding (§5b) ----------
+   Deterministic is cool and solid; inferred is warm and dashed. Two channels
+   carrying one fact, so the split survives a reader who cannot see the hue and
+   a window too small to show the legend. */
+var DETERMINISTIC = { "PRODUCER_DDL": 1, "PRODUCER_GRAPH_IMPORT": 1, "ddl": 1, "graph-import": 1 };
+function isRead(prov) { return !!DETERMINISTIC[(prov && prov.producer) || ""]; }
+function producerName(prov) {
+  var p = (prov && prov.producer) || "";
+  return p.replace(/^PRODUCER_/, "").toLowerCase().replace(/_/g, "-") || "unknown";
+}
+
+/* =======================================================================
+   Loading
+   ======================================================================= */
+var jobId = (function () {
+  var m = location.pathname.match(/\/ui\/jobs\/([^\/]+)$/);
+  return m ? decodeURIComponent(m[1]) : "";
+})();
+
+function start() {
+  if (!jobId) { DOM("chooser").classList.add("on"); return; }
+  DOM("jobid").textContent = jobId;
+  load();
+}
+
+var pollTimer = null;
+function load() {
+  fetch(location.pathname + "/graph", { credentials: "same-origin", headers: { "Accept": "application/json" } })
+    .then(function (r) {
+      if (r.status === 401) { location.reload(); return null; }   // the 401 body is the sign-in page
+      if (!r.ok) { return r.text().then(function (t) { throw { status: r.status, text: t }; }); }
+      return r.json();
+    })
+    .then(function (doc) { if (doc) { G = doc; render(); } })
+    .catch(function (e) { notReady(e); });
+}
+
+/* A job with no result yet is not a failure and must not read like one. 412
+   means the request was fine and the state was not — pkg/service's own
+   distinction — so the page says which state, and keeps asking. */
+function notReady(e) {
+  var status = e && e.status;
+  var text = (e && e.text) || (e && e.message) || String(e);
+  DOM("failtitle").textContent = status === 412 ? "Nothing to draw yet" : "Could not load the graph";
+  DOM("failtext").textContent = text;
+  DOM("fail").classList.add("on");
+  if (status === 412) {
+    if (pollTimer) { clearTimeout(pollTimer); }
+    pollTimer = setTimeout(function () { DOM("fail").classList.remove("on"); load(); }, 3000);
+  }
+}
+
+/* =======================================================================
+   Turning the document into something drawable
+   ======================================================================= */
+function render() {
+  var res = G.result || {};
+  var counts = res.counts || {};
+  paintCounts(counts);
+  paintState();
+  paintBanners(counts);
+  measureBar();
+  build(res);
+  fit();
+  loop();
+  paintFindings(res);
+}
+
+function paintCounts(counts) {
+  var alarming = { violations: 1, conflicts: 1, chunks_unread: 1 };
+  var noticing = { duplicates: 1, guesses: 1, chunks_empty: 1 };
+  var cells = document.querySelectorAll("#counts .c");
+  for (var i = 0; i < cells.length; i++) {
+    var cell = cells[i], key = cell.getAttribute("data-count");
+    var v = counts[key];
+    cell.querySelector(".n").textContent = num(v);
+    cell.classList.toggle("alarm", !!alarming[key] && v > 0);
+    cell.classList.toggle("notice", !!noticing[key] && v > 0);
+  }
+}
+
+function paintState() {
+  var state = ((G.job || {}).state || "").replace(/^JOB_STATE_/, "");
+  var el = DOM("state");
+  el.textContent = G.held ? "held — needs review" : state.toLowerCase().replace(/_/g, " ");
+  el.classList.toggle("held", !!G.held);
+  el.classList.toggle("ok", !G.held && state === "SUCCEEDED");
+  DOM("bar").classList.toggle("held", !!G.held);
+  document.title = (G.held ? "HELD — " : "") + "alchemy — " + jobId;
+}
+
+function banner(kind, head, text) {
+  var el = document.createElement("div");
+  el.className = "banner " + kind;
+  el.innerHTML = "<b>" + esc(head) + "</b>" + esc(text);
+  DOM("banners").appendChild(el);
+}
+
+function paintBanners(counts) {
+  DOM("banners").innerHTML = "";
+  if (G.held) {
+    /* §7.3: the job is held and GetResult refuses its graph on purpose. The
+       view does not go round that; it says so, and shows the question instead
+       of an answer. */
+    banner("stop", "This job is held — there is no graph here",
+      // The service's own sentence first and verbatim, then this view's. They
+      // are joined by a dash rather than run together because the first is
+      // pkg/service explaining its refusal and the second is the page
+      // explaining what it drew instead, and a reader is owed the seam.
+      (G.because || "").replace(/\s*$/, "") +
+      " — What is drawn is the conflict itself: each side is a claim, coloured by what produced it. " +
+      "Answer them on the gRPC stream alchemy.v1.Alchemy/Review; the graph is delivered once they are.");
+  }
+  if (G.truncated) {
+    var shown = G.shown || {};
+    banner("cut", "This is a sample, not the graph",
+      "Drawing " + num(shown.entities) + " of " + num(counts.entities) + " entities and " +
+      num(shown.relations) + " of " + num(counts.relations) + " relations — a graph this size is a " +
+      "browser tab that stops responding, so the view stops reading at its budget. " +
+      "The numbers above are the whole graph's, not the sample's. " +
+      "For all of it: GET /v1/jobs/" + jobId + "/result:stream");
+  }
+  if (!G.held && counts.violations > 0) {
+    banner("stop", "This graph was delivered with violations in it",
+      num(counts.violations) + " record(s) say something the ontology does not allow. They are ringed on " +
+      "the graph and listed at the bottom left; the rest of the graph is usable without them (§7.3).");
+  }
+}
+
+/* Build the drawn graph.
+
+   For a delivered job that is the entities and relations. For a held job there
+   is no graph to draw and inventing one would be the exact mistake §7.3 exists
+   to prevent, so what is drawn instead is the conflicts: two claim nodes and a
+   red tether, each side coloured by its own producer. Nothing about it looks
+   like a graph of the corpus, which is the point. */
+function build(res) {
+  NODES = []; EDGES = []; BY_ID = {};
+  var flagged = {};
+
+  (res.violations || []).forEach(function (v) { flagged[v.subject] = "violation"; });
+  (res.conflicts || []).forEach(function (c) { flagged[c.subject] = "conflict"; });
+
+  if (G.held) {
+    (res.conflicts || []).forEach(function (c, i) {
+      var a = addNode("conflict:" + i + ":left", c.subject, (c.left || {}).statement || "left",
+        (c.left || {}).provenance, "claim");
+      var b = addNode("conflict:" + i + ":right", c.subject, (c.right || {}).statement || "right",
+        (c.right || {}).provenance, "claim");
+      a.finding = b.finding = "conflict";
+      a.detail = b.detail = c;
+      EDGES.push({ a: a, b: b, type: (c.kind || "").replace(/^CONFLICT_KIND_/, "").toLowerCase(),
+        kind: "conflict", detail: c });
+    });
+  } else {
+    (res.entities || []).forEach(function (e) {
+      var n = addNode(e.id, e.type, e.name || e.id, e.provenance, "entity");
+      n.detail = e;
+      if (flagged[e.id]) { n.finding = flagged[e.id]; }
+    });
+    (res.relations || []).forEach(function (r) {
+      var a = BY_ID[r.from], b = BY_ID[r.to];
+      if (!a || !b) { return; }
+      var key = r.from + " -[" + r.type + "]-> " + r.to;
+      EDGES.push({ a: a, b: b, type: r.type, prov: r.provenance, kind: "relation",
+        detail: r, finding: flagged[key] || null });
+      if (flagged[key]) { a.finding = a.finding || "violation"; b.finding = b.finding || "violation"; }
+    });
+    (res.duplicates || []).forEach(function (d) {
+      var a = BY_ID[(d.left || {}).id], b = BY_ID[(d.right || {}).id];
+      if (!a || !b) { return; }
+      a.finding = a.finding || "duplicate"; b.finding = b.finding || "duplicate";
+      EDGES.push({ a: a, b: b, type: "may be one node", kind: "duplicate", detail: d });
+    });
+  }
+
+  NODES.forEach(function (n) { n.deg = 0; });
+  EDGES.forEach(function (e) { e.a.deg++; e.b.deg++; });
+  seed();
+  settle(260);
+}
+
+function addNode(id, type, label, prov, kind) {
+  if (BY_ID[id]) { return BY_ID[id]; }
+  var n = { id: id, type: type || "", label: label || id, prov: prov || null, kind: kind,
+    x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, deg: 0, finding: null, detail: null };
+  NODES.push(n); BY_ID[id] = n;
+  return n;
+}
+
+/* =======================================================================
+   Force layout in three dimensions.
+
+   Plain repulsion with a distance cutoff, springs on the edges, and a weak
+   pull to the centre. The cutoff is what stops a graph with a few unconnected
+   nodes from inflating until the interesting part is a speck: without it every
+   node pushes every other one however far away it is, and nothing pulls back.
+   ======================================================================= */
+function seed() {
+  // A spiral on a sphere rather than random noise, so a layout starts spread
+  // out and settles instead of exploding out of one point.
+  var n = NODES.length;
+  for (var i = 0; i < n; i++) {
+    var t = (i + 0.5) / n, phi = Math.acos(1 - 2 * t), theta = Math.PI * (1 + Math.sqrt(5)) * i;
+    var r = 120 + 40 * Math.random();
+    NODES[i].x = r * Math.sin(phi) * Math.cos(theta);
+    NODES[i].y = r * Math.sin(phi) * Math.sin(theta);
+    NODES[i].z = r * Math.cos(phi);
+    NODES[i].vx = NODES[i].vy = NODES[i].vz = 0;
+  }
+}
+
+var CUTOFF = 340, REPEL = 2600, SPRING = 0.014, REST = 46, DAMP = 0.82;
+function settle(steps) {
+  for (var s = 0; s < steps; s++) { step(); }
+  recentre();
+}
+
+/* Move the layout's centroid to the origin.
+
+   The centering force is deliberately weak — strong enough to keep a graph
+   from wandering off, weak enough not to squash it into a ball — which means
+   the whole graph drifts as a unit. fit() measures from the origin, so a graph
+   that has drifted is framed around a point it is no longer at: with two nodes
+   and a conflict between them, that puts one of them off the screen. */
+function recentre() {
+  if (!NODES.length) { return; }
+  var cx = 0, cy = 0, cz = 0, i;
+  for (i = 0; i < NODES.length; i++) { cx += NODES[i].x; cy += NODES[i].y; cz += NODES[i].z; }
+  cx /= NODES.length; cy /= NODES.length; cz /= NODES.length;
+  for (i = 0; i < NODES.length; i++) { NODES[i].x -= cx; NODES[i].y -= cy; NODES[i].z -= cz; }
+}
+
+function step() {
+  var n = NODES.length, i, j, a, b, dx, dy, dz, d2, d, f;
+  for (i = 0; i < n; i++) {
+    a = NODES[i];
+    for (j = i + 1; j < n; j++) {
+      b = NODES[j];
+      dx = a.x - b.x; dy = a.y - b.y; dz = a.z - b.z;
+      d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > CUTOFF * CUTOFF || d2 === 0) { continue; }
+      d = Math.sqrt(d2) || 0.01;
+      f = REPEL / d2;
+      dx /= d; dy /= d; dz /= d;
+      a.vx += dx * f; a.vy += dy * f; a.vz += dz * f;
+      b.vx -= dx * f; b.vy -= dy * f; b.vz -= dz * f;
+    }
+  }
+  for (i = 0; i < EDGES.length; i++) {
+    a = EDGES[i].a; b = EDGES[i].b;
+    dx = b.x - a.x; dy = b.y - a.y; dz = b.z - a.z;
+    d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01;
+    f = (d - REST) * SPRING;
+    dx = dx / d * f; dy = dy / d * f; dz = dz / d * f;
+    a.vx += dx; a.vy += dy; a.vz += dz;
+    b.vx -= dx; b.vy -= dy; b.vz -= dz;
+  }
+  for (i = 0; i < n; i++) {
+    a = NODES[i];
+    a.vx -= a.x * 0.0016; a.vy -= a.y * 0.0016; a.vz -= a.z * 0.0016;
+    a.vx *= DAMP; a.vy *= DAMP; a.vz *= DAMP;
+    a.x += a.vx; a.y += a.vy; a.z += a.vz;
+  }
+}
+
+/* =======================================================================
+   Camera and renderer. Painter's algorithm on a 2D canvas: rotate, project,
+   sort by depth, draw back to front. No WebGL, so nothing to fail to compile
+   on a machine with an old driver either.
+   ======================================================================= */
+var cv = DOM("cv"), ctx = cv.getContext("2d");
+var cam = { yaw: 0.6, pitch: -0.35, dist: 620, focal: 620 };
+var W = 0, H = 0, DPR = 1;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.max(1, Math.round(W * DPR));
+  cv.height = Math.max(1, Math.round(H * DPR));
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  draw();
+}
+/* Two measurements rather than one constant.
+
+   --barh is where the counts bar ends and --topofs is where the banners do,
+   and they are separate because the banners appear and disappear: a held job
+   has one, a sampled graph has one, a clean job has none, and the panels below
+   have to clear whichever is actually there. Overlaying them instead would put
+   a red banner on top of the legend exactly when the legend is most needed. */
+function measureBar() {
+  var barh = DOM("bar").offsetHeight;
+  var root = document.documentElement.style;
+  root.setProperty("--barh", barh + "px");
+  root.setProperty("--topofs", (barh + DOM("banners").offsetHeight) + "px");
+}
+window.addEventListener("resize", function () { measureBar(); resize(); });
+if (window.ResizeObserver) {
+  new ResizeObserver(resize).observe(DOM("scene"));
+  new ResizeObserver(measureBar).observe(DOM("bar"));
+  new ResizeObserver(measureBar).observe(DOM("banners"));
+}
+
+function project(p) {
+  var cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  var cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  var x = p.x * cy - p.z * sy;
+  var z = p.x * sy + p.z * cy;
+  var y = p.y * cp - z * sp;
+  z = p.y * sp + z * cp;
+  var depth = z + cam.dist;
+  if (depth < 1) { depth = 1; }
+  var k = cam.focal / depth;
+  return { sx: W / 2 + x * k, sy: H / 2 + y * k, k: k, depth: depth };
+}
+
+/* Frame the graph.
+
+   The camera distance is solved for rather than picked, because the layout's
+   own scale is not a constant: three nodes settle into a ball thirty units
+   across and three thousand settle into one a thousand across, and a fixed
+   distance makes one of those a speck and the other a wall. What is fixed is
+   the fraction of the window the graph should occupy; the distance follows
+   from it. The floor keeps the camera outside the graph rather than inside it,
+   which is the one arrangement with no sensible picture. */
+function fit() {
+  var r = 1;
+  NODES.forEach(function (n) {
+    var d = Math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+    if (d > r) { r = d; }
+  });
+  var span = Math.min(W, H) || 620;
+  cam.focal = span * 0.95;
+  cam.dist = Math.max(r * 1.25 + 40, cam.focal * r / (span * 0.40));
+  draw();
+}
+
+function visible(prov, finding) {
+  if (onlyFindings && !finding) { return false; }
+  if (onlyGuessed && isRead(prov)) { return false; }
+  return true;
+}
+
+function draw() {
+  if (!ctx) { return; }
+  ctx.clearRect(0, 0, W, H);
+  if (!NODES.length) { return; }
+
+  // The scale at the centre plane. Sizes are expressed relative to it rather
+  // than to the raw projection factor, so a node's radius is a number of
+  // screen pixels that means the same thing in a graph of three and a graph of
+  // three thousand — the projection factor alone is a hundred times larger in
+  // the first, and using it directly draws three discs the size of coins.
+  cam.kRef = cam.focal / cam.dist;
+
+  var i;
+  for (i = 0; i < NODES.length; i++) { NODES[i].p = project(NODES[i]); }
+
+  // Edges first, back to front, so a line never sits on top of the node it
+  // should be behind.
+  var edges = EDGES.slice().sort(function (a, b) {
+    return (b.a.p.depth + b.b.p.depth) - (a.a.p.depth + a.b.p.depth);
+  });
+  for (i = 0; i < edges.length; i++) { drawEdge(edges[i]); }
+
+  var nodes = NODES.slice().sort(function (a, b) { return b.p.depth - a.p.depth; });
+  for (i = 0; i < nodes.length; i++) { drawNode(nodes[i]); }
+}
+
+function drawEdge(e) {
+  var shown = e.kind === "relation" ? visible(e.prov, e.finding) : true;
+  var dim = !shown;
+  var read = e.kind === "relation" ? isRead(e.prov) : false;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(e.a.p.sx, e.a.p.sy);
+  ctx.lineTo(e.b.p.sx, e.b.p.sy);
+
+  if (e.kind === "conflict") {
+    ctx.strokeStyle = P.bad; ctx.lineWidth = 3; ctx.setLineDash([]);
+    ctx.globalAlpha = 0.95;
+  } else if (e.kind === "duplicate") {
+    ctx.strokeStyle = P.dup; ctx.lineWidth = 2; ctx.setLineDash([2, 5]);
+    ctx.globalAlpha = 0.85;
+  } else if (e.finding) {
+    ctx.strokeStyle = P.bad; ctx.lineWidth = 2.4; ctx.setLineDash(read ? [] : [5, 4]);
+    ctx.globalAlpha = 0.95;
+  } else {
+    // The encoding: cool and solid for a machine that read it, warm and dashed
+    // for a model that decided it, and the model's own confidence as opacity.
+    ctx.strokeStyle = read ? P.read : P.guess;
+    ctx.lineWidth = read ? 1.5 : 1.2;
+    ctx.setLineDash(read ? [] : [5, 4]);
+    var conf = (e.prov && e.prov.confidence) || 0;
+    ctx.globalAlpha = dim ? 0.05 : (read ? 0.55 : 0.34 + 0.4 * Math.min(1, conf));
+  }
+  if (selected && (selected === e || selected === e.a || selected === e.b)) {
+    ctx.lineWidth += 1.6; ctx.globalAlpha = 1;
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawNode(n) {
+  var read = isRead(n.prov);
+  var shown = visible(n.prov, n.finding);
+  // Perspective as a cue, not as the scale: rel is 1 at the centre plane and
+  // departs from it only by how near or far this node actually is.
+  var rel = Math.max(0.35, Math.min(2.4, n.p.k / cam.kRef));
+  var r = (3.4 + Math.min(7, n.deg * 0.55)) * rel;
+  if (r < 1.2) { r = 1.2; }
+
+  ctx.save();
+  ctx.globalAlpha = shown ? 1 : 0.07;
+
+  if (n.finding) {
+    // A cheap bloom: an additive radial wash under the ringed node, so a
+    // finding is findable by eye in a crowd without a label being legible.
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    var glow = ctx.createRadialGradient(n.p.sx, n.p.sy, 0, n.p.sx, n.p.sy, r * 5);
+    var tint = n.finding === "duplicate" ? P.dup : P.bad;
+    glow.addColorStop(0, tint); glow.addColorStop(1, "transparent");
+    ctx.globalAlpha = shown ? 0.30 : 0.05;
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(n.p.sx, n.p.sy, r * 5, 0, 6.284); ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.beginPath();
+  ctx.arc(n.p.sx, n.p.sy, r, 0, 6.284);
+  ctx.fillStyle = read ? P.read : P.guess;
+  ctx.fill();
+
+  // The second channel again, on the node: a solid ring for what was read, a
+  // dashed one for what was guessed.
+  ctx.lineWidth = Math.max(1, r * 0.32);
+  ctx.setLineDash(read ? [] : [r * 0.9, r * 0.7]);
+  ctx.strokeStyle = n.finding ? (n.finding === "duplicate" ? P.dup : P.bad) : (read ? P.read : P.guess);
+  if (n.finding) { ctx.lineWidth = Math.max(1.6, r * 0.45); ctx.setLineDash([]); }
+  ctx.beginPath();
+  ctx.arc(n.p.sx, n.p.sy, r + ctx.lineWidth, 0, 6.284);
+  ctx.stroke();
+
+  if (selected === n) {
+    ctx.setLineDash([]); ctx.strokeStyle = P.ink; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(n.p.sx, n.p.sy, r * 2.4, 0, 6.284); ctx.stroke();
+  }
+
+  if (showLabels && shown && (n.deg > 1 || n.finding || NODES.length < 220 || selected === n)) {
+    ctx.setLineDash([]);
+    ctx.globalAlpha = shown ? Math.max(0.35, Math.min(1, rel)) : 0.08;
+    ctx.fillStyle = P.ink;
+    ctx.font = Math.max(9, Math.min(14, 11 * rel)) + "px ui-sans-serif,system-ui,sans-serif";
+    ctx.fillText(n.label.length > 26 ? n.label.slice(0, 25) + "…" : n.label, n.p.sx + r + 5, n.p.sy + 4);
+  }
+  ctx.restore();
+}
+
+/* ---------- the loop: settle while warm, orbit while asked ---------- */
+var warm = 0;
+function loop() {
+  requestAnimationFrame(loop);
+  var moved = false;
+  if (warm > 0) { step(); warm--; moved = true; }
+  if (spinning) { cam.yaw += 0.0035; moved = true; }
+  if (moved) { draw(); }
+}
+
+/* =======================================================================
+   Interaction
+   ======================================================================= */
+var drag = null;
+cv.addEventListener("pointerdown", function (ev) {
+  cv.setPointerCapture(ev.pointerId);
+  drag = { x: ev.clientX, y: ev.clientY, yaw: cam.yaw, pitch: cam.pitch, moved: 0 };
+  cv.classList.add("dragging");
+});
+cv.addEventListener("pointermove", function (ev) {
+  if (!drag) { return; }
+  var dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
+  cam.yaw = drag.yaw + dx * 0.006;
+  cam.pitch = Math.max(-1.5, Math.min(1.5, drag.pitch + dy * 0.006));
+  draw();
+});
+cv.addEventListener("pointerup", function (ev) {
+  cv.classList.remove("dragging");
+  var was = drag; drag = null;
+  if (was && was.moved < 5) { pick(ev); }
+});
+cv.addEventListener("pointercancel", function () { drag = null; cv.classList.remove("dragging"); });
+cv.addEventListener("wheel", function (ev) {
+  ev.preventDefault();
+  cam.dist = Math.max(80, Math.min(9000, cam.dist * (ev.deltaY > 0 ? 1.12 : 0.89)));
+  draw();
+}, { passive: false });
+
+function pick(ev) {
+  var rect = cv.getBoundingClientRect();
+  var mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+  var best = null, bestD = 22 * 22;
+  for (var i = 0; i < NODES.length; i++) {
+    var n = NODES[i];
+    if (!n.p) { continue; }
+    var dx = n.p.sx - mx, dy = n.p.sy - my, d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = n; }
+  }
+  select(best);
+}
+
+function select(n) {
+  selected = n;
+  if (!n) { DOM("detail").classList.remove("on"); draw(); return; }
+  showDetail(n);
+  draw();
+}
+
+/* The detail panel is where §5b's promise is cashed: every field of the
+   provenance, named, for one record. "Attributable" is only true if a person
+   can get from a dot on a screen to the chunk of the file it came from. */
+function showDetail(n) {
+  var d = n.detail || {};
+  DOM("dtitle").textContent = n.label;
+  var prov = n.prov || {};
+  var read = isRead(prov);
+  DOM("dsub").innerHTML =
+    '<span class="tag ' + (read ? "read" : "guess") + '">' + esc(read ? "read" : "guessed") + "</span> " +
+    esc(n.type || "");
+
+  var rows = [];
+  function row(k, v) { if (v !== undefined && v !== null && v !== "" && v !== 0) { rows.push([k, v]); } }
+  row("producer", producerName(prov));
+  row("source", prov.source);
+  row("chunk", prov.chunk === -1 ? "— (not chunked)" : prov.chunk);
+  row("model", prov.model);
+  row("ontology", prov.ontology);
+  row("chunking", prov.chunking);
+  row("confidence", prov.confidence ? prov.confidence.toFixed(2) : null);
+  row("reviewed by", prov.reviewed_by);
+  row("rule set", prov.rule_set);
+  row("ruled by", prov.ruled_by);
+  if (n.finding) { row("finding", n.finding); }
+  if (d.detail) { row("detail", d.detail); }
+  if (d.kind) { row("kind", String(d.kind).replace(/^[A-Z_]*_KIND_/, "").toLowerCase()); }
+  if (d.left && d.right) {
+    row("left", (d.left.statement || d.left.name || "") + " — " + ((d.left.provenance || {}).source || ""));
+    row("right", (d.right.statement || d.right.name || "") + " — " + ((d.right.provenance || {}).source || ""));
+  }
+  if (d.attributes) {
+    Object.keys(d.attributes).forEach(function (k) { row(k, JSON.stringify(d.attributes[k])); });
+  }
+
+  DOM("dfields").innerHTML = rows.map(function (r) {
+    return "<dt>" + esc(r[0]) + "</dt><dd>" + esc(r[1]) + "</dd>";
+  }).join("");
+  DOM("detail").classList.add("on");
+}
+
+/* ---------- findings list ---------- */
+function paintFindings(res) {
+  var items = [];
+  (res.conflicts || []).forEach(function (c, i) {
+    items.push({ cls: "conflict", s: c.subject, d: c.detail, node: G.held ? BY_ID["conflict:" + i + ":left"] : BY_ID[c.subject], raw: c });
+  });
+  (res.violations || []).forEach(function (v) {
+    items.push({ cls: "violation", s: v.subject, d: v.detail, node: BY_ID[v.subject], raw: v });
+  });
+  (res.duplicates || []).forEach(function (d) {
+    items.push({ cls: "duplicate", s: d.subject, d: d.detail, node: BY_ID[(d.left || {}).id], raw: d });
+  });
+  (res.guesses || []).forEach(function (g) {
+    items.push({ cls: "guess", s: g.field + " → " + g.chosen_as, d: g.reason, node: null, raw: g });
+  });
+
+  DOM("findcount").textContent = items.length ? "(" + items.length + ")" : "(none)";
+  var ul = DOM("findlist");
+  ul.innerHTML = "";
+  items.slice(0, 400).forEach(function (it) {
+    var li = document.createElement("li");
+    li.className = it.cls;
+    li.innerHTML = '<span class="s">' + esc(it.s) + '</span><span class="d">' + esc(it.d || it.cls) + "</span>";
+    li.addEventListener("click", function () {
+      if (it.node) { select(it.node); }
+      else {
+        DOM("dtitle").textContent = it.s;
+        DOM("dsub").textContent = it.cls;
+        DOM("dfields").innerHTML = Object.keys(it.raw).map(function (k) {
+          return "<dt>" + esc(k) + "</dt><dd>" + esc(typeof it.raw[k] === "object" ? JSON.stringify(it.raw[k]) : it.raw[k]) + "</dd>";
+        }).join("");
+        DOM("detail").classList.add("on");
+      }
+    });
+    ul.appendChild(li);
+  });
+}
+
+/* ---------- controls ---------- */
+DOM("spin").addEventListener("click", function () {
+  spinning = !spinning;
+  DOM("spin").classList.toggle("on", spinning);
+});
+DOM("fit").addEventListener("click", function () { warm = 120; fit(); });
+DOM("detailclose").addEventListener("click", function () { select(null); });
+DOM("only-guessed").addEventListener("change", function (e) { onlyGuessed = e.target.checked; draw(); });
+DOM("only-findings").addEventListener("change", function (e) { onlyFindings = e.target.checked; draw(); });
+DOM("show-labels").addEventListener("change", function (e) { showLabels = e.target.checked; draw(); });
+DOM("retry").addEventListener("click", function () { DOM("fail").classList.remove("on"); load(); });
+DOM("out").addEventListener("click", function () {
+  fetch("/ui/session", { method: "DELETE", credentials: "same-origin" })
+    .then(function () { location.reload(); });
+});
+DOM("pick").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  var id = DOM("pickid").value.trim();
+  if (id) { location.pathname = "/ui/jobs/" + encodeURIComponent(id); }
+});
+
+/* ---------- go ---------- */
+try {
+  measureBar();
+  resize();
+  start();
+} catch (err) {
+  // The error boundary. A renderer that throws must not leave a blank page: the
+  // findings are the reason to open this view at all, so they are printed as a
+  // table, and the error is printed with them rather than only in a console
+  // nobody has open.
+  DOM("failtitle").textContent = "The graph could not be drawn";
+  DOM("failtext").textContent = (err && err.stack) || String(err);
+  var res = (G && G.result) || {};
+  var rows = [];
+  ["conflicts", "violations", "duplicates"].forEach(function (kind) {
+    (res[kind] || []).forEach(function (f) {
+      rows.push("<tr><td>" + esc(kind) + "</td><td>" + esc(f.subject) + "</td><td>" + esc(f.detail || "") + "</td></tr>");
+    });
+  });
+  DOM("failtable").innerHTML = rows.length
+    ? "<table><thead><tr><th>kind</th><th>subject</th><th>detail</th></tr></thead><tbody>" + rows.join("") + "</tbody></table>"
+    : "";
+  DOM("fail").classList.add("on");
+}
+</script>
+</body>
+</html>

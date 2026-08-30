@@ -1,0 +1,112 @@
+<!doctype html>
+<!--
+  The body of a 401.
+
+  It is not a route and it is not an exemption: every view route answers 401 to
+  a caller with no credential, and this is what that answer looks like when the
+  caller is a browser. It contains no job, no count and no name — serving it to
+  a stranger tells them nothing the open port did not.
+
+  The token is sent in an Authorization header rather than in a form body, so
+  it travels the way it travels on every other route and is redacted by the
+  same infrastructure that already redacts it. The form therefore cannot be a
+  plain <form> submit; it is a fetch, and the value is never assigned anywhere
+  that outlives the request.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="5" cy="8" r="3.2" fill="%231668c9"/><circle cx="11.5" cy="8" r="2.6" fill="none" stroke="%23c2740b" stroke-width="1.6" stroke-dasharray="2 1.6"/></svg>'>
+<title>alchemy — sign in</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#f6f7f9; --panel:#ffffff; --line:#dcdfe6; --ink:#1c2330; --dim:#69738a;
+    --accent:#2563eb; --bad:#b42318;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0a0d14; --panel:#111725; --line:#232c3f; --ink:#e6ecf7; --dim:#7d8aa3;
+           --accent:#5b8cff; --bad:#ff8b7d; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);color:var(--ink);padding:24px;
+    font:14px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  main{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:22px}
+  h1{margin:0 0 4px;font-size:16px;letter-spacing:.01em}
+  p{margin:0 0 16px;color:var(--dim);font-size:13px}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin-bottom:6px}
+  input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
+    background:var(--bg);color:var(--ink);font:inherit}
+  input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  button{margin-top:12px;width:100%;padding:9px;border:0;border-radius:8px;background:var(--accent);
+    color:#fff;font:inherit;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.55;cursor:default}
+  .why{margin-top:16px;font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:12px}
+  code{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
+  #err{margin-top:10px;color:var(--bad);font-size:13px;min-height:18px}
+</style>
+</head>
+<body>
+<main>
+  <h1>alchemy</h1>
+  <p>This view needs the same bearer token every RPC needs.</p>
+
+  <form id="f" autocomplete="off">
+    <label for="t">Bearer token</label>
+    <input id="t" type="password" autocomplete="current-password" spellcheck="false" autofocus>
+    <button id="go" type="submit">Sign in</button>
+  </form>
+  <div id="err" role="alert"></div>
+
+  <div class="why">
+    The token is sent once, in an <code>Authorization</code> header, to
+    <code>/ui/session</code>. What comes back is a short-lived cookie that
+    stands for it — the token itself is never put in a URL, so it lands in no
+    history, no access log and no referrer.
+    <noscript><br><br><strong>Scripting is off.</strong> The token has to be
+    sent in a header, which a plain form cannot do. Call
+    <code>POST /ui/session</code> with <code>Authorization: Bearer …</code>,
+    or use the gRPC API directly.</noscript>
+  </div>
+</main>
+
+<script>
+(function () {
+  var form = document.getElementById("f");
+  var field = document.getElementById("t");
+  var button = document.getElementById("go");
+  var err = document.getElementById("err");
+
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var token = field.value.trim();
+    if (!token) { err.textContent = "Enter the token."; return; }
+    button.disabled = true;
+    err.textContent = "";
+    fetch("/ui/session", {
+      method: "POST",
+      // Same-origin only: the cookie that comes back is SameSite=Strict and
+      // there is nothing to gain from ever sending this anywhere else.
+      credentials: "same-origin",
+      headers: { "Authorization": "Bearer " + token }
+    }).then(function (r) {
+      // The field is cleared whichever way this went. The token stays in this
+      // page's memory for exactly as long as the request took.
+      field.value = "";
+      if (r.status === 204) { location.reload(); return; }
+      button.disabled = false;
+      err.textContent = r.status === 401
+        ? "That token was refused."
+        : "Sign-in failed (" + r.status + ").";
+    }).catch(function () {
+      button.disabled = false;
+      err.textContent = "Could not reach the service.";
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -16,6 +16,16 @@
 // pieces of content negotiation (raw uploads, Server-Sent Events, and the
 // status mapping) and one refusal (Review, which has no honest translation).
 // Each has its own file and its own reason.
+//
+// There is one deliberate exception to "no route that does not correspond to
+// an RPC", and it is declared rather than assumed: the browser view under /ui
+// (view.go). A page backs no RPC, so it cannot be a translation of one; what
+// keeps it inside the rule's intent is that every one of its handlers ends in
+// an RPC call carrying the caller's own credential, so it can ask the service
+// nothing a buyer with curl could not ask. The exception is enumerated in
+// Views(), each entry carrying the sentence that justifies it, for the same
+// reason Refusals() is enumerated: an exception a test reads is one nobody can
+// take by accident.
 package gateway
 
 // The generated half of this package's world — the .pb.gw.go handlers and the
@@ -71,9 +81,15 @@ func New(ctx context.Context, conn *grpc.ClientConn) (http.Handler, error) {
 			return nil, err
 		}
 	}
+	// The browser view is mounted in front of the translated routes rather than
+	// on them. It is the one part of this package that backs no RPC, which is
+	// why it is declared in Views() and reserved a prefix of its own: see
+	// view.go for the argument, and routes_test.go for the test that will not
+	// let the exception be taken quietly.
+	//
 	// rawUploads wraps rather than routes: it decides how one body is spelled
 	// and never where a request goes.
-	return rawUploads(sseHeaders(mux)), nil
+	return rawUploads(sseHeaders(viewRoutes(mux, newViewer(client)))), nil
 }
 
 // jsonMarshaler is the JSON a buyer reads, and its two settings are both
