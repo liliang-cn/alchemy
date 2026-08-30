@@ -156,6 +156,17 @@ func TestTheBoundHoldsWhenEveryNodeDecidesAtOnce(t *testing.T) {
 		cluster[i] = newShared(t, pg.pool(), cfg)
 	}
 
+	// The hold is five handoffs, measured against this store rather than assumed, because the
+	// second assertion below — that the bound was actually reached — is only
+	// meaningful when two holders can overlap, and whether they can depends on
+	// how long a handoff takes. A slot travels release → grant → acquire, at
+	// least one round trip; against a database on the same machine that is
+	// well under a millisecond and against one across a LAN it is more. A hold
+	// fixed at a millisecond therefore passes on a laptop and fails on a real
+	// deployment while the bound is being enforced perfectly, which is a test
+	// asserting the network rather than the budget.
+	hold := 5 * handoff(t, cluster[0])
+
 	var p peak
 	var wg sync.WaitGroup
 	for _, node := range cluster {
@@ -170,7 +181,7 @@ func TestTheBoundHoldsWhenEveryNodeDecidesAtOnce(t *testing.T) {
 						return
 					}
 					p.enter()
-					time.Sleep(time.Millisecond)
+					time.Sleep(hold)
 					p.leave()
 					l.Release(nil)
 				}
@@ -437,4 +448,37 @@ func TestHeartbeatingAReclaimedSlotReportsItIsGone(t *testing.T) {
 	if err := l.Heartbeat(context.Background()); !errors.Is(err, budget.ErrLeaseExpired) {
 		t.Fatalf("Heartbeat on a reclaimed slot = %v, want ErrLeaseExpired", err)
 	}
+}
+
+// handoff is how long one uncontended acquire-and-release costs against this
+// store. It is measured rather than guessed: the number is the store's latency,
+// which is a property of somebody's deployment and not of this package.
+//
+// A short warm-up first, because the first call pays for a connection the pool
+// has not opened yet and that is not what a handoff costs afterwards.
+func handoff(t *testing.T, b *budget.Postgres) time.Duration {
+	t.Helper()
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		l, err := b.Acquire(ctx, "warmup")
+		if err != nil {
+			t.Fatalf("warm-up Acquire: %v", err)
+		}
+		l.Release(nil)
+	}
+	const n = 10
+	start := time.Now()
+	for i := 0; i < n; i++ {
+		l, err := b.Acquire(ctx, "warmup")
+		if err != nil {
+			t.Fatalf("Acquire: %v", err)
+		}
+		l.Release(nil)
+	}
+	d := time.Since(start) / n
+	if d < 50*time.Microsecond {
+		d = 50 * time.Microsecond
+	}
+	t.Logf("one uncontended acquire+release against this store: %v", d)
+	return d
 }
