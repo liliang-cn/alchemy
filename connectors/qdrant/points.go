@@ -171,6 +171,8 @@ const (
 	keyProvReviewedBy    = "prov_reviewed_by"
 	keyProvRuleSet       = "prov_rule_set"
 	keyProvRuledBy       = "prov_ruled_by"
+	keyProvBy            = "prov_by"
+	keyProvAt            = "prov_at"
 
 	// The load marker's own keys. They are on exactly one point per load, and
 	// they are the whole of what this store has instead of a catalog: which
@@ -225,6 +227,12 @@ func provenancePayload(p alchemy.Provenance, into map[string]any) map[string]any
 		keyProvReviewedBy: p.ReviewedBy,
 		keyProvRuleSet:    p.RuleSet,
 		keyProvRuledBy:    p.RuledBy,
+		// The asserter and the date, for alchemy.ProducerHuman: the only thing
+		// that tells a fact a named person stated from one a file happened to
+		// contain. A store that kept the producer and dropped these would hold
+		// "a person said so" with no way to ask which.
+		keyProvBy: p.By,
+		keyProvAt: p.At,
 	} {
 		if v != "" {
 			into[k] = v

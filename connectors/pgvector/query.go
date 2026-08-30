@@ -279,13 +279,24 @@ func (l *Loader) scanRelations(ctx context.Context, sql string, load string, arg
 	return out, seqs, rows.Err()
 }
 
-// provDest is the scan target list for provCols, in the same order. It is next
-// to provRow and provNames on purpose: three lists that must agree, written so
-// that a field added to alchemy.Provenance breaks the build in all three.
+// provDest is the scan target list for provCols, in the same order.
+//
+// It is next to provRow and provCols because the three must agree, and the
+// comment here used to claim that a field added to alchemy.Provenance would
+// break the build in all three. It does not and it cannot: every element is an
+// `any`, so a list that is one short compiles perfectly and fails at run time
+// as a scan-arity error, or -- worse -- a list that is the right length with
+// two fields transposed compiles, runs, and writes each value into the other's
+// column. Provenance grew By and At and nothing here noticed.
+//
+// TestTheThreeProvenanceListsCoverEveryField is the check that was missing. It
+// counts the struct's fields by reflection and holds all three lists to it, so
+// the next field added fails a test that names which list forgot it.
 func provDest(p *alchemy.Provenance) []any {
 	return []any{
 		&p.Source, &p.Chunk, &p.Producer, new(bool), &p.Model,
 		&p.Ontology, &p.Chunking, &p.Confidence, &p.ReviewedBy, &p.RuleSet, &p.RuledBy,
+		&p.By, &p.At,
 	}
 }
 

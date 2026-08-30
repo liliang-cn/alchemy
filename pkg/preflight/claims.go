@@ -217,3 +217,53 @@ func outsideJSON(v any) string {
 		return fmt.Sprintf("%T", v)
 	}
 }
+
+// assertions checks the one obligation alchemy.ProducerHuman carries: a person
+// asserted this, so the record must say which person and when.
+//
+// Only that producer is checked. Every other one names a document in Source
+// and there is nobody to name beyond it — a foreign key is not asserted by
+// anybody, it is what a schema says — so demanding a signature from them would
+// be demanding a fact that does not exist. This is the check that keeps
+// "a named person asserted it" from degrading into "somebody typed it".
+func assertions(res alchemy.Result) []Defect {
+	var out []Defect
+	report := func(subject, what string) {
+		out = append(out, Defect{
+			Kind:     AssertionUnsigned,
+			Severity: SeverityReport,
+			Subject:  subject,
+			Detail: fmt.Sprintf("producer is %q and %s; an assertion nobody is named for "+
+				"cannot be asked about, which is the whole of what made it admissible",
+				alchemy.ProducerHuman, what),
+		})
+	}
+	missing := func(p alchemy.Provenance) string {
+		switch {
+		case p.By == "" && p.At == "":
+			return "neither a person nor a date is recorded"
+		case p.By == "":
+			return "no person is named"
+		case p.At == "":
+			return "no date is recorded"
+		}
+		return ""
+	}
+	for _, e := range res.Entities {
+		if e.Provenance.Producer != alchemy.ProducerHuman {
+			continue
+		}
+		if what := missing(e.Provenance); what != "" {
+			report(e.ID, what)
+		}
+	}
+	for _, r := range res.Relations {
+		if r.Provenance.Producer != alchemy.ProducerHuman {
+			continue
+		}
+		if what := missing(r.Provenance); what != "" {
+			report(r.Identity(), what)
+		}
+	}
+	return out
+}

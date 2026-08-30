@@ -48,6 +48,9 @@ const (
 	Alchemy_UploadSource_FullMethodName = "/alchemy.v1.Alchemy/UploadSource"
 	Alchemy_WatchJob_FullMethodName     = "/alchemy.v1.Alchemy/WatchJob"
 	Alchemy_Review_FullMethodName       = "/alchemy.v1.Alchemy/Review"
+	Alchemy_ListFindings_FullMethodName = "/alchemy.v1.Alchemy/ListFindings"
+	Alchemy_Decide_FullMethodName       = "/alchemy.v1.Alchemy/Decide"
+	Alchemy_Assert_FullMethodName       = "/alchemy.v1.Alchemy/Assert"
 )
 
 // AlchemyClient is the client API for Alchemy service.
@@ -108,6 +111,56 @@ type AlchemyClient interface {
 	// document says the same. Refusing is a translation of "this cannot be
 	// translated"; pretending is not.
 	Review(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ReviewDecision, ReviewItem], error)
+	// ListFindings and Decide are review for a job that has already stopped, and
+	// they are the reason the paragraph above is about mid-run review rather
+	// than about review.
+	//
+	// What Review's bidirectional shape buys is that a decision reaches an
+	// extraction that has not run yet. That property is real and it is
+	// untranslatable: a reviewer answers item three while item four is still
+	// arriving, and an HTTP request body must be finished before its response is
+	// read. So Review stays unannotated and the gateway still answers its path
+	// 501.
+	//
+	// A job sitting at NEEDS_REVIEW is not that situation. Nothing is running.
+	// There is no item four. The findings are a finite list in a finished result
+	// and the decisions are a batch, so a list and a batch is not a degradation
+	// of the stream — it is what that case actually is, and forcing it through a
+	// bidirectional connection was making every HTTP client pay for a property
+	// this case does not have. The consequence until now was that a buyer could
+	// curl the graph and could not curl "this edge is wrong".
+	//
+	// The two shapes are one mechanism: a decision submitted here is the same
+	// ReviewDecision, applied by the same code, and lands in the same
+	// provenance. What differs is when it may be sent.
+	ListFindings(ctx context.Context, in *ListFindingsRequest, opts ...grpc.CallOption) (*Findings, error)
+	Decide(ctx context.Context, in *DecideRequest, opts ...grpc.CallOption) (*DecideResponse, error)
+	// Assert records a fact somebody knows and no document states.
+	//
+	// It is not a hole in §4. Nothing is stored that a job does not already
+	// store, the graph comes back as JSON, and where it goes afterwards is the
+	// caller's business exactly as it is for every other result. What it removes
+	// is a detour: until now the only way in was to write the fact into a file,
+	// upload it, create a job, poll it and fetch the result — five steps and an
+	// invented document for one triple — and it arrived stamped
+	// PRODUCER_GRAPH_IMPORT, "an existing graph already asserted it", which is
+	// not what happened and cost the record the one thing that made it worth
+	// admitting: a person who can be asked.
+	//
+	// It is synchronous, and that is not an optimisation. An assertion has no
+	// chunking, no model call and no embedding; it is a parse and a check
+	// against the ontology. There is nothing to poll, and returning a job id for
+	// a caller to poll would be inventing asynchrony an operation does not have.
+	// The Result carries the job id in its `job` field, so the record is still
+	// traceable through GetJob like any other.
+	//
+	// The ontology is optional and checked when given, which is the rule graph
+	// sources already follow. An assertion under an ontology that does not
+	// declare its types comes back with violations naming them, rather than a
+	// refusal: §5 makes the graph never more permissive than the vocabulary, and
+	// a person asserting a type nobody declared is exactly the case that has to
+	// be visible instead of quietly accepted.
+	Assert(ctx context.Context, in *AssertRequest, opts ...grpc.CallOption) (*Result, error)
 }
 
 type alchemyClient struct {
@@ -222,6 +275,36 @@ func (c *alchemyClient) Review(ctx context.Context, opts ...grpc.CallOption) (gr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Alchemy_ReviewClient = grpc.BidiStreamingClient[ReviewDecision, ReviewItem]
 
+func (c *alchemyClient) ListFindings(ctx context.Context, in *ListFindingsRequest, opts ...grpc.CallOption) (*Findings, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Findings)
+	err := c.cc.Invoke(ctx, Alchemy_ListFindings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *alchemyClient) Decide(ctx context.Context, in *DecideRequest, opts ...grpc.CallOption) (*DecideResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DecideResponse)
+	err := c.cc.Invoke(ctx, Alchemy_Decide_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *alchemyClient) Assert(ctx context.Context, in *AssertRequest, opts ...grpc.CallOption) (*Result, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Result)
+	err := c.cc.Invoke(ctx, Alchemy_Assert_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AlchemyServer is the server API for Alchemy service.
 // All implementations must embed UnimplementedAlchemyServer
 // for forward compatibility.
@@ -280,6 +363,56 @@ type AlchemyServer interface {
 	// document says the same. Refusing is a translation of "this cannot be
 	// translated"; pretending is not.
 	Review(grpc.BidiStreamingServer[ReviewDecision, ReviewItem]) error
+	// ListFindings and Decide are review for a job that has already stopped, and
+	// they are the reason the paragraph above is about mid-run review rather
+	// than about review.
+	//
+	// What Review's bidirectional shape buys is that a decision reaches an
+	// extraction that has not run yet. That property is real and it is
+	// untranslatable: a reviewer answers item three while item four is still
+	// arriving, and an HTTP request body must be finished before its response is
+	// read. So Review stays unannotated and the gateway still answers its path
+	// 501.
+	//
+	// A job sitting at NEEDS_REVIEW is not that situation. Nothing is running.
+	// There is no item four. The findings are a finite list in a finished result
+	// and the decisions are a batch, so a list and a batch is not a degradation
+	// of the stream — it is what that case actually is, and forcing it through a
+	// bidirectional connection was making every HTTP client pay for a property
+	// this case does not have. The consequence until now was that a buyer could
+	// curl the graph and could not curl "this edge is wrong".
+	//
+	// The two shapes are one mechanism: a decision submitted here is the same
+	// ReviewDecision, applied by the same code, and lands in the same
+	// provenance. What differs is when it may be sent.
+	ListFindings(context.Context, *ListFindingsRequest) (*Findings, error)
+	Decide(context.Context, *DecideRequest) (*DecideResponse, error)
+	// Assert records a fact somebody knows and no document states.
+	//
+	// It is not a hole in §4. Nothing is stored that a job does not already
+	// store, the graph comes back as JSON, and where it goes afterwards is the
+	// caller's business exactly as it is for every other result. What it removes
+	// is a detour: until now the only way in was to write the fact into a file,
+	// upload it, create a job, poll it and fetch the result — five steps and an
+	// invented document for one triple — and it arrived stamped
+	// PRODUCER_GRAPH_IMPORT, "an existing graph already asserted it", which is
+	// not what happened and cost the record the one thing that made it worth
+	// admitting: a person who can be asked.
+	//
+	// It is synchronous, and that is not an optimisation. An assertion has no
+	// chunking, no model call and no embedding; it is a parse and a check
+	// against the ontology. There is nothing to poll, and returning a job id for
+	// a caller to poll would be inventing asynchrony an operation does not have.
+	// The Result carries the job id in its `job` field, so the record is still
+	// traceable through GetJob like any other.
+	//
+	// The ontology is optional and checked when given, which is the rule graph
+	// sources already follow. An assertion under an ontology that does not
+	// declare its types comes back with violations naming them, rather than a
+	// refusal: §5 makes the graph never more permissive than the vocabulary, and
+	// a person asserting a type nobody declared is exactly the case that has to
+	// be visible instead of quietly accepted.
+	Assert(context.Context, *AssertRequest) (*Result, error)
 	mustEmbedUnimplementedAlchemyServer()
 }
 
@@ -313,6 +446,15 @@ func (UnimplementedAlchemyServer) WatchJob(*WatchJobRequest, grpc.ServerStreamin
 }
 func (UnimplementedAlchemyServer) Review(grpc.BidiStreamingServer[ReviewDecision, ReviewItem]) error {
 	return status.Errorf(codes.Unimplemented, "method Review not implemented")
+}
+func (UnimplementedAlchemyServer) ListFindings(context.Context, *ListFindingsRequest) (*Findings, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListFindings not implemented")
+}
+func (UnimplementedAlchemyServer) Decide(context.Context, *DecideRequest) (*DecideResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Decide not implemented")
+}
+func (UnimplementedAlchemyServer) Assert(context.Context, *AssertRequest) (*Result, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Assert not implemented")
 }
 func (UnimplementedAlchemyServer) mustEmbedUnimplementedAlchemyServer() {}
 func (UnimplementedAlchemyServer) testEmbeddedByValue()                 {}
@@ -443,6 +585,60 @@ func _Alchemy_Review_Handler(srv interface{}, stream grpc.ServerStream) error {
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Alchemy_ReviewServer = grpc.BidiStreamingServer[ReviewDecision, ReviewItem]
 
+func _Alchemy_ListFindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFindingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AlchemyServer).ListFindings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Alchemy_ListFindings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AlchemyServer).ListFindings(ctx, req.(*ListFindingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Alchemy_Decide_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DecideRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AlchemyServer).Decide(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Alchemy_Decide_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AlchemyServer).Decide(ctx, req.(*DecideRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Alchemy_Assert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AssertRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AlchemyServer).Assert(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Alchemy_Assert_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AlchemyServer).Assert(ctx, req.(*AssertRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Alchemy_ServiceDesc is the grpc.ServiceDesc for Alchemy service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -465,6 +661,18 @@ var Alchemy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteJob",
 			Handler:    _Alchemy_DeleteJob_Handler,
+		},
+		{
+			MethodName: "ListFindings",
+			Handler:    _Alchemy_ListFindings_Handler,
+		},
+		{
+			MethodName: "Decide",
+			Handler:    _Alchemy_Decide_Handler,
+		},
+		{
+			MethodName: "Assert",
+			Handler:    _Alchemy_Assert_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

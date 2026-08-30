@@ -23,6 +23,45 @@
     "text/event-stream"
   ],
   "paths": {
+    "/v1/assertions": {
+      "post": {
+        "summary": "Assert records a fact somebody knows and no document states.",
+        "description": "It is not a hole in §4. Nothing is stored that a job does not already\nstore, the graph comes back as JSON, and where it goes afterwards is the\ncaller's business exactly as it is for every other result. What it removes\nis a detour: until now the only way in was to write the fact into a file,\nupload it, create a job, poll it and fetch the result — five steps and an\ninvented document for one triple — and it arrived stamped\nPRODUCER_GRAPH_IMPORT, \"an existing graph already asserted it\", which is\nnot what happened and cost the record the one thing that made it worth\nadmitting: a person who can be asked.\n\nIt is synchronous, and that is not an optimisation. An assertion has no\nchunking, no model call and no embedding; it is a parse and a check\nagainst the ontology. There is nothing to poll, and returning a job id for\na caller to poll would be inventing asynchrony an operation does not have.\nThe Result carries the job id in its `job` field, so the record is still\ntraceable through GetJob like any other.\n\nThe ontology is optional and checked when given, which is the rule graph\nsources already follow. An assertion under an ontology that does not\ndeclare its types comes back with violations naming them, rather than a\nrefusal: §5 makes the graph never more permissive than the vocabulary, and\na person asserting a type nobody declared is exactly the case that has to\nbe visible instead of quietly accepted.",
+        "operationId": "Alchemy_Assert",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Result"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "AssertRequest is a fact a person states.\n\nThe entities and relations are given in the same shape every other producer\nemits, and their provenance is overwritten rather than read: the producer is\nPRODUCER_HUMAN, the source is the asserter, and by/at are stamped by the\nserver from `by` and its own clock. A caller cannot assert something on\nsomebody else's behalf by filling the field in, and cannot backdate one.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1AssertRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
     "/v1/jobs": {
       "post": {
         "summary": "Unary for things that are one question.",
@@ -139,6 +178,48 @@
         ]
       }
     },
+    "/v1/jobs/{job_id}/decisions": {
+      "post": {
+        "operationId": "Alchemy_Decide",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1DecideResponse"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AlchemyDecideBody"
+            }
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
     "/v1/jobs/{job_id}/events": {
       "get": {
         "summary": "Progress is server-streaming: stages, counts, and conflicts as they are\nfound rather than at the end.",
@@ -158,6 +239,42 @@
                 }
               },
               "title": "Stream result of v1JobEvent"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}/findings": {
+      "get": {
+        "summary": "ListFindings and Decide are review for a job that has already stopped, and\nthey are the reason the paragraph above is about mid-run review rather\nthan about review.",
+        "description": "What Review's bidirectional shape buys is that a decision reaches an\nextraction that has not run yet. That property is real and it is\nuntranslatable: a reviewer answers item three while item four is still\narriving, and an HTTP request body must be finished before its response is\nread. So Review stays unannotated and the gateway still answers its path\n501.\n\nA job sitting at NEEDS_REVIEW is not that situation. Nothing is running.\nThere is no item four. The findings are a finite list in a finished result\nand the decisions are a batch, so a list and a batch is not a degradation\nof the stream — it is what that case actually is, and forcing it through a\nbidirectional connection was making every HTTP client pay for a property\nthis case does not have. The consequence until now was that a buyer could\ncurl the graph and could not curl \"this edge is wrong\".\n\nThe two shapes are one mechanism: a decision submitted here is the same\nReviewDecision, applied by the same code, and lands in the same\nprovenance. What differs is when it may be sent.",
+        "operationId": "Alchemy_ListFindings",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Findings"
             }
           },
           "401": {
@@ -328,6 +445,19 @@
     }
   },
   "definitions": {
+    "AlchemyDecideBody": {
+      "type": "object",
+      "properties": {
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ReviewDecision"
+          }
+        }
+      },
+      "description": "DecideRequest is a batch of decisions about one job.\n\nA batch and not one decision, because the queue a person works through is a\nlist and answering it one HTTP request at a time would make the round trips\nthe cost of reviewing rather than the thinking. Order is preserved: two\ndecisions about one item apply in the order given, which is what makes\n\"reject, then always\" mean what it reads as."
+    },
     "protobufAny": {
       "type": "object",
       "properties": {
@@ -363,6 +493,40 @@
           }
         }
       }
+    },
+    "v1AssertRequest": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Entity"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Relation"
+          }
+        },
+        "by": {
+          "type": "string",
+          "description": "Who is asserting. Required — see the by field on Provenance, and\npreflight's assertion_unsigned."
+        },
+        "note": {
+          "type": "string",
+          "description": "Why, in the asserter's own words. It lands on every record's attributes\nunder \"note\", because a fact stated with a reason is a different thing to\naudit from one stated without."
+        },
+        "ontology": {
+          "type": "string"
+        },
+        "part": {
+          "type": "string"
+        }
+      },
+      "description": "AssertRequest is a fact a person states.\n\nThe entities and relations are given in the same shape every other producer\nemits, and their provenance is overwritten rather than read: the producer is\nPRODUCER_HUMAN, the source is the asserter, and by/at are stamped by the\nserver from `by` and its own clock. A caller cannot assert something on\nsomebody else's behalf by filling the field in, and cannot backdate one."
     },
     "v1Chunk": {
       "type": "object",
@@ -552,6 +716,45 @@
         }
       }
     },
+    "v1DecideResponse": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/v1JobState"
+        },
+        "applied": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "remaining_holding": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "rejected": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1DecisionRejection"
+          },
+          "description": "Decisions the job did not recognise, by item id, with the reason. An\nunknown item is reported rather than refused: a batch assembled from a\nlist somebody read ten minutes ago may name an item a rule has since\ntaken away, and failing the whole batch over it would lose the decisions\nthat were still good."
+        }
+      },
+      "description": "DecideResponse says what the batch did and what is left.\n\nremaining_holding is the number that matters: it is zero when the job can\nfinish, and a caller that submitted decisions and got a non-zero back knows\nit is not done without having to re-list."
+    },
+    "v1DecisionRejection": {
+      "type": "object",
+      "properties": {
+        "item_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
     "v1Duplicate": {
       "type": "object",
       "properties": {
@@ -643,6 +846,30 @@
           "$ref": "#/definitions/v1Provenance"
         }
       }
+    },
+    "v1Findings": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/v1JobState"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ReviewItem"
+          }
+        },
+        "holding": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many of the items below are conflicts nobody has answered — the ones\nholding the job under §7.3. The rest are findings a reader may act on and\nthe job does not wait for."
+        }
+      },
+      "description": "Findings is that queue, as a list rather than as a stream.\n\nThe job's state travels with it because the list alone cannot say why it is\nempty: a SUCCEEDED job with nothing to review and a job still RUNNING both\nhave no findings yet, and a client that could not tell would report \"all\nclear\" for a job that has not finished looking."
     },
     "v1Guess": {
       "type": "object",
@@ -812,10 +1039,11 @@
         "PRODUCER_DDL",
         "PRODUCER_GRAPH_IMPORT",
         "PRODUCER_TABULAR",
-        "PRODUCER_LLM_EXTRACT"
+        "PRODUCER_LLM_EXTRACT",
+        "PRODUCER_HUMAN"
       ],
       "default": "PRODUCER_UNSPECIFIED",
-      "description": "Producer is §5b's \"field that matters\": DDL and GRAPH_IMPORT mean a machine\nread something that already said this, LLM_EXTRACT means a model decided it."
+      "description": "Producer is §5b's \"field that matters\": DDL and GRAPH_IMPORT mean a machine\nread something that already said this, LLM_EXTRACT means a model decided it.\n\n - PRODUCER_HUMAN: A named person asserted it. The only producer whose source is not a\ndocument, and the only one for which by/at below are required."
     },
     "v1Provenance": {
       "type": "object",
@@ -856,6 +1084,14 @@
         "ruled_by": {
           "type": "string",
           "description": "The one rule that actually acted on this record — retyped it, renamed it,\nor answered the question it raised — by the name rule_sets uses.\n\nrule_set says which rules were in the room; this says which one moved.\nEmpty means none did, which is not the same as none being in force."
+        },
+        "by": {
+          "type": "string",
+          "description": "Who asserted this, for PRODUCER_HUMAN. Required for that producer and\nmeaningless for the others, whose sources are documents.\n\nNot reviewed_by. That says somebody accepted a record another producer\nproposed, and the record still names the proposer; this says nobody\nproposed it and a person is the whole of its authority. A reader filtering\nto \"what a machine read\" excludes these and keeps the reviewed ones."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the assertion was made, RFC 3339."
         }
       },
       "description": "Provenance says where a fact came from and how it was produced. Every entity\nand every relation carries one; §5b makes this a product guarantee rather\nthan a debugging aid."

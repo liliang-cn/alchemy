@@ -60,6 +60,8 @@ const (
 	keyReviewedBy    = "reviewed_by"
 	keyRuleSet       = "rule_set"
 	keyRuledBy       = "ruled_by"
+	keyBy            = "by"
+	keyAt            = "at"
 	keyJSONAttrs     = "json_attrs"
 	keyAssertions    = "assertions"
 	keyProvenance    = "provenance"
@@ -92,6 +94,11 @@ func provenanceMeta(p alchemy.Provenance, prefix string) map[string]string {
 		keyReviewedBy: p.ReviewedBy,
 		keyRuleSet:    p.RuleSet,
 		keyRuledBy:    p.RuledBy,
+		// The asserter and the date, for alchemy.ProducerHuman. Without them a
+		// human assertion in this store says "a person said so" and cannot say
+		// which person, which is the one thing that made it admissible.
+		keyBy: p.By,
+		keyAt: p.At,
 	} {
 		if v != "" {
 			out[prefix+k] = v

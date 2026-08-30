@@ -29,6 +29,8 @@ const (
 	keyReviewedBy    = "reviewed_by"
 	keyRuleSet       = "rule_set"
 	keyRuledBy       = "ruled_by"
+	keyBy            = "by"
+	keyAt            = "at"
 	keyJSONAttrs     = "json_attrs"
 )
 
@@ -65,6 +67,13 @@ func provenanceProps(p alchemy.Provenance, prefix string) map[string]any {
 		keyReviewedBy: p.ReviewedBy,
 		keyRuleSet:    p.RuleSet,
 		keyRuledBy:    p.RuledBy,
+		// The asserter and the date, for alchemy.ProducerHuman. They are the
+		// only thing that distinguishes a fact a named person stated from one
+		// a file happened to contain, and a store that wrote the producer and
+		// dropped these would hold a record saying "a person said so" with no
+		// way to ask which — the §5b guarantee inverted.
+		keyBy: p.By,
+		keyAt: p.At,
 	} {
 		if v != "" {
 			out[prefix+k] = v

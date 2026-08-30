@@ -33,6 +33,16 @@ import (
 // request — and the body names the gRPC method that does. A 404 would have
 // been less work and would have told a buyer that Alchemy has no review at
 // all, which is false and is the more expensive wrong answer.
+//
+// That last sentence used to be more nearly true than it should have been. The
+// refusal above is about the property the STREAM has — a decision reaching an
+// extraction that has not run yet — and for a long time it was worded as
+// though review itself were untranslatable, so a buyer with a job sitting at
+// NEEDS_REVIEW could fetch the graph over HTTP and could not say "this edge is
+// wrong" over HTTP. Nothing is running in that case: there is no item four, the
+// findings are a finite list and the decisions are a batch. ListFindings and
+// Decide are that case, they are generated routes like any other, and the
+// message below names them so the refusal points somewhere a curl can go.
 
 // Refusal is a route the gateway answers itself, because the RPC behind it
 // cannot be translated.
@@ -65,9 +75,12 @@ func Refusals() []Refusal {
 		Status: 501,
 		Because: "Review is a bidirectional stream and has no honest translation into HTTP: " +
 			"a reviewer must be able to answer one item while the next is still arriving, and an HTTP request body " +
-			"must be finished before its response can be read. Use the gRPC method alchemy.v1.Alchemy/Review. " +
-			"Everything else about a held job — watching it, fetching it, deleting it — works over HTTP; " +
-			"only unblocking it does not.",
+			"must be finished before its response can be read. That property is only needed while the job is still " +
+			"running, which is what this method is for: use the gRPC method alchemy.v1.Alchemy/Review to send a " +
+			"decision that must reach an extraction that has not happened yet. " +
+			"A job that has already stopped at NEEDS_REVIEW needs none of it — nothing is still arriving — so it is " +
+			"reviewable over HTTP: GET /v1/jobs/{job_id}/findings for the queue and POST /v1/jobs/{job_id}/decisions " +
+			"to answer it. Same decisions, same code, same provenance.",
 	}}
 }
 

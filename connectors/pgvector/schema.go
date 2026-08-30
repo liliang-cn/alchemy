@@ -35,12 +35,20 @@ const provDDL = `
 	prov_confidence    double precision NOT NULL,
 	prov_reviewed_by   text NOT NULL,
 	prov_rule_set      text NOT NULL,
-	prov_ruled_by      text NOT NULL`
+	prov_ruled_by      text NOT NULL,
+	-- The asserter and the date, for alchemy.ProducerHuman. They default to
+	-- the empty string because every other producer's source is a document and
+	-- there is nobody to name beyond it, so empty is the honest value rather
+	-- than a missing one -- which is also what lets the ALTERs below add them
+	-- to a schema created before they existed without rewriting a single row.
+	prov_by            text NOT NULL DEFAULT '',
+	prov_at            text NOT NULL DEFAULT ''`
 
 // provCols is the same list as a projection, in the same order, for COPY and
 // for the reads that rebuild an alchemy.Provenance.
 const provCols = `prov_source, prov_chunk, prov_producer, prov_deterministic, prov_model, ` +
-	`prov_ontology, prov_chunking, prov_confidence, prov_reviewed_by, prov_rule_set, prov_ruled_by`
+	`prov_ontology, prov_chunking, prov_confidence, prov_reviewed_by, prov_rule_set, prov_ruled_by, ` +
+	`prov_by, prov_at`
 
 // State is what a load row says about itself.
 const (
@@ -156,8 +164,21 @@ func (l *Loader) withDDLLock(ctx context.Context, f func(pgx.Tx) error) error {
 	return tx.Commit(ctx)
 }
 
+// provTables are the tables that carry provDDL. All three must receive every
+// provenance column or a COPY into the one that was missed fails at run time
+// with "extra data after last expected column" -- which is what the database
+// says when four lists that have to agree do not.
+var provTables = []string{"entities", "relations", "violations"}
+
+// provAdded are the provenance columns added after this schema first shipped,
+// as ALTER fragments. A column added to provDDL from now on belongs here too.
+var provAdded = []string{
+	`prov_by text NOT NULL DEFAULT ''`,
+	`prov_at text NOT NULL DEFAULT ''`,
+}
+
 func (l *Loader) ddl() []string {
-	return []string{
+	out := []string{
 		// The load is the unit of everything here: of identity, of
 		// idempotency, and of visibility. Entity.ID is stable within one
 		// result and says nothing across runs, so there is no key on which two
@@ -286,6 +307,28 @@ func (l *Loader) ddl() []string {
 		l.q(`CREATE INDEX IF NOT EXISTS duplicates_left ON {s}.duplicates (load_id, left_id)`),
 		l.q(`CREATE INDEX IF NOT EXISTS duplicates_right ON {s}.duplicates (load_id, right_id)`),
 
+		// A column added to provDDL after a schema was created never reaches
+		// it: CREATE TABLE IF NOT EXISTS does nothing to a table that is
+		// already there. These are that gap closed, and they are generated
+		// from provTables rather than written out per table because writing
+		// them out is how the third table gets forgotten -- which is exactly
+		// what happened here. alchemy.Provenance grew By and At; entities and
+		// relations were altered by hand and violations was not, and the
+		// failure was a COPY rejecting a row rather than anything a reader
+		// would have noticed.
+		//
+		// Every one is idempotent and carries a default, so they rewrite no
+		// rows and run safely against a corpus somebody is using. That is the
+		// only reason a provenance field can be added after a store has
+		// customers in it at all.
+	}
+	for _, table := range provTables {
+		for _, col := range provAdded {
+			out = append(out, l.q("ALTER TABLE {s}."+table+" ADD COLUMN IF NOT EXISTS "+col))
+		}
+	}
+	out = append(out, []string{
+
 		// The views are the mechanism that makes a half-written load
 		// unreadable rather than merely unlikely. A buyer who queries the
 		// tables directly can see a load in progress; a buyer who queries
@@ -302,7 +345,8 @@ func (l *Loader) ddl() []string {
 		l.q(`CREATE OR REPLACE VIEW {s}.loaded_violations AS
 	SELECT v.* FROM {s}.violations v JOIN {s}.loads l ON l.id = v.load_id
 	WHERE l.state = '` + stateComplete + `'`),
-	}
+	}...)
+	return out
 }
 
 // boundIn reads the width the embedding column is declared at, through the

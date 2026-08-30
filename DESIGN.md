@@ -426,6 +426,17 @@ stop proposing it in the next chunk. That is a bidirectional stream. Modelled
 over HTTP it becomes polling plus a submit endpoint, which is the same thing
 with latency and more state on both sides.
 
+That paragraph is about a job that is *still running*, and for a while it was
+read as though it were about review. The difference cost something real: a
+buyer could fetch a held graph over HTTP and could not say "this edge is wrong"
+over HTTP, because the only way to answer a queue was a bidirectional stream.
+A job stopped at `NEEDS_REVIEW` has nothing still arriving — the findings are a
+finite list and the decisions are a batch — so `ListFindings` and `Decide` are
+that case and they are ordinary HTTP routes. `Review` stays untranslated and
+its path stays 501, because the property it has and they do not is a decision
+reaching an extraction that has not happened yet. Same decisions, same code,
+same provenance; what differs is when they may be sent.
+
 **Progress on a long job is a stream.** A PDF corpus with OCR is minutes.
 Server-streaming says so natively; over HTTP it is either polling or SSE, and
 SSE is a stream pretending to be a response.
@@ -741,6 +752,28 @@ cost is stated where it lands — a run during which a decision arrives is no
 longer reproducible from its inputs, so every record names the rules it was
 proposed under, and a run with no mid-run decisions is still byte-identical at
 every concurrency.
+
+A fact somebody knows and no document states now has a way in that says so.
+`Assert` takes a small graph, a name and a reason, stamps every record
+`human` with the asserter and the date, checks it against the ontology like
+anything else, and returns it — one call, synchronously, because an assertion
+has no chunking, no model and no embedding and there is nothing to poll. Until
+it existed the only route was to write the fact into a file and import it,
+which arrived stamped `graph-import` — "an existing graph already asserted it"
+— and cost the record the one thing that made it worth admitting: a person who
+can be asked. `human` is deterministic, and that is the substantive claim
+rather than bookkeeping: what makes an `llm-extract` edge inferred is not that
+a machine wrote it down, it is that nobody can be asked about it.
+
+**The limit of that, stated because it is the next thing somebody will hit.**
+Conflict detection is per run. An assertion that merely *adds* a fact is one
+call; an assertion that *contradicts* something already extracted does not
+meet it, because the two records are in two results and nothing compares them.
+Contesting an existing claim means running both sources in one job, which is
+where the conflict is found and where §7.3 holds it. Fixing that properly
+would mean the service holding graphs so a new claim could be checked against
+an old one, and that is §4 — so the honest answer today is that alchemy
+corrects a corpus by re-running it, not by patching it.
 
 What is still not built: a graph store of any kind, which is §4 and deliberate.
 

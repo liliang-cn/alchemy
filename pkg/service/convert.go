@@ -43,6 +43,7 @@ var producers = map[alchemy.Producer]alchemyv1.Producer{
 	alchemy.ProducerGraphImport: alchemyv1.Producer_PRODUCER_GRAPH_IMPORT,
 	alchemy.ProducerTabular:     alchemyv1.Producer_PRODUCER_TABULAR,
 	alchemy.ProducerLLMExtract:  alchemyv1.Producer_PRODUCER_LLM_EXTRACT,
+	alchemy.ProducerHuman:       alchemyv1.Producer_PRODUCER_HUMAN,
 }
 
 var wireProducers = invert(producers)
@@ -147,6 +148,8 @@ func provenanceToProto(p alchemy.Provenance) *alchemyv1.Provenance {
 		ReviewedBy: p.ReviewedBy,
 		RuleSet:    p.RuleSet,
 		RuledBy:    p.RuledBy,
+		By:         p.By,
+		At:         p.At,
 	}
 }
 
@@ -165,6 +168,8 @@ func provenanceFromProto(p *alchemyv1.Provenance) alchemy.Provenance {
 		ReviewedBy: p.GetReviewedBy(),
 		RuleSet:    p.GetRuleSet(),
 		RuledBy:    p.GetRuledBy(),
+		By:         p.GetBy(),
+		At:         p.GetAt(),
 	}
 }
 

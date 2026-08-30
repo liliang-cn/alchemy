@@ -109,6 +109,70 @@ service Alchemy {
   // A job can reach NEEDS_REVIEW without review mode being on: a conflict
   // always requires a person (§7.3). Review is how it gets unblocked, which is
   // why this rpc is not gated on the job having asked for review.
+
+  // ListFindings and Decide are review for a job that has already stopped, and
+  // they are the reason the paragraph above is about mid-run review rather
+  // than about review.
+  //
+  // What Review's bidirectional shape buys is that a decision reaches an
+  // extraction that has not run yet. That property is real and it is
+  // untranslatable: a reviewer answers item three while item four is still
+  // arriving, and an HTTP request body must be finished before its response is
+  // read. So Review stays unannotated and the gateway still answers its path
+  // 501.
+  //
+  // A job sitting at NEEDS_REVIEW is not that situation. Nothing is running.
+  // There is no item four. The findings are a finite list in a finished result
+  // and the decisions are a batch, so a list and a batch is not a degradation
+  // of the stream — it is what that case actually is, and forcing it through a
+  // bidirectional connection was making every HTTP client pay for a property
+  // this case does not have. The consequence until now was that a buyer could
+  // curl the graph and could not curl "this edge is wrong".
+  //
+  // The two shapes are one mechanism: a decision submitted here is the same
+  // ReviewDecision, applied by the same code, and lands in the same
+  // provenance. What differs is when it may be sent.
+  rpc ListFindings(ListFindingsRequest) returns (Findings) {
+    option (google.api.http) = {get: "/v1/jobs/{job_id}/findings"};
+  }
+  rpc Decide(DecideRequest) returns (DecideResponse) {
+    option (google.api.http) = {
+      post: "/v1/jobs/{job_id}/decisions"
+      body: "*"
+    };
+  }
+
+  // Assert records a fact somebody knows and no document states.
+  //
+  // It is not a hole in §4. Nothing is stored that a job does not already
+  // store, the graph comes back as JSON, and where it goes afterwards is the
+  // caller's business exactly as it is for every other result. What it removes
+  // is a detour: until now the only way in was to write the fact into a file,
+  // upload it, create a job, poll it and fetch the result — five steps and an
+  // invented document for one triple — and it arrived stamped
+  // PRODUCER_GRAPH_IMPORT, "an existing graph already asserted it", which is
+  // not what happened and cost the record the one thing that made it worth
+  // admitting: a person who can be asked.
+  //
+  // It is synchronous, and that is not an optimisation. An assertion has no
+  // chunking, no model call and no embedding; it is a parse and a check
+  // against the ontology. There is nothing to poll, and returning a job id for
+  // a caller to poll would be inventing asynchrony an operation does not have.
+  // The Result carries the job id in its `job` field, so the record is still
+  // traceable through GetJob like any other.
+  //
+  // The ontology is optional and checked when given, which is the rule graph
+  // sources already follow. An assertion under an ontology that does not
+  // declare its types comes back with violations naming them, rather than a
+  // refusal: §5 makes the graph never more permissive than the vocabulary, and
+  // a person asserting a type nobody declared is exactly the case that has to
+  // be visible instead of quietly accepted.
+  rpc Assert(AssertRequest) returns (Result) {
+    option (google.api.http) = {
+      post: "/v1/assertions"
+      body: "*"
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +209,9 @@ enum Producer {
   PRODUCER_GRAPH_IMPORT = 2;
   PRODUCER_TABULAR = 3;
   PRODUCER_LLM_EXTRACT = 4;
+  // A named person asserted it. The only producer whose source is not a
+  // document, and the only one for which by/at below are required.
+  PRODUCER_HUMAN = 5;
 }
 
 enum ViolationKind {
@@ -430,6 +497,16 @@ message Provenance {
   // rule_set says which rules were in the room; this says which one moved.
   // Empty means none did, which is not the same as none being in force.
   string ruled_by = 10;
+  // Who asserted this, for PRODUCER_HUMAN. Required for that producer and
+  // meaningless for the others, whose sources are documents.
+  //
+  // Not reviewed_by. That says somebody accepted a record another producer
+  // proposed, and the record still names the proposer; this says nobody
+  // proposed it and a person is the whole of its authority. A reader filtering
+  // to "what a machine read" excludes these and keeps the reviewed ones.
+  string by = 11;
+  // When the assertion was made, RFC 3339.
+  string at = 12;
 }
 
 message Entity {
@@ -821,6 +898,83 @@ message Edit {
   // to the survivor's spelling leaves two nodes with one name and every edge
   // where it was.
   string into = 5;
+}
+
+// ListFindingsRequest asks for the queue of a job that has stopped.
+message ListFindingsRequest {
+  string job_id = 1;
+}
+
+// Findings is that queue, as a list rather than as a stream.
+//
+// The job's state travels with it because the list alone cannot say why it is
+// empty: a SUCCEEDED job with nothing to review and a job still RUNNING both
+// have no findings yet, and a client that could not tell would report "all
+// clear" for a job that has not finished looking.
+message Findings {
+  string job_id = 1;
+  JobState state = 2;
+  repeated ReviewItem items = 3;
+  // How many of the items below are conflicts nobody has answered — the ones
+  // holding the job under §7.3. The rest are findings a reader may act on and
+  // the job does not wait for.
+  int32 holding = 4;
+}
+
+// DecideRequest is a batch of decisions about one job.
+//
+// A batch and not one decision, because the queue a person works through is a
+// list and answering it one HTTP request at a time would make the round trips
+// the cost of reviewing rather than the thinking. Order is preserved: two
+// decisions about one item apply in the order given, which is what makes
+// "reject, then always" mean what it reads as.
+message DecideRequest {
+  string job_id = 1;
+  repeated ReviewDecision decisions = 2;
+}
+
+// DecideResponse says what the batch did and what is left.
+//
+// remaining_holding is the number that matters: it is zero when the job can
+// finish, and a caller that submitted decisions and got a non-zero back knows
+// it is not done without having to re-list.
+message DecideResponse {
+  string job_id = 1;
+  JobState state = 2;
+  int32 applied = 3;
+  int32 remaining_holding = 4;
+  // Decisions the job did not recognise, by item id, with the reason. An
+  // unknown item is reported rather than refused: a batch assembled from a
+  // list somebody read ten minutes ago may name an item a rule has since
+  // taken away, and failing the whole batch over it would lose the decisions
+  // that were still good.
+  repeated DecisionRejection rejected = 5;
+}
+
+message DecisionRejection {
+  string item_id = 1;
+  string reason = 2;
+}
+
+// AssertRequest is a fact a person states.
+//
+// The entities and relations are given in the same shape every other producer
+// emits, and their provenance is overwritten rather than read: the producer is
+// PRODUCER_HUMAN, the source is the asserter, and by/at are stamped by the
+// server from `by` and its own clock. A caller cannot assert something on
+// somebody else's behalf by filling the field in, and cannot backdate one.
+message AssertRequest {
+  repeated Entity entities = 1;
+  repeated Relation relations = 2;
+  // Who is asserting. Required — see the by field on Provenance, and
+  // preflight's assertion_unsigned.
+  string by = 3;
+  // Why, in the asserter's own words. It lands on every record's attributes
+  // under "note", because a fact stated with a reason is a different thing to
+  // audit from one stated without.
+  string note = 4;
+  string ontology = 5;
+  string part = 6;
 }
 
 message ReviewDecision {

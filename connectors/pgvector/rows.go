@@ -15,6 +15,8 @@ import (
 var provNames = []string{
 	"prov_source", "prov_chunk", "prov_producer", "prov_deterministic", "prov_model",
 	"prov_ontology", "prov_chunking", "prov_confidence", "prov_reviewed_by", "prov_rule_set", "prov_ruled_by",
+	// The asserter and the date, for alchemy.ProducerHuman.
+	"prov_by", "prov_at",
 }
 
 // provRow renders one Provenance in provNames order.
@@ -29,6 +31,10 @@ func provRow(p alchemy.Provenance) []any {
 	return []any{
 		p.Source, p.Chunk, string(p.Producer), p.Producer.Deterministic(), p.Model,
 		p.Ontology, p.Chunking, p.Confidence, p.ReviewedBy, p.RuleSet, p.RuledBy,
+		// The asserter and the date, for alchemy.ProducerHuman: the only thing
+		// that tells a fact a named person stated from one a file happened to
+		// contain.
+		p.By, p.At,
 	}
 }
 

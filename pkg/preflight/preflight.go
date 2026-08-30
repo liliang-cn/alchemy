@@ -115,6 +115,19 @@ const (
 	// the process that made it: the value round-trips in Go and changes type on
 	// the way to any consumer, so each store meets a different graph.
 	AttributeType Kind = "attribute_type"
+	// AssertionUnsigned — a record whose producer is alchemy.ProducerHuman and
+	// whose provenance names nobody.
+	//
+	// It is a report and not a refusal, deliberately, and the line in this
+	// package's doc comment is why: the graph is writable and something in it
+	// is untrue, which is a reader's problem rather than a writer's. The edge
+	// is real and a store that held it would hold a correct edge; what is
+	// missing is the only thing that made a human assertion admissible in the
+	// first place. §5b sells the ability to ask "who says so", and an
+	// unattributed assertion is the one record in a graph that answers "a
+	// person" and cannot say which — worse than an inferred edge, which at
+	// least admits that nobody can be asked.
+	AssertionUnsigned Kind = "assertion_unsigned"
 )
 
 // Severity is what a defect costs, and it is the whole of the difference
@@ -167,6 +180,7 @@ func Check(res alchemy.Result) []Defect {
 	out = append(out, counts(res)...)
 	out = append(out, ruleNames(res)...)
 	out = append(out, attributes(res)...)
+	out = append(out, assertions(res)...)
 	return out
 }
 

@@ -22,6 +22,31 @@ const (
 	ProducerTabular Producer = "tabular"
 	// ProducerLLMExtract — a model read prose and proposed it.
 	ProducerLLMExtract Producer = "llm-extract"
+	// ProducerHuman — a named person asserted it, because they know it.
+	//
+	// It is the only producer whose source is not a document, and it exists
+	// because the alternative was worse. A fact somebody knows and no file
+	// states had exactly one way in: write it into a JSON file and import it,
+	// which arrives as ProducerGraphImport — "an existing graph already
+	// asserted it". That is not what happened. An agent citing such an edge
+	// could name the file and could not name the person, the date or the
+	// reason, which is the half of §5b that makes the other half worth paying
+	// for: a reader can tell a guess from a statement, and could not tell one
+	// person's statement from another system's export.
+	//
+	// It is deterministic, and that is the substantive claim here rather than a
+	// bookkeeping detail. §5b's split is "somebody stated the fact, rather than
+	// inferring it", and a person signing their name to a sentence is the
+	// clearest case of stating there is — clearer than a foreign key, which
+	// states what a schema believes rather than what anybody checked. What
+	// makes an llm-extract edge inferred is not that a machine wrote it down;
+	// it is that nobody can be asked about it.
+	//
+	// The obligation that comes with it is Provenance.By and Provenance.At,
+	// which pkg/preflight requires for this producer and no other. An assertion
+	// nobody is named for is an anonymous claim wearing a person's badge, and
+	// it would be the §2.1 failure with a REST endpoint attached.
+	ProducerHuman Producer = "human"
 )
 
 // Deterministic reports whether the producer read something that already
@@ -34,7 +59,7 @@ const (
 // arrives marked as inferred, which is the safe direction to be wrong in.
 func (p Producer) Deterministic() bool {
 	switch p {
-	case ProducerDDL, ProducerGraphImport:
+	case ProducerDDL, ProducerGraphImport, ProducerHuman:
 		return true
 	default:
 		return false
@@ -121,6 +146,26 @@ type Provenance struct {
 	// Empty means no rule acted on this record, which is not the same as no rule
 	// being in force; see RuleSet.
 	RuledBy string `json:"ruled_by,omitempty"`
+	// By names the person who asserted this, for ProducerHuman. It is required
+	// for that producer and meaningless for the others, whose sources are
+	// documents and whose Source field already says which one.
+	//
+	// It is not ReviewedBy. ReviewedBy says somebody accepted a record another
+	// producer proposed, and the record still says who proposed it; this says
+	// nobody proposed it and a person is the whole of its authority. A reader
+	// filtering to "what a machine read" must exclude these and include the
+	// reviewed ones, and a single field could not tell them apart.
+	By string `json:"by,omitempty"`
+	// At is when the assertion was made, RFC 3339.
+	//
+	// A string rather than a time.Time so that an unset value marshals to
+	// nothing: every other optional field here omits when empty, and a struct
+	// cannot. That is not a formatting preference — sink.Digest hashes this
+	// struct through encoding/json, so a field that always renders would change
+	// the content address of every result ever produced the moment it was
+	// added. Provenance can grow and alchemy.Counts cannot, and omitempty is
+	// the entire difference.
+	At string `json:"at,omitempty"`
 }
 
 // Entity is a node of the returned graph.

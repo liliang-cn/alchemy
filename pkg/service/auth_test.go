@@ -28,10 +28,24 @@ import (
 func TestEveryRPCRefusesAnUnauthenticatedCall(t *testing.T) {
 	conn := connect(t, harness{})
 
+	// Non-empty rather than a count. The guard is here because rpcs() reads
+	// the descriptor by reflection and an empty slice would make every
+	// assertion below vacuous — the test would pass loudest exactly when it
+	// had stopped testing anything.
+	//
+	// It used to be `!= 8`, which is the hand-maintained list the paragraph
+	// above argues against, spelled as a number instead of as names. When the
+	// proto gained ListFindings, Decide and Assert it became `11 != 8` and
+	// t.Fatalf aborted before a single subtest ran — so for that window NO rpc
+	// was having its unauthenticated call checked, including the three new
+	// ones, and the suite reported one red test rather than eleven unchecked
+	// methods. A literal that turns a whole security check off when it goes
+	// stale is worse than no literal.
 	methods := rpcs()
-	if len(methods) != 8 {
-		t.Fatalf("the service has %d RPCs; the proto declares 8, so one of the two moved", len(methods))
+	if len(methods) == 0 {
+		t.Fatal("the service descriptor lists no RPCs; every assertion below would be vacuous")
 	}
+	t.Logf("checking %d RPCs against %d kinds of bad credential", len(methods), 6)
 
 	credentials := []struct {
 		name string
