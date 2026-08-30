@@ -157,6 +157,11 @@ type Result struct {
 	// deliberately, and a reader who fetches the graph months later can see
 	// that somebody said the old answer was over, and name them.
 	Supersessions []Supersession `json:"supersessions,omitempty"`
+	// Proposals are the types this corpus used and the ontology does not
+	// declare, one per type rather than one per record. See Proposal: the
+	// vocabulary is a claim about a corpus, and the corpus is what says what
+	// the claim is missing.
+	Proposals []Proposal `json:"proposals,omitempty"`
 	// RuleSets is every standing policy this job's records were extracted
 	// under, each named once. Provenance.RuleSet is a name into it.
 	//

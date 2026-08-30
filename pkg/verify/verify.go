@@ -49,7 +49,12 @@ type Report struct {
 	// finding: nothing is wrong, and the two records agree — they are merely
 	// not joined. See alchemy.Duplicate.
 	Duplicates []alchemy.Duplicate
-	Counts     alchemy.Counts
+	// Proposals are the undeclared types this run met, one entry per type
+	// rather than one per record. See alchemy.Proposal. They are derived from
+	// Violations, so they exist exactly when a vocabulary was supplied and
+	// something was not in it.
+	Proposals []alchemy.Proposal
+	Counts    alchemy.Counts
 }
 
 // Check verifies one job's extraction. The output is a pure function of the
@@ -67,6 +72,9 @@ func Check(in Input) Report {
 		// the same sentence the conflict pass is here on.
 		Duplicates: duplicates(entities),
 	}
+	// Derived from the violations rather than from a second walk, so the two
+	// can never disagree about what is undeclared. Empty when nothing is.
+	out.Proposals = proposals(out.Violations, entities)
 	out.Counts = count(out)
 	return out
 }

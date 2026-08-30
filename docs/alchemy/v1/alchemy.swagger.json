@@ -1056,6 +1056,63 @@
       "default": "PRODUCER_UNSPECIFIED",
       "description": "Producer is §5b's \"field that matters\": DDL and GRAPH_IMPORT mean a machine\nread something that already said this, LLM_EXTRACT means a model decided it.\n\n - PRODUCER_HUMAN: A named person asserted it. The only producer whose source is not a\ndocument, and the only one for which by/at below are required."
     },
+    "v1Proposal": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/v1ProposalKind"
+        },
+        "type": {
+          "type": "string"
+        },
+        "records": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many records used it: what tells a vocabulary gap from a typo."
+        },
+        "from": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The entity types this relation type was observed between, sorted. Empty\nfor an entity proposal, and for a relation whose ends are themselves\nundeclared — a line proposing two undeclared things at once is a line\nnobody can accept as one thing."
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Who used it. §5b's question asked of a proposal: a type every record of\none PDF used is a different suggestion from one a person asserted by name."
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1Producer"
+          }
+        },
+        "example": {
+          "$ref": "#/definitions/v1Ref",
+          "description": "One record that used it, so a reader can go and look."
+        }
+      },
+      "description": "Proposal is a type a source used that the ontology does not declare, stated\nas the change that would let it.\n\nNot a second violation. A violation is per record and says what is wrong;\nsix records using one undeclared type are six violations, and a\nfour-hundred-thousand-record import missing one type is four hundred\nthousand of them. This is one entry per type and it says what to do.\n\nIt proposes and never applies. The ends and the counts are observed —\n\"MEMBER_OF was used four times, always from Person to Team, by liliang\" —\nand whether that is what the type MEANS is a judgement §2.1 will not let a\nmachine make.\n\nProduced only when a vocabulary was supplied. A run with no ontology has\nnothing to be undeclared against, and the way to ask \"what vocabulary would\nthis graph need\" is to supply an empty one — a question rather than a side\neffect of not asking."
+    },
+    "v1ProposalKind": {
+      "type": "string",
+      "enum": [
+        "PROPOSAL_KIND_UNSPECIFIED",
+        "PROPOSAL_KIND_ENTITY",
+        "PROPOSAL_KIND_RELATION"
+      ],
+      "default": "PROPOSAL_KIND_UNSPECIFIED",
+      "description": "ProposalKind says which of an ontology's two lists a proposal belongs in."
+    },
     "v1Provenance": {
       "type": "object",
       "properties": {
@@ -1273,6 +1330,14 @@
             "$ref": "#/definitions/v1Supersession"
           },
           "description": "What this run says is no longer true, and who said so."
+        },
+        "proposals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Proposal"
+          },
+          "description": "The types this corpus used and the ontology does not declare, one per type\nrather than one per record."
         }
       }
     },
@@ -1385,6 +1450,13 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1Supersession"
+          }
+        },
+        "proposals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Proposal"
           }
         }
       },

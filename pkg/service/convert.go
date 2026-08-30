@@ -48,6 +48,11 @@ var producers = map[alchemy.Producer]alchemyv1.Producer{
 
 var wireProducers = invert(producers)
 
+var proposalKinds = map[alchemy.ProposalKind]alchemyv1.ProposalKind{
+	alchemy.ProposalEntity:   alchemyv1.ProposalKind_PROPOSAL_KIND_ENTITY,
+	alchemy.ProposalRelation: alchemyv1.ProposalKind_PROPOSAL_KIND_RELATION,
+}
+
 var violationKinds = map[alchemy.ViolationKind]alchemyv1.ViolationKind{
 	alchemy.ViolationUnknownEntityType:   alchemyv1.ViolationKind_VIOLATION_KIND_UNKNOWN_ENTITY_TYPE,
 	alchemy.ViolationUnknownRelationType: alchemyv1.ViolationKind_VIOLATION_KIND_UNKNOWN_RELATION_TYPE,
@@ -339,6 +344,7 @@ func resultToProto(r alchemy.Result) *alchemyv1.Result {
 		Unread:        each(r.Unread, unreadToProto),
 		RuleSets:      each(r.RuleSets, ruleSetToProto),
 		Supersessions: each(r.Supersessions, supersessionToProto),
+		Proposals:     each(r.Proposals, proposalToProto),
 	}
 }
 
@@ -488,4 +494,25 @@ func supersessionToProto(s alchemy.Supersession) *alchemyv1.Supersession {
 		Reason:     s.Reason,
 		Provenance: provenanceToProto(s.Provenance),
 	}
+}
+
+// proposalToProto carries the vocabulary a corpus is asking for.
+//
+// The producers are converted through the same table every record uses, so a
+// producer missing from it reaches a caller as PRODUCER_UNSPECIFIED here too —
+// which is what TestEveryProducerHasAWireName exists to stop.
+func proposalToProto(p alchemy.Proposal) *alchemyv1.Proposal {
+	out := &alchemyv1.Proposal{
+		Kind:    proposalKinds[p.Kind],
+		Type:    p.Type,
+		Records: int32(p.Records),
+		From:    p.From,
+		To:      p.To,
+		Sources: p.Sources,
+		Example: aboutToProto(p.Example),
+	}
+	for _, pr := range p.Producers {
+		out.Producers = append(out.Producers, producers[pr])
+	}
+	return out
 }

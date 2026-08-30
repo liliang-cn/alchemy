@@ -76,6 +76,7 @@ func (r *run) running() alchemy.Counts {
 		Entities:   r.entities,
 		Relations:  r.relations,
 		Violations: r.violations,
+		Proposals:  r.proposals,
 		Conflicts:  r.conflicts,
 		Guesses:    r.guesses,
 		Unread:     r.unread,

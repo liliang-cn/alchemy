@@ -298,6 +298,36 @@ the chunk that produced it, so the failure is visible and locatable.
 This is the mechanism from §2.1 stated as a product guarantee: the graph is
 never more permissive than the ontology you declared.
 
+### The corpus is what says what the vocabulary is missing
+
+The rule above runs one way: the ontology is written first and everything is
+checked against it. That is right for a model, which is what §2.1 is about, and
+it is the wrong order for a person. Somebody who knows a fact had to hand-edit
+a vocabulary document and re-run before they could state it — stating one team
+of four people meant adding an entity type and three relation types by hand,
+first, in JSON.
+
+So a result carries `proposals`: the types a source used that the ontology does
+not declare, one entry per type rather than one per record, with the ends the
+type was observed between, who used it, how often, and one record to go and
+look at. The same assertion produces six violations and three proposals; a
+four-hundred-thousand-record import missing one type produces four hundred
+thousand and one.
+
+It proposes and never applies, which is the same line every other finding here
+sits on. "MEMBER_OF was used four times, always from Person to Team, by
+liliang" is a fact about the corpus. Whether that is what the type *means* is a
+judgement, and §2.1 is the argument that a plausible judgement nobody made is
+the failure that survives review. An end whose own type is also undeclared is
+left out rather than proposed alongside — a line proposing two undeclared
+things at once is a line nobody can accept as one thing.
+
+Proposals exist exactly when violations do, so a run that declared no
+vocabulary produces none: it is not missing one. The way to ask "what
+vocabulary would this graph need" is to supply an empty ontology, which makes
+it a question rather than a side effect of not asking — and keeps every
+ungoverned result ever loaded at the content address it already has.
+
 ### A fact has to be able to go out of date
 
 The vocabulary says which edges may exist. Until it could also say how many, a

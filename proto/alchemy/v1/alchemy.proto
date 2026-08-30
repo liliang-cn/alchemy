@@ -751,6 +751,9 @@ message Result {
   repeated RuleSet rule_sets = 12;
   // What this run says is no longer true, and who said so.
   repeated Supersession supersessions = 15;
+  // The types this corpus used and the ontology does not declare, one per type
+  // rather than one per record.
+  repeated Proposal proposals = 16;
 }
 
 // StandingRule is one rule of a set: what it is called, and what the model was
@@ -821,6 +824,7 @@ message ResultPage {
   // the answer arrive after the decision.
   repeated RuleSet rule_sets = 14;
   repeated Supersession supersessions = 17;
+  repeated Proposal proposals = 18;
 }
 
 // ---------------------------------------------------------------------------
@@ -1026,6 +1030,49 @@ message Supersession {
   // superseding record's. A reviewer may retire a record a model proposed, and
   // those are two claims by two parties.
   Provenance provenance = 4;
+}
+
+// ProposalKind says which of an ontology's two lists a proposal belongs in.
+enum ProposalKind {
+  PROPOSAL_KIND_UNSPECIFIED = 0;
+  PROPOSAL_KIND_ENTITY = 1;
+  PROPOSAL_KIND_RELATION = 2;
+}
+
+// Proposal is a type a source used that the ontology does not declare, stated
+// as the change that would let it.
+//
+// Not a second violation. A violation is per record and says what is wrong;
+// six records using one undeclared type are six violations, and a
+// four-hundred-thousand-record import missing one type is four hundred
+// thousand of them. This is one entry per type and it says what to do.
+//
+// It proposes and never applies. The ends and the counts are observed —
+// "MEMBER_OF was used four times, always from Person to Team, by liliang" —
+// and whether that is what the type MEANS is a judgement §2.1 will not let a
+// machine make.
+//
+// Produced only when a vocabulary was supplied. A run with no ontology has
+// nothing to be undeclared against, and the way to ask "what vocabulary would
+// this graph need" is to supply an empty one — a question rather than a side
+// effect of not asking.
+message Proposal {
+  ProposalKind kind = 1;
+  string type = 2;
+  // How many records used it: what tells a vocabulary gap from a typo.
+  int32 records = 3;
+  // The entity types this relation type was observed between, sorted. Empty
+  // for an entity proposal, and for a relation whose ends are themselves
+  // undeclared — a line proposing two undeclared things at once is a line
+  // nobody can accept as one thing.
+  repeated string from = 4;
+  repeated string to = 5;
+  // Who used it. §5b's question asked of a proposal: a type every record of
+  // one PDF used is a different suggestion from one a person asserted by name.
+  repeated string sources = 6;
+  repeated Producer producers = 7;
+  // One record that used it, so a reader can go and look.
+  Ref example = 8;
 }
 
 message ReviewDecision {

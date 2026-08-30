@@ -44,6 +44,10 @@ func (r *run) verify() verify.Report {
 	// to be a question.
 	if r.req.Ontology != nil {
 		r.violations = append(r.violations, rep.Violations...)
+		// The proposals travel with the violations they are derived from, and
+		// under the same condition for the same reason: a run that declared no
+		// vocabulary is not missing one.
+		r.proposals = append(r.proposals, rep.Proposals...)
 	}
 	r.found(rep.Conflicts...)
 	// Kept whatever the ontology said, for the same reason the conflicts are:
@@ -55,6 +59,7 @@ func (r *run) verify() verify.Report {
 	rep.Violations = r.violations
 	rep.Conflicts = r.conflicts
 	rep.Duplicates = r.duplicates
+	rep.Proposals = r.proposals
 	r.progress(stageVerify, "")
 	return rep
 }

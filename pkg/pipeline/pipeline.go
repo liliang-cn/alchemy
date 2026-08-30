@@ -237,6 +237,10 @@ type run struct {
 	violations []alchemy.Violation
 	conflicts  []alchemy.Conflict
 	duplicates []alchemy.Duplicate
+	// proposals are the undeclared types this run met, one per type. They are
+	// accumulated beside the violations they come from, so a paged or resumed
+	// run reports the same vocabulary gap once rather than once per page.
+	proposals  []alchemy.Proposal
 	guesses    []alchemy.Guess
 	modelCalls []alchemy.ModelCall
 	// chunksEmpty is the running total of chunks that produced nothing, summed
@@ -319,6 +323,7 @@ func (r *run) result() alchemy.Result {
 		Chunks:     r.chunks,
 		Conflicts:  r.conflicts,
 		Violations: r.violations,
+		Proposals:  r.proposals,
 		Duplicates: r.duplicates,
 		Guesses:    r.guesses,
 		Unread:     r.unread,

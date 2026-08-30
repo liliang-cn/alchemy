@@ -169,6 +169,13 @@ func checked(req *alchemyv1.AssertRequest, entities []alchemy.Entity, relations 
 	}
 	if strings.TrimSpace(req.GetOntology()) != "" {
 		res.Violations = rep.Violations
+		// The proposals travel with the violations they are derived from, and
+		// for this endpoint they are the more useful half: a person stating a
+		// fact in a vocabulary that does not have a word for it is told which
+		// word to add, once, rather than told six times that six records are
+		// wrong. Asserting one team of four people is three proposals and six
+		// violations.
+		res.Proposals = rep.Proposals
 	}
 	return res
 }

@@ -658,6 +658,56 @@ func (RuleOrigin) EnumDescriptor() ([]byte, []int) {
 	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{9}
 }
 
+// ProposalKind says which of an ontology's two lists a proposal belongs in.
+type ProposalKind int32
+
+const (
+	ProposalKind_PROPOSAL_KIND_UNSPECIFIED ProposalKind = 0
+	ProposalKind_PROPOSAL_KIND_ENTITY      ProposalKind = 1
+	ProposalKind_PROPOSAL_KIND_RELATION    ProposalKind = 2
+)
+
+// Enum value maps for ProposalKind.
+var (
+	ProposalKind_name = map[int32]string{
+		0: "PROPOSAL_KIND_UNSPECIFIED",
+		1: "PROPOSAL_KIND_ENTITY",
+		2: "PROPOSAL_KIND_RELATION",
+	}
+	ProposalKind_value = map[string]int32{
+		"PROPOSAL_KIND_UNSPECIFIED": 0,
+		"PROPOSAL_KIND_ENTITY":      1,
+		"PROPOSAL_KIND_RELATION":    2,
+	}
+)
+
+func (x ProposalKind) Enum() *ProposalKind {
+	p := new(ProposalKind)
+	*p = x
+	return p
+}
+
+func (x ProposalKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProposalKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_alchemy_v1_alchemy_proto_enumTypes[10].Descriptor()
+}
+
+func (ProposalKind) Type() protoreflect.EnumType {
+	return &file_alchemy_v1_alchemy_proto_enumTypes[10]
+}
+
+func (x ProposalKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProposalKind.Descriptor instead.
+func (ProposalKind) EnumDescriptor() ([]byte, []int) {
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{10}
+}
+
 // ModelEndpoint is one of the caller's models. The name is not decoration: it
 // is what appears in provenance and in the cost report, so two runs against
 // two models are told apart by a reader who has only the result.
@@ -2848,6 +2898,9 @@ type Result struct {
 	RuleSets []*RuleSet `protobuf:"bytes,12,rep,name=rule_sets,json=ruleSets,proto3" json:"rule_sets,omitempty"`
 	// What this run says is no longer true, and who said so.
 	Supersessions []*Supersession `protobuf:"bytes,15,rep,name=supersessions,proto3" json:"supersessions,omitempty"`
+	// The types this corpus used and the ontology does not declare, one per type
+	// rather than one per record.
+	Proposals     []*Proposal `protobuf:"bytes,16,rep,name=proposals,proto3" json:"proposals,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2983,6 +3036,13 @@ func (x *Result) GetRuleSets() []*RuleSet {
 func (x *Result) GetSupersessions() []*Supersession {
 	if x != nil {
 		return x.Supersessions
+	}
+	return nil
+}
+
+func (x *Result) GetProposals() []*Proposal {
+	if x != nil {
+		return x.Proposals
 	}
 	return nil
 }
@@ -3148,6 +3208,7 @@ type ResultPage struct {
 	// the answer arrive after the decision.
 	RuleSets      []*RuleSet      `protobuf:"bytes,14,rep,name=rule_sets,json=ruleSets,proto3" json:"rule_sets,omitempty"`
 	Supersessions []*Supersession `protobuf:"bytes,17,rep,name=supersessions,proto3" json:"supersessions,omitempty"`
+	Proposals     []*Proposal     `protobuf:"bytes,18,rep,name=proposals,proto3" json:"proposals,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3297,6 +3358,13 @@ func (x *ResultPage) GetRuleSets() []*RuleSet {
 func (x *ResultPage) GetSupersessions() []*Supersession {
 	if x != nil {
 		return x.Supersessions
+	}
+	return nil
+}
+
+func (x *ResultPage) GetProposals() []*Proposal {
+	if x != nil {
+		return x.Proposals
 	}
 	return nil
 }
@@ -4300,6 +4368,131 @@ func (x *Supersession) GetProvenance() *Provenance {
 	return nil
 }
 
+// Proposal is a type a source used that the ontology does not declare, stated
+// as the change that would let it.
+//
+// Not a second violation. A violation is per record and says what is wrong;
+// six records using one undeclared type are six violations, and a
+// four-hundred-thousand-record import missing one type is four hundred
+// thousand of them. This is one entry per type and it says what to do.
+//
+// It proposes and never applies. The ends and the counts are observed —
+// "MEMBER_OF was used four times, always from Person to Team, by liliang" —
+// and whether that is what the type MEANS is a judgement §2.1 will not let a
+// machine make.
+//
+// Produced only when a vocabulary was supplied. A run with no ontology has
+// nothing to be undeclared against, and the way to ask "what vocabulary would
+// this graph need" is to supply an empty one — a question rather than a side
+// effect of not asking.
+type Proposal struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  ProposalKind           `protobuf:"varint,1,opt,name=kind,proto3,enum=alchemy.v1.ProposalKind" json:"kind,omitempty"`
+	Type  string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// How many records used it: what tells a vocabulary gap from a typo.
+	Records int32 `protobuf:"varint,3,opt,name=records,proto3" json:"records,omitempty"`
+	// The entity types this relation type was observed between, sorted. Empty
+	// for an entity proposal, and for a relation whose ends are themselves
+	// undeclared — a line proposing two undeclared things at once is a line
+	// nobody can accept as one thing.
+	From []string `protobuf:"bytes,4,rep,name=from,proto3" json:"from,omitempty"`
+	To   []string `protobuf:"bytes,5,rep,name=to,proto3" json:"to,omitempty"`
+	// Who used it. §5b's question asked of a proposal: a type every record of
+	// one PDF used is a different suggestion from one a person asserted by name.
+	Sources   []string   `protobuf:"bytes,6,rep,name=sources,proto3" json:"sources,omitempty"`
+	Producers []Producer `protobuf:"varint,7,rep,packed,name=producers,proto3,enum=alchemy.v1.Producer" json:"producers,omitempty"`
+	// One record that used it, so a reader can go and look.
+	Example       *Ref `protobuf:"bytes,8,opt,name=example,proto3" json:"example,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Proposal) Reset() {
+	*x = Proposal{}
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Proposal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Proposal) ProtoMessage() {}
+
+func (x *Proposal) ProtoReflect() protoreflect.Message {
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Proposal.ProtoReflect.Descriptor instead.
+func (*Proposal) Descriptor() ([]byte, []int) {
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *Proposal) GetKind() ProposalKind {
+	if x != nil {
+		return x.Kind
+	}
+	return ProposalKind_PROPOSAL_KIND_UNSPECIFIED
+}
+
+func (x *Proposal) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *Proposal) GetRecords() int32 {
+	if x != nil {
+		return x.Records
+	}
+	return 0
+}
+
+func (x *Proposal) GetFrom() []string {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *Proposal) GetTo() []string {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *Proposal) GetSources() []string {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *Proposal) GetProducers() []Producer {
+	if x != nil {
+		return x.Producers
+	}
+	return nil
+}
+
+func (x *Proposal) GetExample() *Ref {
+	if x != nil {
+		return x.Example
+	}
+	return nil
+}
+
 type ReviewDecision struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The first message on the stream must name the job; later ones may repeat
@@ -4321,7 +4514,7 @@ type ReviewDecision struct {
 
 func (x *ReviewDecision) Reset() {
 	*x = ReviewDecision{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[43]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4333,7 +4526,7 @@ func (x *ReviewDecision) String() string {
 func (*ReviewDecision) ProtoMessage() {}
 
 func (x *ReviewDecision) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[43]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4346,7 +4539,7 @@ func (x *ReviewDecision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewDecision.ProtoReflect.Descriptor instead.
 func (*ReviewDecision) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{43}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ReviewDecision) GetJobId() string {
@@ -4589,7 +4782,7 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x06Unread\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x18\n" +
 	"\alocator\x18\x02 \x01(\tR\alocator\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xd6\x05\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x8a\x06\n" +
 	"\x06Result\x12\x10\n" +
 	"\x03job\x18\x0e \x01(\tR\x03job\x12.\n" +
 	"\bentities\x18\x01 \x03(\v2\x12.alchemy.v1.EntityR\bentities\x122\n" +
@@ -4611,13 +4804,14 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"duplicates\x18\r \x03(\v2\x15.alchemy.v1.DuplicateR\n" +
 	"duplicates\x120\n" +
 	"\trule_sets\x18\f \x03(\v2\x13.alchemy.v1.RuleSetR\bruleSets\x12>\n" +
-	"\rsupersessions\x18\x0f \x03(\v2\x18.alchemy.v1.SupersessionR\rsupersessions\"6\n" +
+	"\rsupersessions\x18\x0f \x03(\v2\x18.alchemy.v1.SupersessionR\rsupersessions\x122\n" +
+	"\tproposals\x18\x10 \x03(\v2\x14.alchemy.v1.ProposalR\tproposals\"6\n" +
 	"\fStandingRule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04told\x18\x02 \x01(\tR\x04told\"M\n" +
 	"\aRuleSet\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12.\n" +
-	"\x05rules\x18\x02 \x03(\v2\x18.alchemy.v1.StandingRuleR\x05rules\"\x82\x06\n" +
+	"\x05rules\x18\x02 \x03(\v2\x18.alchemy.v1.StandingRuleR\x05rules\"\xb6\x06\n" +
 	"\n" +
 	"ResultPage\x12\x12\n" +
 	"\x04page\x18\x01 \x01(\x05R\x04page\x12\x12\n" +
@@ -4642,7 +4836,8 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x06unread\x18\f \x03(\v2\x12.alchemy.v1.UnreadR\x06unread\x12,\n" +
 	"\x05rules\x18\r \x03(\v2\x16.alchemy.v1.ReviewRuleR\x05rules\x120\n" +
 	"\trule_sets\x18\x0e \x03(\v2\x13.alchemy.v1.RuleSetR\bruleSets\x12>\n" +
-	"\rsupersessions\x18\x11 \x03(\v2\x18.alchemy.v1.SupersessionR\rsupersessions\"\xd9\x02\n" +
+	"\rsupersessions\x18\x11 \x03(\v2\x18.alchemy.v1.SupersessionR\rsupersessions\x122\n" +
+	"\tproposals\x18\x12 \x03(\v2\x14.alchemy.v1.ProposalR\tproposals\"\xd9\x02\n" +
 	"\bJobEvent\x12*\n" +
 	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12*\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x14.alchemy.v1.JobStateR\x05state\x12\x14\n" +
@@ -4724,7 +4919,16 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x126\n" +
 	"\n" +
 	"provenance\x18\x04 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
-	"provenance\"\xe2\x01\n" +
+	"provenance\"\x83\x02\n" +
+	"\bProposal\x12,\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x18.alchemy.v1.ProposalKindR\x04kind\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
+	"\arecords\x18\x03 \x01(\x05R\arecords\x12\x12\n" +
+	"\x04from\x18\x04 \x03(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x05 \x03(\tR\x02to\x12\x18\n" +
+	"\asources\x18\x06 \x03(\tR\asources\x122\n" +
+	"\tproducers\x18\a \x03(\x0e2\x14.alchemy.v1.ProducerR\tproducers\x12)\n" +
+	"\aexample\x18\b \x01(\v2\x0f.alchemy.v1.RefR\aexample\"\xe2\x01\n" +
 	"\x0eReviewDecision\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x17\n" +
 	"\aitem_id\x18\x02 \x01(\tR\x06itemId\x12*\n" +
@@ -4801,7 +5005,11 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"RuleOrigin\x12\x1b\n" +
 	"\x17RULE_ORIGIN_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14RULE_ORIGIN_REVIEWED\x10\x01\x12\x18\n" +
-	"\x14RULE_ORIGIN_AUTHORED\x10\x022\xff\a\n" +
+	"\x14RULE_ORIGIN_AUTHORED\x10\x02*c\n" +
+	"\fProposalKind\x12\x1d\n" +
+	"\x19PROPOSAL_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14PROPOSAL_KIND_ENTITY\x10\x01\x12\x1a\n" +
+	"\x16PROPOSAL_KIND_RELATION\x10\x022\xff\a\n" +
 	"\aAlchemy\x12O\n" +
 	"\tCreateJob\x12\x1c.alchemy.v1.CreateJobRequest\x1a\x0f.alchemy.v1.Job\"\x13\x82\xd3\xe4\x93\x02\r:\x01*\"\b/v1/jobs\x12O\n" +
 	"\x06GetJob\x12\x19.alchemy.v1.GetJobRequest\x1a\x0f.alchemy.v1.Job\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/jobs/{job_id}\x12_\n" +
@@ -4827,8 +5035,8 @@ func file_alchemy_v1_alchemy_proto_rawDescGZIP() []byte {
 	return file_alchemy_v1_alchemy_proto_rawDescData
 }
 
-var file_alchemy_v1_alchemy_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_alchemy_v1_alchemy_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_alchemy_v1_alchemy_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
+var file_alchemy_v1_alchemy_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_alchemy_v1_alchemy_proto_goTypes = []any{
 	(JobState)(0),                 // 0: alchemy.v1.JobState
 	(SourceKind)(0),               // 1: alchemy.v1.SourceKind
@@ -4840,169 +5048,176 @@ var file_alchemy_v1_alchemy_proto_goTypes = []any{
 	(ReviewVerb)(0),               // 7: alchemy.v1.ReviewVerb
 	(RefKind)(0),                  // 8: alchemy.v1.RefKind
 	(RuleOrigin)(0),               // 9: alchemy.v1.RuleOrigin
-	(*ModelEndpoint)(nil),         // 10: alchemy.v1.ModelEndpoint
-	(*Models)(nil),                // 11: alchemy.v1.Models
-	(*Chunking)(nil),              // 12: alchemy.v1.Chunking
-	(*ReviewOptions)(nil),         // 13: alchemy.v1.ReviewOptions
-	(*ReviewRule)(nil),            // 14: alchemy.v1.ReviewRule
-	(*CreateJobRequest)(nil),      // 15: alchemy.v1.CreateJobRequest
-	(*Job)(nil),                   // 16: alchemy.v1.Job
-	(*GetJobRequest)(nil),         // 17: alchemy.v1.GetJobRequest
-	(*DeleteJobRequest)(nil),      // 18: alchemy.v1.DeleteJobRequest
-	(*WatchJobRequest)(nil),       // 19: alchemy.v1.WatchJobRequest
-	(*GetResultRequest)(nil),      // 20: alchemy.v1.GetResultRequest
-	(*SourceChunk)(nil),           // 21: alchemy.v1.SourceChunk
-	(*Source)(nil),                // 22: alchemy.v1.Source
-	(*Provenance)(nil),            // 23: alchemy.v1.Provenance
-	(*Entity)(nil),                // 24: alchemy.v1.Entity
-	(*Relation)(nil),              // 25: alchemy.v1.Relation
-	(*Chunk)(nil),                 // 26: alchemy.v1.Chunk
-	(*Vector)(nil),                // 27: alchemy.v1.Vector
-	(*Violation)(nil),             // 28: alchemy.v1.Violation
-	(*Guess)(nil),                 // 29: alchemy.v1.Guess
-	(*Claim)(nil),                 // 30: alchemy.v1.Claim
-	(*Conflict)(nil),              // 31: alchemy.v1.Conflict
-	(*Duplicate)(nil),             // 32: alchemy.v1.Duplicate
-	(*DuplicateSide)(nil),         // 33: alchemy.v1.DuplicateSide
-	(*Counts)(nil),                // 34: alchemy.v1.Counts
-	(*ModelCall)(nil),             // 35: alchemy.v1.ModelCall
-	(*Unread)(nil),                // 36: alchemy.v1.Unread
-	(*Result)(nil),                // 37: alchemy.v1.Result
-	(*StandingRule)(nil),          // 38: alchemy.v1.StandingRule
-	(*RuleSet)(nil),               // 39: alchemy.v1.RuleSet
-	(*ResultPage)(nil),            // 40: alchemy.v1.ResultPage
-	(*JobEvent)(nil),              // 41: alchemy.v1.JobEvent
-	(*Ref)(nil),                   // 42: alchemy.v1.Ref
-	(*ReviewItem)(nil),            // 43: alchemy.v1.ReviewItem
-	(*Edit)(nil),                  // 44: alchemy.v1.Edit
-	(*ListFindingsRequest)(nil),   // 45: alchemy.v1.ListFindingsRequest
-	(*Findings)(nil),              // 46: alchemy.v1.Findings
-	(*DecideRequest)(nil),         // 47: alchemy.v1.DecideRequest
-	(*DecideResponse)(nil),        // 48: alchemy.v1.DecideResponse
-	(*DecisionRejection)(nil),     // 49: alchemy.v1.DecisionRejection
-	(*AssertRequest)(nil),         // 50: alchemy.v1.AssertRequest
-	(*Supersedes)(nil),            // 51: alchemy.v1.Supersedes
-	(*Supersession)(nil),          // 52: alchemy.v1.Supersession
-	(*ReviewDecision)(nil),        // 53: alchemy.v1.ReviewDecision
-	nil,                           // 54: alchemy.v1.ModelEndpoint.OptionsEntry
-	(*timestamppb.Timestamp)(nil), // 55: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 56: google.protobuf.Struct
-	(*emptypb.Empty)(nil),         // 57: google.protobuf.Empty
+	(ProposalKind)(0),             // 10: alchemy.v1.ProposalKind
+	(*ModelEndpoint)(nil),         // 11: alchemy.v1.ModelEndpoint
+	(*Models)(nil),                // 12: alchemy.v1.Models
+	(*Chunking)(nil),              // 13: alchemy.v1.Chunking
+	(*ReviewOptions)(nil),         // 14: alchemy.v1.ReviewOptions
+	(*ReviewRule)(nil),            // 15: alchemy.v1.ReviewRule
+	(*CreateJobRequest)(nil),      // 16: alchemy.v1.CreateJobRequest
+	(*Job)(nil),                   // 17: alchemy.v1.Job
+	(*GetJobRequest)(nil),         // 18: alchemy.v1.GetJobRequest
+	(*DeleteJobRequest)(nil),      // 19: alchemy.v1.DeleteJobRequest
+	(*WatchJobRequest)(nil),       // 20: alchemy.v1.WatchJobRequest
+	(*GetResultRequest)(nil),      // 21: alchemy.v1.GetResultRequest
+	(*SourceChunk)(nil),           // 22: alchemy.v1.SourceChunk
+	(*Source)(nil),                // 23: alchemy.v1.Source
+	(*Provenance)(nil),            // 24: alchemy.v1.Provenance
+	(*Entity)(nil),                // 25: alchemy.v1.Entity
+	(*Relation)(nil),              // 26: alchemy.v1.Relation
+	(*Chunk)(nil),                 // 27: alchemy.v1.Chunk
+	(*Vector)(nil),                // 28: alchemy.v1.Vector
+	(*Violation)(nil),             // 29: alchemy.v1.Violation
+	(*Guess)(nil),                 // 30: alchemy.v1.Guess
+	(*Claim)(nil),                 // 31: alchemy.v1.Claim
+	(*Conflict)(nil),              // 32: alchemy.v1.Conflict
+	(*Duplicate)(nil),             // 33: alchemy.v1.Duplicate
+	(*DuplicateSide)(nil),         // 34: alchemy.v1.DuplicateSide
+	(*Counts)(nil),                // 35: alchemy.v1.Counts
+	(*ModelCall)(nil),             // 36: alchemy.v1.ModelCall
+	(*Unread)(nil),                // 37: alchemy.v1.Unread
+	(*Result)(nil),                // 38: alchemy.v1.Result
+	(*StandingRule)(nil),          // 39: alchemy.v1.StandingRule
+	(*RuleSet)(nil),               // 40: alchemy.v1.RuleSet
+	(*ResultPage)(nil),            // 41: alchemy.v1.ResultPage
+	(*JobEvent)(nil),              // 42: alchemy.v1.JobEvent
+	(*Ref)(nil),                   // 43: alchemy.v1.Ref
+	(*ReviewItem)(nil),            // 44: alchemy.v1.ReviewItem
+	(*Edit)(nil),                  // 45: alchemy.v1.Edit
+	(*ListFindingsRequest)(nil),   // 46: alchemy.v1.ListFindingsRequest
+	(*Findings)(nil),              // 47: alchemy.v1.Findings
+	(*DecideRequest)(nil),         // 48: alchemy.v1.DecideRequest
+	(*DecideResponse)(nil),        // 49: alchemy.v1.DecideResponse
+	(*DecisionRejection)(nil),     // 50: alchemy.v1.DecisionRejection
+	(*AssertRequest)(nil),         // 51: alchemy.v1.AssertRequest
+	(*Supersedes)(nil),            // 52: alchemy.v1.Supersedes
+	(*Supersession)(nil),          // 53: alchemy.v1.Supersession
+	(*Proposal)(nil),              // 54: alchemy.v1.Proposal
+	(*ReviewDecision)(nil),        // 55: alchemy.v1.ReviewDecision
+	nil,                           // 56: alchemy.v1.ModelEndpoint.OptionsEntry
+	(*timestamppb.Timestamp)(nil), // 57: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 58: google.protobuf.Struct
+	(*emptypb.Empty)(nil),         // 59: google.protobuf.Empty
 }
 var file_alchemy_v1_alchemy_proto_depIdxs = []int32{
-	54, // 0: alchemy.v1.ModelEndpoint.options:type_name -> alchemy.v1.ModelEndpoint.OptionsEntry
-	10, // 1: alchemy.v1.Models.llm:type_name -> alchemy.v1.ModelEndpoint
-	10, // 2: alchemy.v1.Models.embedder:type_name -> alchemy.v1.ModelEndpoint
-	10, // 3: alchemy.v1.Models.ocr:type_name -> alchemy.v1.ModelEndpoint
-	14, // 4: alchemy.v1.ReviewOptions.rules:type_name -> alchemy.v1.ReviewRule
-	6,  // 5: alchemy.v1.ReviewRule.kind:type_name -> alchemy.v1.ReviewKind
-	53, // 6: alchemy.v1.ReviewRule.from:type_name -> alchemy.v1.ReviewDecision
-	9,  // 7: alchemy.v1.ReviewRule.origin:type_name -> alchemy.v1.RuleOrigin
-	11, // 8: alchemy.v1.CreateJobRequest.models:type_name -> alchemy.v1.Models
-	12, // 9: alchemy.v1.CreateJobRequest.chunking:type_name -> alchemy.v1.Chunking
-	13, // 10: alchemy.v1.CreateJobRequest.review:type_name -> alchemy.v1.ReviewOptions
-	0,  // 11: alchemy.v1.Job.state:type_name -> alchemy.v1.JobState
-	55, // 12: alchemy.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	55, // 13: alchemy.v1.Job.expires_at:type_name -> google.protobuf.Timestamp
-	1,  // 14: alchemy.v1.SourceChunk.kind:type_name -> alchemy.v1.SourceKind
-	1,  // 15: alchemy.v1.Source.kind:type_name -> alchemy.v1.SourceKind
-	2,  // 16: alchemy.v1.Provenance.producer:type_name -> alchemy.v1.Producer
-	56, // 17: alchemy.v1.Entity.attributes:type_name -> google.protobuf.Struct
-	23, // 18: alchemy.v1.Entity.provenance:type_name -> alchemy.v1.Provenance
-	56, // 19: alchemy.v1.Relation.attributes:type_name -> google.protobuf.Struct
-	23, // 20: alchemy.v1.Relation.provenance:type_name -> alchemy.v1.Provenance
-	3,  // 21: alchemy.v1.Violation.kind:type_name -> alchemy.v1.ViolationKind
-	23, // 22: alchemy.v1.Violation.provenance:type_name -> alchemy.v1.Provenance
-	42, // 23: alchemy.v1.Violation.about:type_name -> alchemy.v1.Ref
-	23, // 24: alchemy.v1.Guess.provenance:type_name -> alchemy.v1.Provenance
-	23, // 25: alchemy.v1.Claim.provenance:type_name -> alchemy.v1.Provenance
-	4,  // 26: alchemy.v1.Conflict.kind:type_name -> alchemy.v1.ConflictKind
-	30, // 27: alchemy.v1.Conflict.left:type_name -> alchemy.v1.Claim
-	30, // 28: alchemy.v1.Conflict.right:type_name -> alchemy.v1.Claim
-	5,  // 29: alchemy.v1.Duplicate.signal:type_name -> alchemy.v1.DuplicateSignal
-	33, // 30: alchemy.v1.Duplicate.left:type_name -> alchemy.v1.DuplicateSide
-	33, // 31: alchemy.v1.Duplicate.right:type_name -> alchemy.v1.DuplicateSide
-	23, // 32: alchemy.v1.DuplicateSide.provenance:type_name -> alchemy.v1.Provenance
-	24, // 33: alchemy.v1.Result.entities:type_name -> alchemy.v1.Entity
-	25, // 34: alchemy.v1.Result.relations:type_name -> alchemy.v1.Relation
-	26, // 35: alchemy.v1.Result.chunks:type_name -> alchemy.v1.Chunk
-	27, // 36: alchemy.v1.Result.vectors:type_name -> alchemy.v1.Vector
-	31, // 37: alchemy.v1.Result.conflicts:type_name -> alchemy.v1.Conflict
-	28, // 38: alchemy.v1.Result.violations:type_name -> alchemy.v1.Violation
-	29, // 39: alchemy.v1.Result.guesses:type_name -> alchemy.v1.Guess
-	34, // 40: alchemy.v1.Result.counts:type_name -> alchemy.v1.Counts
-	35, // 41: alchemy.v1.Result.model_calls:type_name -> alchemy.v1.ModelCall
-	36, // 42: alchemy.v1.Result.unread:type_name -> alchemy.v1.Unread
-	14, // 43: alchemy.v1.Result.rules:type_name -> alchemy.v1.ReviewRule
-	32, // 44: alchemy.v1.Result.duplicates:type_name -> alchemy.v1.Duplicate
-	39, // 45: alchemy.v1.Result.rule_sets:type_name -> alchemy.v1.RuleSet
-	52, // 46: alchemy.v1.Result.supersessions:type_name -> alchemy.v1.Supersession
-	38, // 47: alchemy.v1.RuleSet.rules:type_name -> alchemy.v1.StandingRule
-	24, // 48: alchemy.v1.ResultPage.entities:type_name -> alchemy.v1.Entity
-	25, // 49: alchemy.v1.ResultPage.relations:type_name -> alchemy.v1.Relation
-	26, // 50: alchemy.v1.ResultPage.chunks:type_name -> alchemy.v1.Chunk
-	27, // 51: alchemy.v1.ResultPage.vectors:type_name -> alchemy.v1.Vector
-	31, // 52: alchemy.v1.ResultPage.conflicts:type_name -> alchemy.v1.Conflict
-	28, // 53: alchemy.v1.ResultPage.violations:type_name -> alchemy.v1.Violation
-	29, // 54: alchemy.v1.ResultPage.guesses:type_name -> alchemy.v1.Guess
-	32, // 55: alchemy.v1.ResultPage.duplicates:type_name -> alchemy.v1.Duplicate
-	34, // 56: alchemy.v1.ResultPage.counts:type_name -> alchemy.v1.Counts
-	35, // 57: alchemy.v1.ResultPage.model_calls:type_name -> alchemy.v1.ModelCall
-	36, // 58: alchemy.v1.ResultPage.unread:type_name -> alchemy.v1.Unread
-	14, // 59: alchemy.v1.ResultPage.rules:type_name -> alchemy.v1.ReviewRule
-	39, // 60: alchemy.v1.ResultPage.rule_sets:type_name -> alchemy.v1.RuleSet
-	52, // 61: alchemy.v1.ResultPage.supersessions:type_name -> alchemy.v1.Supersession
-	55, // 62: alchemy.v1.JobEvent.at:type_name -> google.protobuf.Timestamp
-	0,  // 63: alchemy.v1.JobEvent.state:type_name -> alchemy.v1.JobState
-	34, // 64: alchemy.v1.JobEvent.counts:type_name -> alchemy.v1.Counts
-	31, // 65: alchemy.v1.JobEvent.conflict:type_name -> alchemy.v1.Conflict
-	35, // 66: alchemy.v1.JobEvent.model_calls_by_stage:type_name -> alchemy.v1.ModelCall
-	8,  // 67: alchemy.v1.Ref.kind:type_name -> alchemy.v1.RefKind
-	23, // 68: alchemy.v1.Ref.provenance:type_name -> alchemy.v1.Provenance
-	6,  // 69: alchemy.v1.ReviewItem.kind:type_name -> alchemy.v1.ReviewKind
-	42, // 70: alchemy.v1.ReviewItem.targets:type_name -> alchemy.v1.Ref
-	14, // 71: alchemy.v1.ReviewItem.suppressed_by:type_name -> alchemy.v1.ReviewRule
-	23, // 72: alchemy.v1.ReviewItem.provenance:type_name -> alchemy.v1.Provenance
-	0,  // 73: alchemy.v1.Findings.state:type_name -> alchemy.v1.JobState
-	43, // 74: alchemy.v1.Findings.items:type_name -> alchemy.v1.ReviewItem
-	53, // 75: alchemy.v1.DecideRequest.decisions:type_name -> alchemy.v1.ReviewDecision
-	0,  // 76: alchemy.v1.DecideResponse.state:type_name -> alchemy.v1.JobState
-	49, // 77: alchemy.v1.DecideResponse.rejected:type_name -> alchemy.v1.DecisionRejection
-	24, // 78: alchemy.v1.AssertRequest.entities:type_name -> alchemy.v1.Entity
-	25, // 79: alchemy.v1.AssertRequest.relations:type_name -> alchemy.v1.Relation
-	51, // 80: alchemy.v1.AssertRequest.supersedes:type_name -> alchemy.v1.Supersedes
-	42, // 81: alchemy.v1.Supersession.by:type_name -> alchemy.v1.Ref
-	23, // 82: alchemy.v1.Supersession.provenance:type_name -> alchemy.v1.Provenance
-	7,  // 83: alchemy.v1.ReviewDecision.verb:type_name -> alchemy.v1.ReviewVerb
-	44, // 84: alchemy.v1.ReviewDecision.edit:type_name -> alchemy.v1.Edit
-	55, // 85: alchemy.v1.ReviewDecision.at:type_name -> google.protobuf.Timestamp
-	15, // 86: alchemy.v1.Alchemy.CreateJob:input_type -> alchemy.v1.CreateJobRequest
-	17, // 87: alchemy.v1.Alchemy.GetJob:input_type -> alchemy.v1.GetJobRequest
-	20, // 88: alchemy.v1.Alchemy.GetResult:input_type -> alchemy.v1.GetResultRequest
-	20, // 89: alchemy.v1.Alchemy.StreamResult:input_type -> alchemy.v1.GetResultRequest
-	18, // 90: alchemy.v1.Alchemy.DeleteJob:input_type -> alchemy.v1.DeleteJobRequest
-	21, // 91: alchemy.v1.Alchemy.UploadSource:input_type -> alchemy.v1.SourceChunk
-	19, // 92: alchemy.v1.Alchemy.WatchJob:input_type -> alchemy.v1.WatchJobRequest
-	53, // 93: alchemy.v1.Alchemy.Review:input_type -> alchemy.v1.ReviewDecision
-	45, // 94: alchemy.v1.Alchemy.ListFindings:input_type -> alchemy.v1.ListFindingsRequest
-	47, // 95: alchemy.v1.Alchemy.Decide:input_type -> alchemy.v1.DecideRequest
-	50, // 96: alchemy.v1.Alchemy.Assert:input_type -> alchemy.v1.AssertRequest
-	16, // 97: alchemy.v1.Alchemy.CreateJob:output_type -> alchemy.v1.Job
-	16, // 98: alchemy.v1.Alchemy.GetJob:output_type -> alchemy.v1.Job
-	37, // 99: alchemy.v1.Alchemy.GetResult:output_type -> alchemy.v1.Result
-	40, // 100: alchemy.v1.Alchemy.StreamResult:output_type -> alchemy.v1.ResultPage
-	57, // 101: alchemy.v1.Alchemy.DeleteJob:output_type -> google.protobuf.Empty
-	22, // 102: alchemy.v1.Alchemy.UploadSource:output_type -> alchemy.v1.Source
-	41, // 103: alchemy.v1.Alchemy.WatchJob:output_type -> alchemy.v1.JobEvent
-	43, // 104: alchemy.v1.Alchemy.Review:output_type -> alchemy.v1.ReviewItem
-	46, // 105: alchemy.v1.Alchemy.ListFindings:output_type -> alchemy.v1.Findings
-	48, // 106: alchemy.v1.Alchemy.Decide:output_type -> alchemy.v1.DecideResponse
-	37, // 107: alchemy.v1.Alchemy.Assert:output_type -> alchemy.v1.Result
-	97, // [97:108] is the sub-list for method output_type
-	86, // [86:97] is the sub-list for method input_type
-	86, // [86:86] is the sub-list for extension type_name
-	86, // [86:86] is the sub-list for extension extendee
-	0,  // [0:86] is the sub-list for field type_name
+	56,  // 0: alchemy.v1.ModelEndpoint.options:type_name -> alchemy.v1.ModelEndpoint.OptionsEntry
+	11,  // 1: alchemy.v1.Models.llm:type_name -> alchemy.v1.ModelEndpoint
+	11,  // 2: alchemy.v1.Models.embedder:type_name -> alchemy.v1.ModelEndpoint
+	11,  // 3: alchemy.v1.Models.ocr:type_name -> alchemy.v1.ModelEndpoint
+	15,  // 4: alchemy.v1.ReviewOptions.rules:type_name -> alchemy.v1.ReviewRule
+	6,   // 5: alchemy.v1.ReviewRule.kind:type_name -> alchemy.v1.ReviewKind
+	55,  // 6: alchemy.v1.ReviewRule.from:type_name -> alchemy.v1.ReviewDecision
+	9,   // 7: alchemy.v1.ReviewRule.origin:type_name -> alchemy.v1.RuleOrigin
+	12,  // 8: alchemy.v1.CreateJobRequest.models:type_name -> alchemy.v1.Models
+	13,  // 9: alchemy.v1.CreateJobRequest.chunking:type_name -> alchemy.v1.Chunking
+	14,  // 10: alchemy.v1.CreateJobRequest.review:type_name -> alchemy.v1.ReviewOptions
+	0,   // 11: alchemy.v1.Job.state:type_name -> alchemy.v1.JobState
+	57,  // 12: alchemy.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	57,  // 13: alchemy.v1.Job.expires_at:type_name -> google.protobuf.Timestamp
+	1,   // 14: alchemy.v1.SourceChunk.kind:type_name -> alchemy.v1.SourceKind
+	1,   // 15: alchemy.v1.Source.kind:type_name -> alchemy.v1.SourceKind
+	2,   // 16: alchemy.v1.Provenance.producer:type_name -> alchemy.v1.Producer
+	58,  // 17: alchemy.v1.Entity.attributes:type_name -> google.protobuf.Struct
+	24,  // 18: alchemy.v1.Entity.provenance:type_name -> alchemy.v1.Provenance
+	58,  // 19: alchemy.v1.Relation.attributes:type_name -> google.protobuf.Struct
+	24,  // 20: alchemy.v1.Relation.provenance:type_name -> alchemy.v1.Provenance
+	3,   // 21: alchemy.v1.Violation.kind:type_name -> alchemy.v1.ViolationKind
+	24,  // 22: alchemy.v1.Violation.provenance:type_name -> alchemy.v1.Provenance
+	43,  // 23: alchemy.v1.Violation.about:type_name -> alchemy.v1.Ref
+	24,  // 24: alchemy.v1.Guess.provenance:type_name -> alchemy.v1.Provenance
+	24,  // 25: alchemy.v1.Claim.provenance:type_name -> alchemy.v1.Provenance
+	4,   // 26: alchemy.v1.Conflict.kind:type_name -> alchemy.v1.ConflictKind
+	31,  // 27: alchemy.v1.Conflict.left:type_name -> alchemy.v1.Claim
+	31,  // 28: alchemy.v1.Conflict.right:type_name -> alchemy.v1.Claim
+	5,   // 29: alchemy.v1.Duplicate.signal:type_name -> alchemy.v1.DuplicateSignal
+	34,  // 30: alchemy.v1.Duplicate.left:type_name -> alchemy.v1.DuplicateSide
+	34,  // 31: alchemy.v1.Duplicate.right:type_name -> alchemy.v1.DuplicateSide
+	24,  // 32: alchemy.v1.DuplicateSide.provenance:type_name -> alchemy.v1.Provenance
+	25,  // 33: alchemy.v1.Result.entities:type_name -> alchemy.v1.Entity
+	26,  // 34: alchemy.v1.Result.relations:type_name -> alchemy.v1.Relation
+	27,  // 35: alchemy.v1.Result.chunks:type_name -> alchemy.v1.Chunk
+	28,  // 36: alchemy.v1.Result.vectors:type_name -> alchemy.v1.Vector
+	32,  // 37: alchemy.v1.Result.conflicts:type_name -> alchemy.v1.Conflict
+	29,  // 38: alchemy.v1.Result.violations:type_name -> alchemy.v1.Violation
+	30,  // 39: alchemy.v1.Result.guesses:type_name -> alchemy.v1.Guess
+	35,  // 40: alchemy.v1.Result.counts:type_name -> alchemy.v1.Counts
+	36,  // 41: alchemy.v1.Result.model_calls:type_name -> alchemy.v1.ModelCall
+	37,  // 42: alchemy.v1.Result.unread:type_name -> alchemy.v1.Unread
+	15,  // 43: alchemy.v1.Result.rules:type_name -> alchemy.v1.ReviewRule
+	33,  // 44: alchemy.v1.Result.duplicates:type_name -> alchemy.v1.Duplicate
+	40,  // 45: alchemy.v1.Result.rule_sets:type_name -> alchemy.v1.RuleSet
+	53,  // 46: alchemy.v1.Result.supersessions:type_name -> alchemy.v1.Supersession
+	54,  // 47: alchemy.v1.Result.proposals:type_name -> alchemy.v1.Proposal
+	39,  // 48: alchemy.v1.RuleSet.rules:type_name -> alchemy.v1.StandingRule
+	25,  // 49: alchemy.v1.ResultPage.entities:type_name -> alchemy.v1.Entity
+	26,  // 50: alchemy.v1.ResultPage.relations:type_name -> alchemy.v1.Relation
+	27,  // 51: alchemy.v1.ResultPage.chunks:type_name -> alchemy.v1.Chunk
+	28,  // 52: alchemy.v1.ResultPage.vectors:type_name -> alchemy.v1.Vector
+	32,  // 53: alchemy.v1.ResultPage.conflicts:type_name -> alchemy.v1.Conflict
+	29,  // 54: alchemy.v1.ResultPage.violations:type_name -> alchemy.v1.Violation
+	30,  // 55: alchemy.v1.ResultPage.guesses:type_name -> alchemy.v1.Guess
+	33,  // 56: alchemy.v1.ResultPage.duplicates:type_name -> alchemy.v1.Duplicate
+	35,  // 57: alchemy.v1.ResultPage.counts:type_name -> alchemy.v1.Counts
+	36,  // 58: alchemy.v1.ResultPage.model_calls:type_name -> alchemy.v1.ModelCall
+	37,  // 59: alchemy.v1.ResultPage.unread:type_name -> alchemy.v1.Unread
+	15,  // 60: alchemy.v1.ResultPage.rules:type_name -> alchemy.v1.ReviewRule
+	40,  // 61: alchemy.v1.ResultPage.rule_sets:type_name -> alchemy.v1.RuleSet
+	53,  // 62: alchemy.v1.ResultPage.supersessions:type_name -> alchemy.v1.Supersession
+	54,  // 63: alchemy.v1.ResultPage.proposals:type_name -> alchemy.v1.Proposal
+	57,  // 64: alchemy.v1.JobEvent.at:type_name -> google.protobuf.Timestamp
+	0,   // 65: alchemy.v1.JobEvent.state:type_name -> alchemy.v1.JobState
+	35,  // 66: alchemy.v1.JobEvent.counts:type_name -> alchemy.v1.Counts
+	32,  // 67: alchemy.v1.JobEvent.conflict:type_name -> alchemy.v1.Conflict
+	36,  // 68: alchemy.v1.JobEvent.model_calls_by_stage:type_name -> alchemy.v1.ModelCall
+	8,   // 69: alchemy.v1.Ref.kind:type_name -> alchemy.v1.RefKind
+	24,  // 70: alchemy.v1.Ref.provenance:type_name -> alchemy.v1.Provenance
+	6,   // 71: alchemy.v1.ReviewItem.kind:type_name -> alchemy.v1.ReviewKind
+	43,  // 72: alchemy.v1.ReviewItem.targets:type_name -> alchemy.v1.Ref
+	15,  // 73: alchemy.v1.ReviewItem.suppressed_by:type_name -> alchemy.v1.ReviewRule
+	24,  // 74: alchemy.v1.ReviewItem.provenance:type_name -> alchemy.v1.Provenance
+	0,   // 75: alchemy.v1.Findings.state:type_name -> alchemy.v1.JobState
+	44,  // 76: alchemy.v1.Findings.items:type_name -> alchemy.v1.ReviewItem
+	55,  // 77: alchemy.v1.DecideRequest.decisions:type_name -> alchemy.v1.ReviewDecision
+	0,   // 78: alchemy.v1.DecideResponse.state:type_name -> alchemy.v1.JobState
+	50,  // 79: alchemy.v1.DecideResponse.rejected:type_name -> alchemy.v1.DecisionRejection
+	25,  // 80: alchemy.v1.AssertRequest.entities:type_name -> alchemy.v1.Entity
+	26,  // 81: alchemy.v1.AssertRequest.relations:type_name -> alchemy.v1.Relation
+	52,  // 82: alchemy.v1.AssertRequest.supersedes:type_name -> alchemy.v1.Supersedes
+	43,  // 83: alchemy.v1.Supersession.by:type_name -> alchemy.v1.Ref
+	24,  // 84: alchemy.v1.Supersession.provenance:type_name -> alchemy.v1.Provenance
+	10,  // 85: alchemy.v1.Proposal.kind:type_name -> alchemy.v1.ProposalKind
+	2,   // 86: alchemy.v1.Proposal.producers:type_name -> alchemy.v1.Producer
+	43,  // 87: alchemy.v1.Proposal.example:type_name -> alchemy.v1.Ref
+	7,   // 88: alchemy.v1.ReviewDecision.verb:type_name -> alchemy.v1.ReviewVerb
+	45,  // 89: alchemy.v1.ReviewDecision.edit:type_name -> alchemy.v1.Edit
+	57,  // 90: alchemy.v1.ReviewDecision.at:type_name -> google.protobuf.Timestamp
+	16,  // 91: alchemy.v1.Alchemy.CreateJob:input_type -> alchemy.v1.CreateJobRequest
+	18,  // 92: alchemy.v1.Alchemy.GetJob:input_type -> alchemy.v1.GetJobRequest
+	21,  // 93: alchemy.v1.Alchemy.GetResult:input_type -> alchemy.v1.GetResultRequest
+	21,  // 94: alchemy.v1.Alchemy.StreamResult:input_type -> alchemy.v1.GetResultRequest
+	19,  // 95: alchemy.v1.Alchemy.DeleteJob:input_type -> alchemy.v1.DeleteJobRequest
+	22,  // 96: alchemy.v1.Alchemy.UploadSource:input_type -> alchemy.v1.SourceChunk
+	20,  // 97: alchemy.v1.Alchemy.WatchJob:input_type -> alchemy.v1.WatchJobRequest
+	55,  // 98: alchemy.v1.Alchemy.Review:input_type -> alchemy.v1.ReviewDecision
+	46,  // 99: alchemy.v1.Alchemy.ListFindings:input_type -> alchemy.v1.ListFindingsRequest
+	48,  // 100: alchemy.v1.Alchemy.Decide:input_type -> alchemy.v1.DecideRequest
+	51,  // 101: alchemy.v1.Alchemy.Assert:input_type -> alchemy.v1.AssertRequest
+	17,  // 102: alchemy.v1.Alchemy.CreateJob:output_type -> alchemy.v1.Job
+	17,  // 103: alchemy.v1.Alchemy.GetJob:output_type -> alchemy.v1.Job
+	38,  // 104: alchemy.v1.Alchemy.GetResult:output_type -> alchemy.v1.Result
+	41,  // 105: alchemy.v1.Alchemy.StreamResult:output_type -> alchemy.v1.ResultPage
+	59,  // 106: alchemy.v1.Alchemy.DeleteJob:output_type -> google.protobuf.Empty
+	23,  // 107: alchemy.v1.Alchemy.UploadSource:output_type -> alchemy.v1.Source
+	42,  // 108: alchemy.v1.Alchemy.WatchJob:output_type -> alchemy.v1.JobEvent
+	44,  // 109: alchemy.v1.Alchemy.Review:output_type -> alchemy.v1.ReviewItem
+	47,  // 110: alchemy.v1.Alchemy.ListFindings:output_type -> alchemy.v1.Findings
+	49,  // 111: alchemy.v1.Alchemy.Decide:output_type -> alchemy.v1.DecideResponse
+	38,  // 112: alchemy.v1.Alchemy.Assert:output_type -> alchemy.v1.Result
+	102, // [102:113] is the sub-list for method output_type
+	91,  // [91:102] is the sub-list for method input_type
+	91,  // [91:91] is the sub-list for extension type_name
+	91,  // [91:91] is the sub-list for extension extendee
+	0,   // [0:91] is the sub-list for field type_name
 }
 
 func init() { file_alchemy_v1_alchemy_proto_init() }
@@ -5015,8 +5230,8 @@ func file_alchemy_v1_alchemy_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alchemy_v1_alchemy_proto_rawDesc), len(file_alchemy_v1_alchemy_proto_rawDesc)),
-			NumEnums:      10,
-			NumMessages:   45,
+			NumEnums:      11,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

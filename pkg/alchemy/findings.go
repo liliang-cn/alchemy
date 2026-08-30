@@ -303,3 +303,66 @@ type DuplicateSide struct {
 	// which, and did the second one know about the first".
 	Provenance Provenance `json:"provenance"`
 }
+
+// ProposalKind says whether a proposal is about an entity type or a relation
+// type. The two are declared in different lists in an ontology, so a consumer
+// applying one has to know which list to put it in.
+type ProposalKind string
+
+const (
+	ProposalEntity   ProposalKind = "entity"
+	ProposalRelation ProposalKind = "relation"
+)
+
+// Proposal is a type a source used that the ontology does not declare, stated
+// as the change that would let it.
+//
+// It is not a second violation. A violation is per record and says what is
+// wrong; six records using one undeclared type are six violations, and a
+// four-hundred-thousand-record import missing one type is four hundred
+// thousand of them. This is one entry per type, and it says what to do rather
+// than what is wrong — the ends the type was actually used between, who used
+// it, and how often.
+//
+// It exists because the vocabulary is the product (§2.1) and until now it
+// could only be written in advance. A person who knows a fact had to hand-edit
+// an ontology document and re-run before the fact could be stated, which is
+// the wrong order: the vocabulary is a claim about a corpus, and a corpus is
+// the thing that tells you what the vocabulary is missing. That is a real cost
+// and not a hypothetical one — asserting one team of four people meant adding
+// a Team entity type and three relation types by hand first.
+//
+// It proposes and never applies, for the reason every other finding here does.
+// The ends and the counts are observed, not inferred: this says "MEMBER_OF was
+// used four times, always from Person to Team, by liliang" and stops. Whether
+// Person -> Team is what the type MEANS is a judgement, and the whole of §2.1
+// is that a plausible judgement nobody made is the failure that survives
+// review.
+//
+// It is produced only when a vocabulary was supplied. A run with no ontology
+// has nothing to be undeclared against, and the way to ask "what vocabulary
+// would this graph need" is to supply an empty one, which is a question rather
+// than a side effect of not asking.
+type Proposal struct {
+	Kind ProposalKind `json:"kind"`
+	// Type is the undeclared type, in the spelling the records used.
+	Type string `json:"type"`
+	// Records is how many records used it, which is what tells a reader
+	// whether they are looking at a vocabulary gap or a typo.
+	Records int `json:"records"`
+	// From and To are the entity types this relation type was observed
+	// between, sorted and deduplicated. Empty for an entity proposal, and
+	// empty for a relation whose ends are themselves undeclared — a proposal
+	// that named a type nobody has declared either would be proposing two
+	// things in one line.
+	From []string `json:"from,omitempty"`
+	To   []string `json:"to,omitempty"`
+	// Sources and Producers are who used it. §5b's question asked of a
+	// proposal: a type every record of one PDF used is a different suggestion
+	// from one a person asserted by name.
+	Sources   []string   `json:"sources,omitempty"`
+	Producers []Producer `json:"producers,omitempty"`
+	// Example is one record that used it, so a reader can go and look rather
+	// than take the summary's word for it.
+	Example Ref `json:"example"`
+}
