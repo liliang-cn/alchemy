@@ -129,8 +129,15 @@ func replace[T any](in []T, i int, v T) []T {
 // something, and a person threw it away afterwards.
 func recount(res alchemy.Result, prior alchemy.Counts, dropped int) alchemy.Counts {
 	c := alchemy.Counts{
-		Entities:   len(res.Entities),
-		Relations:  len(res.Relations),
+		Entities:  len(res.Entities),
+		Relations: len(res.Relations),
+		// Recomputed rather than carried, unlike the chunk numbers below:
+		// review neither adds nor removes a chunk or a vector, so these two are
+		// the same either way — and computing them keeps the rule that a number
+		// derivable from the slices is derived, so a count and its subject
+		// cannot drift apart in the one place a reviewer edited the graph.
+		Chunks:     len(res.Chunks),
+		Vectors:    len(res.Vectors),
 		Violations: len(res.Violations),
 		Conflicts:  len(res.Conflicts),
 		Guesses:    len(res.Guesses),
@@ -187,30 +194,4 @@ func rulesFrom(decided []answered) []Rule {
 		})
 	}
 	return out
-}
-
-// Held reports the conflicts nobody has answered yet.
-//
-// §7.3: a job that finds a conflict does not finish; it reaches NEEDS_REVIEW
-// and stays there until someone resolves it, whether or not the caller asked
-// for review. That rule needs a test a coordinator can apply to a result, and
-// this is it — a conflict is answered when a person's name is on it, which is
-// the same fact §5c puts in provenance rather than a second flag that could
-// disagree with it.
-//
-// Violations are deliberately not here. §7.3 puts them on the other side of
-// the line: one source saying something the ontology forbids is attributable
-// and excludable, and the rest of the graph is usable without it.
-func Held(res alchemy.Result) []alchemy.Conflict {
-	var open []alchemy.Conflict
-	for _, c := range res.Conflicts {
-		// Either side carrying a reviewer means the question was put to a
-		// person and answered. Requiring both would leave a job held by a
-		// conflict whose losing claim was deleted along with the record that
-		// made it.
-		if c.Left.Provenance.ReviewedBy == "" && c.Right.Provenance.ReviewedBy == "" {
-			open = append(open, c)
-		}
-	}
-	return open
 }

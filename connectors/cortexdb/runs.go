@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	cdb "github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
 )
 
 // author is stamped on every document this connector creates, so that "what did
@@ -58,4 +60,57 @@ func (l *Loader) Incomplete(ctx context.Context) ([]string, error) {
 	}
 	sort.Strings(open)
 	return open, nil
+}
+
+// deleteRun removes everything one run put in the store, which is what
+// Ident.Replace means.
+//
+// The envelope makes replacement part of the contract — §4.1: "a different one
+// under the same name refuses unless told to replace" — and a store that
+// refused both would leave a caller who genuinely means to re-import a corpus
+// under a stable name with nowhere to go but a new name every night. This
+// package had no such path before, which was an omission rather than a
+// position: it argued only that replacing *by default* would be wrong.
+//
+// It goes through CortexDB's own two deletes rather than SQL, and the order is
+// load-bearing. DeleteDocumentGraph removes a document's chunk and document
+// nodes, its relation edges, and the entities it alone asserted — detaching
+// rather than deleting the ones another document also claims, which is the
+// behaviour a shared brain needs. DeleteDocument then removes the record and
+// cascades to the embeddings, which the graph delete deliberately does not
+// touch because they live in the caller's collection.
+//
+// A run's own two documents go last, so that a crash midway leaves the marker
+// standing and Incomplete still names the run: half a deletion that says it is
+// half done is the same property the load itself keeps.
+func (l *Loader) deleteRun(ctx context.Context, rep *Report) error {
+	store := l.cortex.Vector()
+	docs, err := store.ListDocumentsWithFilter(ctx, author, listLimit)
+	if err != nil {
+		return fmt.Errorf("cortexdb: list documents of run %s: %w", l.opts.RunID, err)
+	}
+	prefix := documentID(l.opts.RunID, "")
+	tools := l.cortex.GraphRAGTools()
+	for _, d := range docs {
+		if !strings.HasPrefix(d.ID, prefix) {
+			continue
+		}
+		rep.Batches++
+		if _, err := tools.DeleteDocumentGraph(ctx, cdb.ToolDeleteDocumentGraphRequest{DocumentID: d.ID}); err != nil {
+			return fmt.Errorf("cortexdb: delete graph of %s: %w", d.ID, err)
+		}
+		if err := store.DeleteDocument(ctx, d.ID); err != nil {
+			return fmt.Errorf("cortexdb: delete document %s: %w", d.ID, err)
+		}
+	}
+	for _, id := range []string{completionID(l.opts.RunID), markerID(l.opts.RunID)} {
+		if doc, err := store.GetDocument(ctx, id); err != nil || doc == nil {
+			continue
+		}
+		rep.Batches++
+		if err := store.DeleteDocument(ctx, id); err != nil {
+			return fmt.Errorf("cortexdb: delete run document %s: %w", id, err)
+		}
+	}
+	return nil
 }

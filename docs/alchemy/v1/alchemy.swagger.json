@@ -506,6 +506,15 @@
           "type": "integer",
           "format": "int32",
           "description": "Pairs of nodes that may be one node. It is in this block because it is a\nnumber no reader can derive from the entities beside it — both nodes are\nwell-formed, correctly typed and separately attributable — and because\n\"one node in six may be a duplicate\" is exactly a number needed to\ndistrust a graph. It counts the findings, not the pairs still unjoined, so\nit does not fall when a merge is applied: which of them were answered is\nin each finding's provenance."
+        },
+        "chunks": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many chunks and vectors the job produced.\n\nThey are here because §8.4 pages a large result and this block rides on\nthe first page: a consumer streaming a graph knew how many entities it had\nseen of how many and could say nothing of the sort about chunks or\nvectors. They are also the denominator that makes chunks_empty and\nchunks_unread readable — \"23 chunks produced nothing\" is a different\ncorpus at 30 chunks than at 3000."
+        },
+        "vectors": {
+          "type": "integer",
+          "format": "int32"
         }
       },
       "description": "Counts is what makes the difference between a graph you can act on and one\nyou merely have (§5)."
@@ -875,7 +884,7 @@
         },
         "provenance": {
           "$ref": "#/definitions/v1Provenance",
-          "description": "Narrows the Ref to the records one source produced. A conflict names two\nclaims about one subject and a decision is about one of them, so without\nthis a rejection would delete the side the reviewer kept."
+          "description": "Narrows the Ref to the records one source produced. A conflict names two\nclaims about one subject and a decision is about one of them, so without\nthis a rejection would delete the side the reviewer kept.\n\nSet on a review target and unset on a Violation.about, and the asymmetry is\nthe difference between the two questions. A decision acts on the records\none source produced, so the source is part of what it names; a violation\nalready carries its own provenance beside the ref, and repeating it inside\nwould be two answers to one question that can disagree."
         }
       },
       "description": "Ref names graph records by what they say rather than by index: an index into\na slice stops meaning anything the moment a rejection removes an element."
@@ -916,6 +925,10 @@
     "v1Result": {
       "type": "object",
       "properties": {
+        "job": {
+          "type": "string",
+          "description": "The job that produced this graph, and the only identity a result has.\n\nIt was missing, and every store written against this message had to invent\nsomething: two demanded a run id from their caller, and two independently\ndigested the whole encoded result — an identity that changes whenever this\nmessage grows a field, so every previously loaded corpus is orphaned by an\nupgrade nobody consulted the store about. The service had the answer all\nalong and simply never put it here.\n\nEmpty is a graph nobody named, and it means what it says: a store must not\npretend it can recognise this result again."
+        },
         "entities": {
           "type": "array",
           "items": {
@@ -1018,6 +1031,10 @@
         },
         "last": {
           "type": "boolean"
+        },
+        "job": {
+          "type": "string",
+          "description": "The job that produced this graph, on the first page with the rest of the\nsummary. A client already knows what it asked for; what it does not have\nis a way to hand the reassembled pages on as a complete Result, and a\nconsumer that had to remember the request in order to fill in the identity\nis one that will fill in the wrong one after a retry."
         },
         "entities": {
           "type": "array",
@@ -1394,10 +1411,15 @@
           "type": "string"
         },
         "subject": {
-          "type": "string"
+          "type": "string",
+          "description": "The subject rendered for a person: an entity id, or \"from -[type]-\u003e to\".\nIt is what a review item is filed under and what a standing rule matches\non, so it is unchanged; `about` is the same subject in fields."
         },
         "provenance": {
           "$ref": "#/definitions/v1Provenance"
+        },
+        "about": {
+          "$ref": "#/definitions/v1Ref",
+          "description": "The record this violation is about, in fields rather than in prose.\n\n§5b promises a wrong record is \"checkable, correctable, and excludable\",\nand excludable was the word that failed: a consumer holding the graph and\nthe findings could only join them by parsing \"a -[USES]-\u003e b\" back into\nthree fields, which is a private copy of the verifier's output format that\nno test on either side would notice drifting. Duplicate got this right\nfrom the start with left.id and right.id.\n\nUnset for a violation about something that is not a graph record — a\nmalformed row and an unnamed column are about a file, and a ref for them\nwould be a join that resolves to nothing."
         }
       }
     },

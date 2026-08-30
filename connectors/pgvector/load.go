@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
-	"github.com/liliang-cn/alchemy/pkg/review"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // LoadOptions is what a caller can say about one load beyond the result
@@ -62,7 +62,7 @@ type Loaded struct {
 // because it is the step after which the graph is no longer a job somebody is
 // watching but a store somebody queries.
 //
-// The test for "unanswered" is review.Held, imported rather than reimplemented.
+// The test for "unanswered" is alchemy.Result.Held, asked of the result rather than reimplemented.
 // A second, differently-worded copy of that rule in this module would be a
 // second answer to the question of when a job is finished, and the two would
 // disagree the first time either moved.
@@ -93,6 +93,15 @@ type ConflictingLoadError struct {
 	Want  string // this result's fingerprint
 	State string
 }
+
+// Unwrap makes this store's sentence and the envelope's question one error.
+//
+// sink.ErrExists is what a caller asks when it does not care which store
+// answered — "the name holds a different graph" is the same fact everywhere —
+// and this type is what a caller asks when it wants the two fingerprints and
+// the state. Wrapping rather than replacing keeps both: errors.Is finds the
+// sentinel, errors.As finds the detail, and neither reader had to change.
+func (e *ConflictingLoadError) Unwrap() error { return sink.ErrExists }
 
 func (e *ConflictingLoadError) Error() string {
 	if e.Have == e.Want {
@@ -130,76 +139,64 @@ func (e *DuplicateEntityError) Error() string {
 // after that point leaves data that no read can see. There is no window in
 // which a query gets half a graph.
 func (l *Loader) Load(ctx context.Context, res alchemy.Result, opts LoadOptions) (Loaded, error) {
-	if held := review.Held(res); len(held) > 0 {
+	// This connector's own refusals first, so that everything it has ever
+	// answered with a typed error still answers with one. §4.1 moved the
+	// *shared* refusals above the line, not this store's account of them: a
+	// caller matching on *DuplicateEntityError or *DimensionError is matching
+	// on this package's contract, and an interface extraction that quietly
+	// changed which error a known input produces would be a redesign wearing a
+	// refactor's clothes.
+	if held := res.Held(); len(held) > 0 {
 		return Loaded{}, &HeldError{Conflicts: held}
 	}
 	if err := checkEntityIDs(res); err != nil {
 		return Loaded{}, err
 	}
-	dim, model, err := dimensionOf(res)
+	if _, _, err := dimensionOf(res); err != nil {
+		return Loaded{}, err
+	}
+
+	// And then the envelope, which asks pkg/preflight before it opens
+	// anything, derives the identity, and streams. Everything below this line
+	// used to be two hundred lines of this file and is now the same two hundred
+	// lines in one place, shared with three other stores.
+	rep, err := sink.Load(ctx, l, res, sink.Options{
+		Load: opts.ID, Replace: opts.Replace, Batch: l.batch,
+	})
 	if err != nil {
 		return Loaded{}, err
 	}
-	fp, err := Fingerprint(res)
-	if err != nil {
-		return Loaded{}, err
-	}
-	out := Loaded{
-		Fingerprint: fp, Dimension: dim,
-		ID:         opts.ID,
+	return Loaded{
+		ID: rep.Load, Fingerprint: rep.Digest, Already: rep.Converged,
+		// Dimension is read back off the result rather than off the report,
+		// because it is what this store bound and a converged load bound
+		// nothing.
+		Dimension:  l.BoundDimension(ctx),
 		Entities:   len(res.Entities),
 		Relations:  len(res.Relations),
 		Chunks:     len(res.Chunks),
 		Vectors:    len(res.Vectors),
 		Violations: len(res.Violations),
 		Duplicates: len(res.Duplicates),
-	}
-	if out.ID == "" {
-		// Deriving the default name from the fingerprint makes the primary key
-		// itself carry the idempotency, so a re-load collides in the database
-		// rather than relying on a check that could be racing.
-		out.ID = "ld_" + fp[:24]
-	}
-
-	if !opts.Replace {
-		if id, ok, err := l.completeFingerprint(ctx, fp); err != nil {
-			return Loaded{}, err
-		} else if ok {
-			out.ID, out.Already = id, true
-			return out, nil
-		}
-	}
-	// The dimension is bound before the load row is written so that a refused
-	// dimension leaves no row behind. It is DDL, so it is outside the load's
-	// transactions by necessity as well as by choice.
-	if err := l.bindDimension(ctx, dim, model); err != nil {
-		return Loaded{}, err
-	}
-	if err := l.claim(ctx, out, opts.Replace); err != nil {
-		if already, ok, e2 := l.alreadyComplete(ctx, out.ID, fp, err); e2 == nil && ok {
-			out.ID, out.Already = already, true
-			return out, nil
-		}
-		return Loaded{}, err
-	}
-
-	if err := l.write(ctx, out.ID, res, dim); err != nil {
-		l.abandon(ctx, out.ID)
-		return Loaded{}, err
-	}
-	if err := l.complete(ctx, out.ID, res); err != nil {
-		l.abandon(ctx, out.ID)
-		// A concurrent loader that committed the identical result first wins
-		// the unique index. Its graph is this graph, so the right answer is
-		// the same one a sequential second load gets.
-		if id, ok, e2 := l.completeFingerprint(ctx, fp); e2 == nil && ok && isUnique(err) {
-			out.ID, out.Already = id, true
-			return out, nil
-		}
-		return Loaded{}, err
-	}
-	return out, nil
+	}, nil
 }
+
+// Fingerprint is the content address of a whole result.
+//
+// It is pkg/sink's now. The function stays because it is this package's API and
+// a buyer may have written it into their own idempotency check, and it
+// delegates rather than keeping a second implementation: two content addresses
+// for one result is exactly the divergence §4.1 says four connectors produced,
+// preserved for compatibility inside one of them.
+//
+// The value it returns is not the value it returned before this became shared,
+// and that is a deliberate one-time break rather than a drift. Nothing persists
+// a fingerprint outside a store's own load row, a re-load under the new address
+// is a new load rather than a corruption, and the new one is better in two ways
+// the old one was wrong about: it is order-independent, so a result reassembled
+// from §8.4's pages is the same load, and it covers the chunks, the vectors,
+// the counts and the policy, all of which this store writes.
+func Fingerprint(res alchemy.Result) (string, error) { return sink.Digest(res), nil }
 
 // checkEntityIDs is a pass over the result the type system does not do.
 // Entity.ID is documented as "stable within one result", which a caller can
@@ -229,16 +226,6 @@ func (l *Loader) completeFingerprint(ctx context.Context, fp string) (string, bo
 	return id, true, nil
 }
 
-// alreadyComplete turns "that ID is taken by this same graph, and it finished"
-// into the no-op a retry deserves. Any other collision stays an error.
-func (l *Loader) alreadyComplete(ctx context.Context, id, fp string, cause error) (string, bool, error) {
-	var ce *ConflictingLoadError
-	if !errors.As(cause, &ce) || ce.Have != fp || ce.State != stateComplete {
-		return "", false, cause
-	}
-	return id, true, nil
-}
-
 // claim writes the load row, in its own transaction, before any data.
 //
 // This row is what makes a half-written load detectable rather than merely
@@ -246,16 +233,16 @@ func (l *Loader) alreadyComplete(ctx context.Context, id, fp string, cause error
 // view joins against it. A connector that wrote the marker last would have a
 // window in which the rows are there and nothing knows they are partial —
 // which is the one outcome worth this much machinery to avoid.
-func (l *Loader) claim(ctx context.Context, out Loaded, replace bool) error {
+func (l *Loader) claim(ctx context.Context, id, digest string, dim int, replace bool) error {
 	if replace {
-		if err := l.deleteLoad(ctx, out.ID); err != nil {
+		if err := l.deleteLoad(ctx, id); err != nil {
 			return err
 		}
 	}
 	const sql = `INSERT INTO {s}.loads (id, fingerprint, state, dimension, embed_model)
 VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING RETURNING id`
-	var id string
-	err := l.pool.QueryRow(ctx, l.q(sql), out.ID, out.Fingerprint, stateLoading, out.Dimension, "").Scan(&id)
+	var got string
+	err := l.pool.QueryRow(ctx, l.q(sql), id, digest, stateLoading, dim, "").Scan(&got)
 	if err == nil {
 		return nil
 	}
@@ -265,20 +252,20 @@ VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING RETURNING id`
 	// Nothing inserted: the ID is taken. Which graph is under it decides
 	// whether this is a retry or a collision.
 	var have, state string
-	err = l.pool.QueryRow(ctx, l.q(`SELECT fingerprint, state FROM {s}.loads WHERE id = $1`), out.ID).
+	err = l.pool.QueryRow(ctx, l.q(`SELECT fingerprint, state FROM {s}.loads WHERE id = $1`), id).
 		Scan(&have, &state)
 	if err != nil {
 		return fmt.Errorf("pgvector: %w", err)
 	}
-	return &ConflictingLoadError{ID: out.ID, Have: have, Want: out.Fingerprint, State: state}
+	return &ConflictingLoadError{ID: id, Have: have, Want: digest, State: state}
 }
 
 // complete is the last statement of a load and the only one that makes it
 // visible. The summary blocks are written here rather than at claim time
 // because a load row that carried §5's counts while its rows were still
 // arriving would be a store advertising numbers it could not yet answer with.
-func (l *Loader) complete(ctx context.Context, id string, res alchemy.Result) error {
-	blocks := []any{res.Counts, res.RuleSets, res.Conflicts, res.Guesses, res.Unread, res.ModelCalls}
+func (l *Loader) complete(ctx context.Context, id string, s sink.Summary, guesses []alchemy.Guess, unread []alchemy.Unread) error {
+	blocks := []any{s.Counts, s.RuleSets, s.Conflicts, guesses, unread, s.ModelCalls}
 	args := []any{id, stateComplete, stateLoading}
 	for _, b := range blocks {
 		raw, err := json.Marshal(b)

@@ -50,7 +50,7 @@ CREATE TABLE customers (
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("columns =\n%#v\nwant\n%#v", got, want)
 	}
-	if pk, _ := res.Entities[0].Attributes["primary_key"].([]string); !reflect.DeepEqual(pk, []string{"id"}) {
+	if pk, _ := res.Entities[0].Attributes["primary_key"].([]any); !reflect.DeepEqual(pk, []any{"id"}) {
 		t.Errorf("primary_key = %#v, want [id]", res.Entities[0].Attributes["primary_key"])
 	}
 }

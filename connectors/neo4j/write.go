@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	driver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
 )
 
 // group is a run of records that share a label or a relationship type.
@@ -75,9 +77,16 @@ func (l *Loader) labels(typ string) (string, error) {
 // argument. Properties are set with `+=` from a parameter map, so no property
 // name and no value is ever concatenated into the statement — the only
 // interpolated things in this package are the labels, through quoteIdent.
-func (l *Loader) writeEntities(ctx context.Context, p *plan, rep *Report) error {
+// It takes one batch rather than a whole result because that is what the
+// envelope hands it (pkg/sink): §8.4 pages a large graph over the wire
+// precisely because it does not fit in one message, and a store that then
+// materialised it to write it would have undone the paging. The grouping and
+// the transaction-sized batching below are unchanged and stay this store's own
+// — Cypher cannot parameterise a label, so a statement carries a thousand rows
+// only if all thousand share one.
+func (l *Loader) writeEntities(ctx context.Context, batch []alchemy.Entity, rep *Report) error {
 	pre := l.opts.ReservedPrefix
-	for _, g := range groupBy(p.entities, func(i int) string { return p.res.Entities[i].Type }) {
+	for _, g := range groupBy(seq(len(batch)), func(i int) string { return batch[i].Type }) {
 		lbl, err := l.labels(g.key)
 		if err != nil {
 			return err
@@ -87,7 +96,7 @@ func (l *Loader) writeEntities(ctx context.Context, p *plan, rep *Report) error 
 		for _, b := range batches(g.idx, l.opts.BatchSize) {
 			rows := make([]any, 0, len(b))
 			for _, i := range b {
-				e := p.res.Entities[i]
+				e := batch[i]
 				props, encoded, err := attributeProps(e.Attributes, pre)
 				if err != nil {
 					return fmt.Errorf("entity %s: %w", e.ID, err)
@@ -121,13 +130,13 @@ func (l *Loader) writeEntities(ctx context.Context, p *plan, rep *Report) error 
 // The MERGE key is the assertion — see relationKey. Two chunks that both said
 // the same thing stay two edges, because §5b's promise is that each of them
 // can name its own producer and a merged edge can only name one.
-func (l *Loader) writeRelations(ctx context.Context, p *plan, rep *Report) error {
+func (l *Loader) writeRelations(ctx context.Context, batch []alchemy.Relation, rep *Report) error {
 	pre := l.opts.ReservedPrefix
 	base, err := quoteIdent(l.opts.BaseLabel)
 	if err != nil {
 		return err
 	}
-	for _, g := range groupBy(p.relations, func(i int) string { return p.res.Relations[i].Type }) {
+	for _, g := range groupBy(seq(len(batch)), func(i int) string { return batch[i].Type }) {
 		typ, err := quoteIdent(g.key)
 		if err != nil {
 			return err
@@ -141,7 +150,7 @@ func (l *Loader) writeRelations(ctx context.Context, p *plan, rep *Report) error
 		for _, b := range batches(g.idx, l.opts.BatchSize) {
 			rows := make([]any, 0, len(b))
 			for _, i := range b {
-				r := p.res.Relations[i]
+				r := batch[i]
 				props, encoded, err := attributeProps(r.Attributes, pre)
 				if err != nil {
 					return fmt.Errorf("relation %s-[%s]->%s: %w", r.From, r.Type, r.To, err)

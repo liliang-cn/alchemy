@@ -24,7 +24,7 @@ func TestRequestOpensSourcesLazily(t *testing.T) {
 	spec := service.JobSpec{Sources: []service.Source{
 		{ID: "s1", Name: "schema.sql", Kind: alchemy.SourceDDL, Path: path},
 	}}
-	req, err := buildRequest(spec, nil, nil)
+	req, err := buildRequest("job-under-test", spec, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -63,7 +63,7 @@ const proseOntology = `{"id":"sds@1","parts":{"prose":{"entities":[{"name":"Clus
 // ontology is required for document sources — is enforced by pipeline.validate,
 // and a copy of it here would be a second place for it to drift.
 func TestRequestLeavesTheOntologyRuleToThePipeline(t *testing.T) {
-	req, err := buildRequest(service.JobSpec{}, nil, nil)
+	req, err := buildRequest("job-under-test", service.JobSpec{}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest with no ontology: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestRequestLeavesTheOntologyRuleToThePipeline(t *testing.T) {
 }
 
 func TestRequestLoadsTheOntology(t *testing.T) {
-	req, err := buildRequest(service.JobSpec{Ontology: proseOntology}, nil, nil)
+	req, err := buildRequest("job-under-test", service.JobSpec{Ontology: proseOntology}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestRequestLoadsTheOntology(t *testing.T) {
 // A malformed ontology is the caller's mistake and must arrive as one, before
 // a single byte of the corpus is read.
 func TestRequestRefusesAMalformedOntology(t *testing.T) {
-	_, err := buildRequest(service.JobSpec{Ontology: "{not json"}, nil, nil)
+	_, err := buildRequest("job-under-test", service.JobSpec{Ontology: "{not json"}, nil, nil)
 	if err == nil {
 		t.Fatal("buildRequest accepted a malformed ontology")
 	}
@@ -103,7 +103,7 @@ func TestRequestRefusesAMalformedOntology(t *testing.T) {
 // to survive the trip. A zero field stays zero — chunk.Options owns the
 // defaults, including the one that matters, a non-zero overlap.
 func TestRequestCarriesChunking(t *testing.T) {
-	req, err := buildRequest(service.JobSpec{
+	req, err := buildRequest("job-under-test", service.JobSpec{
 		Chunking: service.Chunking{Strategy: "sentence", Size: 400, Overlap: 40},
 	}, nil, nil)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestRequestCarriesChunking(t *testing.T) {
 		t.Fatalf("chunking = %+v, want %+v", req.Chunking, want)
 	}
 
-	empty, err := buildRequest(service.JobSpec{}, nil, nil)
+	empty, err := buildRequest("job-under-test", service.JobSpec{}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestRequestCarriesReviewAndDecisions(t *testing.T) {
 		decisions: []review.Decision{{ItemID: "conflict/entity_attributes/n1", Verb: review.VerbAccept, By: "ops"}},
 		rules:     []review.Rule{live},
 	}
-	req, err := buildRequest(service.JobSpec{
+	req, err := buildRequest("job-under-test", service.JobSpec{
 		Review: review.Options{Reviewing: true, MinConfidence: 0.7, Rules: []review.Rule{stated}},
 	}, in, nil)
 	if err != nil {
@@ -163,7 +163,7 @@ func TestRequestCarriesReviewAndDecisions(t *testing.T) {
 // — and not a job that loses the rules it was created with either.
 func TestRequestToleratesNoInbox(t *testing.T) {
 	stated := review.Rule{Shape: "violation/entity_type/Cluster"}
-	req, err := buildRequest(service.JobSpec{Review: review.Options{Rules: []review.Rule{stated}}}, nil, nil)
+	req, err := buildRequest("job-under-test", service.JobSpec{Review: review.Options{Rules: []review.Rule{stated}}}, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest: %v", err)
 	}
@@ -184,3 +184,19 @@ type fakeInbox struct {
 
 func (f fakeInbox) Decisions() []review.Decision { return f.decisions }
 func (f fakeInbox) Rules() []review.Rule         { return f.rules }
+
+// The service knows which job it is running and hands the ID to Run; until now
+// it stopped here. §4 makes the returned JSON the contract, and a graph that
+// cannot say which run produced it is one every store has to name for itself —
+// which four of them did, four ways.
+func TestTheJobIDReachesThePipelineAndSoTheResult(t *testing.T) {
+	req, err := buildRequest("job-42", service.JobSpec{
+		Sources: []service.Source{{ID: "s1", Kind: alchemy.SourceDDL, Path: "x"}},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("buildRequest: %v", err)
+	}
+	if req.Job != "job-42" {
+		t.Fatalf("Job = %q, want the job the service is running", req.Job)
+	}
+}

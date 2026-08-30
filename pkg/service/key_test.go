@@ -26,8 +26,10 @@ func TestTheEdgeKeyReachesTheWire(t *testing.T) {
 // either leg would put the decision back on an edge nobody chose.
 func TestARefKeepsItsKeyBothWays(t *testing.T) {
 	want := review.Ref{
-		Kind: review.RefRelation, From: "table:node_connections", To: "table:nodes",
-		Type: "REFERENCES", Key: "FK_NC_NODES_DST",
+		Ref: alchemy.Ref{
+			Kind: review.RefRelation, From: "table:node_connections", To: "table:nodes",
+			Type: "REFERENCES", Key: "FK_NC_NODES_DST",
+		},
 		Provenance: alchemy.Provenance{Source: "s.sql", Chunk: -1, Producer: alchemy.ProducerDDL},
 	}
 	if got := refFromProto(refToProto(want)); got != want {

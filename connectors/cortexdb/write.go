@@ -53,9 +53,14 @@ func (l *Loader) writeDocuments(ctx context.Context, p *plan, rep *Report) error
 // pipeline with its own chunker" whose chunk text "lives in the caller's
 // embedding store, under the same id". Writing them here would be a second
 // answer to a question CortexDB has already answered.
-func (l *Loader) writeChunks(ctx context.Context, p *plan, rep *Report) (map[int]bool, error) {
+//
+// It takes the range of p.chunks it has not yet written rather than the whole
+// slice, because pkg/sink hands this store chunks a batch at a time and a
+// writer that walked everything filed so far would rewrite the corpus once per
+// batch.
+func (l *Loader) writeChunks(ctx context.Context, p *plan, from int, rep *Report) (map[int]bool, error) {
 	written := map[int]bool{}
-	if len(p.chunks) == 0 {
+	if from >= len(p.chunks) {
 		return written, nil
 	}
 	store := l.cortex.Vector()
@@ -80,7 +85,7 @@ func (l *Loader) writeChunks(ctx context.Context, p *plan, rep *Report) (map[int
 		batch = batch[:0]
 		return nil
 	}
-	for _, i := range p.chunks {
+	for _, i := range p.chunks[from:] {
 		c := p.res.Chunks[i]
 		vi, ok := p.vectorFor[c.Index]
 		if !ok {

@@ -28,10 +28,14 @@ CREATE TABLE orders (
 	if r.Type != RelationType {
 		t.Errorf("Type = %q, want %q", r.Type, RelationType)
 	}
-	if cols, _ := r.Attributes["columns"].([]string); !reflect.DeepEqual(cols, []string{"customer_id"}) {
+	// []any and not []string: alchemy.Entity.Attributes declares the JSON
+	// value domain, so a list of names is what encoding/json produces for one.
+	// Asserting the Go type here is what keeps this reader's output the same
+	// shape for a consumer holding the Result and one reading it off the wire.
+	if cols, _ := r.Attributes["columns"].([]any); !reflect.DeepEqual(cols, []any{"customer_id"}) {
 		t.Errorf("columns = %#v, want [customer_id]", r.Attributes["columns"])
 	}
-	if refs, _ := r.Attributes["references"].([]string); !reflect.DeepEqual(refs, []string{"id"}) {
+	if refs, _ := r.Attributes["references"].([]any); !reflect.DeepEqual(refs, []any{"id"}) {
 		t.Errorf("references = %#v, want [id]", r.Attributes["references"])
 	}
 	want := alchemy.Provenance{Source: "schema.sql", Chunk: -1, Producer: alchemy.ProducerDDL}
@@ -105,12 +109,12 @@ CREATE TABLE orders (
 	if len(res.Relations) != 2 {
 		t.Fatalf("relations = %+v", res.Relations)
 	}
-	var cols []string
+	var cols []any
 	for _, r := range res.Relations {
-		c, _ := r.Attributes["columns"].([]string)
+		c, _ := r.Attributes["columns"].([]any)
 		cols = append(cols, c...)
 	}
-	if !reflect.DeepEqual(cols, []string{"billing_address_id", "shipping_address_id"}) {
+	if !reflect.DeepEqual(cols, []any{"billing_address_id", "shipping_address_id"}) {
 		t.Errorf("columns = %v", cols)
 	}
 }

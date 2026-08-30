@@ -228,7 +228,7 @@ func authoredShape(shape string) (Kind, error) {
 		if fields["type"] == "" {
 			return "", tooWide(shape, "the type it is about", `every violation of this kind from this producer, whatever it is about`)
 		}
-		rebuilt = violationShape(alchemy.Violation{Kind: vk, Provenance: prov}, []Ref{{Type: fields["type"]}})
+		rebuilt = violationShape(alchemy.Violation{Kind: vk, Provenance: prov}, []Ref{{Ref: alchemy.Ref{Type: fields["type"]}}})
 	case KindGuess:
 		if fields["field"] == "" || fields["chosen"] == "" {
 			return "", tooWide(shape, "the column and the field it was read as", `every inferred mapping this producer makes`)

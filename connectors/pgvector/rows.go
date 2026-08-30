@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // provNames is the provenance projection as a column list, spelled once and
@@ -55,64 +56,46 @@ func attrs(m map[string]any) (any, error) {
 // data that loads cleanly and means something else.
 func with[T any](head, tail []T) []T { return append(append([]T{}, head...), tail...) }
 
-// write puts every table of one result into the store, largest last.
+// The writers below take one batch and the offset it starts at, rather than a
+// whole result, because that is what the envelope hands them (pkg/sink): a
+// large graph reaches a store as a stream of batches and never as a struct, so
+// a writer that took a Result would put §8.4's whole four-hundred-thousand-
+// record import in this process's heap in order to COPY it out again.
 //
-// The order is not arbitrary: chunks and their embeddings are what a search
-// reads, entities and relations are what a search's neighbourhood reads, and
-// the findings are read by a person. Nothing here is visible until complete()
-// runs, so the order only decides what a failure has already cost, not what
-// anybody can see.
-func (l *Loader) write(ctx context.Context, id string, res alchemy.Result, dim int) error {
-	if err := l.writeChunks(ctx, id, res, dim); err != nil {
-		return err
-	}
-	if err := l.writeEntities(ctx, id, res); err != nil {
-		return err
-	}
-	if err := l.writeRelations(ctx, id, res); err != nil {
-		return err
-	}
-	if err := l.writeViolations(ctx, id, res); err != nil {
-		return err
-	}
-	return l.writeDuplicates(ctx, id, res)
-}
+// The offset is what `seq` is: the record's position in the load, counted
+// across batches. It was the position in the slice, which was the same number
+// only because the slice was the whole result.
 
-func (l *Loader) writeChunks(ctx context.Context, id string, res alchemy.Result, dim int) error {
+func (l *Loader) writeChunkBatch(ctx context.Context, id string, dim int, batch []sink.Chunk) error {
 	cols := []string{"load_id", "idx", "source", "strategy", "heading", "start_byte", "end_byte", "body", "embed_model"}
 	// The embedding column only exists once a dimension has been bound, so a
 	// result with no vectors writes a narrower row rather than a NULL into a
 	// column that is not there.
-	byChunk := make(map[int]alchemy.Vector, len(res.Vectors))
-	for _, v := range res.Vectors {
-		byChunk[v.Chunk] = v
-	}
 	if dim > 0 {
 		cols = append(cols, "embedding")
 	}
-	return l.copyRows(ctx, "chunks", cols, len(res.Chunks), func(i int) ([]any, error) {
-		c := res.Chunks[i]
-		row := []any{id, c.Index, c.Source, c.Strategy, c.Heading, c.Start, c.End, c.Text, ""}
+	return l.copyRows(ctx, "chunks", cols, len(batch), func(i int) ([]any, error) {
+		c := batch[i]
+		row := []any{id, c.Index, c.Source, c.Strategy, c.Heading, c.Start, c.End, c.Text, c.Model}
 		if dim == 0 {
 			return row, nil
 		}
-		v, ok := byChunk[c.Index]
-		if !ok {
-			// A chunk nobody embedded. §5c puts the embedding after review, so
-			// a chunk that was rejected or that produced nothing legitimately
-			// has no vector; it keeps its text and is simply not searchable by
-			// similarity.
+		// A chunk nobody embedded. §5c puts the embedding after review, so a
+		// chunk that was rejected or that produced nothing legitimately has no
+		// vector; it keeps its text and is simply not searchable by similarity.
+		// The envelope carries the two together, so this is a nil field rather
+		// than a lookup that could miss.
+		if c.Vector == nil {
 			return append(row, nil), nil
 		}
-		row[len(row)-1] = v.Model
-		return append(row, v.Values), nil
+		return append(row, c.Vector), nil
 	})
 }
 
-func (l *Loader) writeEntities(ctx context.Context, id string, res alchemy.Result) error {
+func (l *Loader) writeEntityBatch(ctx context.Context, id string, batch []alchemy.Entity) error {
 	cols := with([]string{"load_id", "entity_id", "type", "name", "attributes"}, provNames)
-	return l.copyRows(ctx, "entities", cols, len(res.Entities), func(i int) ([]any, error) {
-		e := res.Entities[i]
+	return l.copyRows(ctx, "entities", cols, len(batch), func(i int) ([]any, error) {
+		e := batch[i]
 		a, err := attrs(e.Attributes)
 		if err != nil {
 			return nil, err
@@ -121,32 +104,32 @@ func (l *Loader) writeEntities(ctx context.Context, id string, res alchemy.Resul
 	})
 }
 
-func (l *Loader) writeRelations(ctx context.Context, id string, res alchemy.Result) error {
+func (l *Loader) writeRelationBatch(ctx context.Context, id string, at int, batch []alchemy.Relation) error {
 	cols := with([]string{"load_id", "seq", "from_id", "to_id", "type", "attributes"}, provNames)
-	return l.copyRows(ctx, "relations", cols, len(res.Relations), func(i int) ([]any, error) {
-		r := res.Relations[i]
+	return l.copyRows(ctx, "relations", cols, len(batch), func(i int) ([]any, error) {
+		r := batch[i]
 		a, err := attrs(r.Attributes)
 		if err != nil {
 			return nil, err
 		}
-		return with([]any{id, i, r.From, r.To, r.Type, a}, provRow(r.Provenance)), nil
+		return with([]any{id, at + i, r.From, r.To, r.Type, a}, provRow(r.Provenance)), nil
 	})
 }
 
-func (l *Loader) writeViolations(ctx context.Context, id string, res alchemy.Result) error {
+func (l *Loader) writeViolationBatch(ctx context.Context, id string, batch []alchemy.Violation) error {
 	cols := with([]string{"load_id", "seq", "kind", "detail", "subject"}, provNames)
-	return l.copyRows(ctx, "violations", cols, len(res.Violations), func(i int) ([]any, error) {
-		v := res.Violations[i]
+	return l.copyRows(ctx, "violations", cols, len(batch), func(i int) ([]any, error) {
+		v := batch[i]
 		return with([]any{id, i, string(v.Kind), v.Detail, v.Subject}, provRow(v.Provenance)), nil
 	})
 }
 
-func (l *Loader) writeDuplicates(ctx context.Context, id string, res alchemy.Result) error {
+func (l *Loader) writeDuplicateBatch(ctx context.Context, id string, batch []alchemy.Duplicate) error {
 	cols := []string{"load_id", "seq", "signal", "subject", "detail",
 		"left_id", "left_type", "left_name", "left_prov",
 		"right_id", "right_type", "right_name", "right_prov"}
-	return l.copyRows(ctx, "duplicates", cols, len(res.Duplicates), func(i int) ([]any, error) {
-		d := res.Duplicates[i]
+	return l.copyRows(ctx, "duplicates", cols, len(batch), func(i int) ([]any, error) {
+		d := batch[i]
 		lp, err := json.Marshal(d.Left.Provenance)
 		if err != nil {
 			return nil, err

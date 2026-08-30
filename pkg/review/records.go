@@ -98,7 +98,7 @@ func entityRef(e alchemy.Entity) Ref {
 	// record claims. Two records both calling themselves n1 while typing it
 	// differently are the whole of alchemy.ConflictEntityType, and a Ref that
 	// could not tell them apart would let a decision about one delete both.
-	return Ref{Kind: RefEntity, ID: e.ID, Type: e.Type, Provenance: e.Provenance}
+	return Ref{Ref: alchemy.Ref{Kind: RefEntity, ID: e.ID, Type: e.Type}, Provenance: e.Provenance}
 }
 
 // relationRef carries the key for the reason entityRef carries the type: it is
@@ -107,7 +107,7 @@ func entityRef(e alchemy.Entity) Ref {
 // only in which of them they are, and a Ref that could not tell them apart
 // would let a decision about one delete both.
 func relationRef(r alchemy.Relation) Ref {
-	return Ref{Kind: RefRelation, From: r.From, To: r.To, Type: r.Type, Key: r.Key, Provenance: r.Provenance}
+	return Ref{Ref: alchemy.Ref{Kind: RefRelation, From: r.From, To: r.To, Type: r.Type, Key: r.Key}, Provenance: r.Provenance}
 }
 
 // labelled is the type with the producer's key after it, the spelling verify

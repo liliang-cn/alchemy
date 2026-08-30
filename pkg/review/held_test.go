@@ -30,7 +30,7 @@ func conflicted() alchemy.Result {
 // question has been answered yet, and to get the question back if it has not.
 func TestAJobIsHeldUntilEveryConflictHasBeenAnsweredByAPerson(t *testing.T) {
 	res := conflicted()
-	if open := review.Held(res); len(open) != 1 {
+	if open := res.Held(); len(open) != 1 {
 		t.Fatalf("held = %+v, want the unanswered conflict", open)
 	}
 
@@ -41,7 +41,7 @@ func TestAJobIsHeldUntilEveryConflictHasBeenAnsweredByAPerson(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v, want none", err)
 	}
-	if open := review.Held(got); len(open) != 0 {
+	if open := got.Held(); len(open) != 0 {
 		t.Fatalf("held = %+v, want nothing: a person answered it", open)
 	}
 	// The conflict is still reported. §5b: a graph reports its own quality,
@@ -78,7 +78,7 @@ func TestARuleAnswersTonightsConflictRatherThanHidingIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v, want none", err)
 	}
-	if open := review.Held(got); len(open) != 0 {
+	if open := got.Held(); len(open) != 0 {
 		t.Fatalf("held = %+v, want the rule to have answered it", open)
 	}
 	// And the answer is the one the rule recorded, carrying the name of the

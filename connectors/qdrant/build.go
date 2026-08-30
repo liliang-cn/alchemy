@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // batchOf is one group of points and the name a report or a failure calls it
@@ -16,38 +17,41 @@ type batchOf struct {
 	points []point
 }
 
-// build turns a result into every point it becomes.
+// The builders below take one batch rather than a whole result, because that
+// is what the envelope hands them (pkg/sink): §8.4 pages a large graph over the
+// wire precisely because it does not fit in one message, and a store that then
+// materialised it to build points would have undone the paging.
 //
-// It is one pass with no I/O in it, which is deliberate: everything that can
-// be wrong with the shape of a result is discoverable before the first
-// request, and a load that is going to be refused should be refused while the
-// store still looks exactly as the caller left it.
-func build(res alchemy.Result, fp, loadID string) []batchOf {
-	// The two lookups that pay for this store's lack of joins. A vector store
-	// cannot follow an id at read time, so anything a reader needs beside a
-	// record has to be copied onto it at write time.
-	names := make(map[string]alchemy.Entity, len(res.Entities))
-	for _, e := range res.Entities {
-		names[e.ID] = e
-	}
-	byChunk := map[int][]alchemy.Entity{}
-	for _, e := range res.Entities {
-		byChunk[e.Provenance.Chunk] = append(byChunk[e.Provenance.Chunk], e)
-	}
-	vectors := make(map[int]alchemy.Vector, len(res.Vectors))
-	for _, v := range res.Vectors {
-		vectors[v.Chunk] = v
-	}
+// Two of them take an index the tx accumulates, and that is this store's own
+// cost rather than the interface's. A vector store has no joins, so anything a
+// reader needs beside a record is copied onto it at write time: an edge carries
+// its endpoints' names and a chunk carries the ids of the entities extracted
+// from it. Both require having seen the entities, which is exactly why sink.Tx
+// makes "entities before the relations that name them" a contract — the index
+// is names and ids, not the graph, and it is the smallest thing that answers
+// the question.
 
-	out := []batchOf{
-		{kind: kindEntity, points: make([]point, 0, len(res.Entities))},
-		{kind: kindRelation, points: make([]point, 0, len(res.Relations))},
-		{kind: kindChunk, points: make([]point, 0, len(res.Chunks))},
-		{kind: kindViolation, points: make([]point, 0, len(res.Violations))},
-		{kind: kindDuplicate, points: make([]point, 0, len(res.Duplicates))},
-	}
+// endpoints is what an edge and a chunk need to know about entities that have
+// already been written.
+type endpoints struct {
+	byID    map[string]alchemy.Entity
+	byChunk map[int][]alchemy.Entity
+}
 
-	for _, e := range res.Entities {
+func newEndpoints() *endpoints {
+	return &endpoints{byID: map[string]alchemy.Entity{}, byChunk: map[int][]alchemy.Entity{}}
+}
+
+func (e *endpoints) add(batch []alchemy.Entity) {
+	for _, en := range batch {
+		e.byID[en.ID] = en
+		e.byChunk[en.Provenance.Chunk] = append(e.byChunk[en.Provenance.Chunk], en)
+	}
+}
+
+func entityPoints(loadID, fp string, batch []alchemy.Entity) batchOf {
+	out := batchOf{kind: kindEntity, points: make([]point, 0, len(batch))}
+	for _, e := range batch {
 		p := base(loadID, kindEntity)
 		p[keyEntityID] = e.ID
 		p[keyType] = e.Type
@@ -60,20 +64,24 @@ func build(res alchemy.Result, fp, loadID string) []batchOf {
 		// that flattened both to nothing would erase.
 		p[keyAttributes] = e.Attributes
 		provenancePayload(e.Provenance, p)
-		out[0].points = append(out[0].points, point{
+		out.points = append(out.points, point{
 			ID: pointID(fp, kindEntity, e.ID), Vector: vectorless(), Payload: p,
 		})
 	}
+	return out
+}
 
-	for i, r := range res.Relations {
+func relationPoints(loadID, fp string, at int, batch []alchemy.Relation, ends *endpoints) batchOf {
+	out := batchOf{kind: kindRelation, points: make([]point, 0, len(batch))}
+	for i, r := range batch {
 		p := base(loadID, kindRelation)
 		p[keyRelFrom] = r.From
 		p[keyRelTo] = r.To
 		p[keyType] = r.Type
 		p[keyRelKey] = r.Key
 		p[keyAttributes] = r.Attributes
-		from, okFrom := names[r.From]
-		to, okTo := names[r.To]
+		from, okFrom := ends.byID[r.From]
+		to, okTo := ends.byID[r.To]
 		p[keyRelFromName], p[keyRelFromType] = from.Name, from.Type
 		p[keyRelToName], p[keyRelToType] = to.Name, to.Type
 		// A relation naming an entity the result does not contain is
@@ -84,12 +92,16 @@ func build(res alchemy.Result, fp, loadID string) []batchOf {
 		// dropped a node.
 		p[keyRelDangling] = !okFrom || !okTo
 		provenancePayload(r.Provenance, p)
-		out[1].points = append(out[1].points, point{
-			ID: pointID(fp, kindRelation, relationKey(i, r)), Vector: vectorless(), Payload: p,
+		out.points = append(out.points, point{
+			ID: pointID(fp, kindRelation, relationKey(at+i, r)), Vector: vectorless(), Payload: p,
 		})
 	}
+	return out
+}
 
-	for _, c := range res.Chunks {
+func chunkPoints(loadID, fp string, batch []sink.Chunk, ends *endpoints) batchOf {
+	out := batchOf{kind: kindChunk, points: make([]point, 0, len(batch))}
+	for _, c := range batch {
 		p := base(loadID, kindChunk)
 		p[keyChunkIndex] = c.Index
 		p[keyText] = c.Text
@@ -98,35 +110,39 @@ func build(res alchemy.Result, fp, loadID string) []batchOf {
 		p[keyHeading] = c.Heading
 		p[keyStart] = c.Start
 		p[keyEnd] = c.End
-		ids := make([]string, 0, len(byChunk[c.Index]))
-		names := make([]string, 0, len(byChunk[c.Index]))
-		for _, e := range byChunk[c.Index] {
+		ids := make([]string, 0, len(ends.byChunk[c.Index]))
+		names := make([]string, 0, len(ends.byChunk[c.Index]))
+		for _, e := range ends.byChunk[c.Index] {
 			ids = append(ids, e.ID)
 			names = append(names, e.Name)
 		}
 		p[keyChunkEntity] = ids
 		p[keyChunkEntityNames] = names
 		vec := vectorless()
-		if v, ok := vectors[c.Index]; ok {
-			vec = map[string]any{vectorName: v.Values}
+		if c.Vector != nil {
+			vec = map[string]any{vectorName: c.Vector}
 			// The embedding model is on the chunk and not only on the load,
 			// because alchemy.Vector carries it per vector: a result that
 			// embedded two chunks with two models is a fact a reader has to be
 			// able to see rather than a detail the store averages away.
-			p[keyEmbedModel] = v.Model
+			p[keyEmbedModel] = c.Model
 		}
-		out[2].points = append(out[2].points, point{
+		out.points = append(out.points, point{
 			ID: pointID(fp, kindChunk, strconv.Itoa(c.Index)), Vector: vec, Payload: p,
 		})
 	}
+	return out
+}
 
-	for i, v := range res.Violations {
+func violationPoints(loadID, fp string, batch []alchemy.Violation) batchOf {
+	out := batchOf{kind: kindViolation, points: make([]point, 0, len(batch))}
+	for i, v := range batch {
 		p := base(loadID, kindViolation)
 		p[keyViolationKind] = string(v.Kind)
 		p[keySubject] = v.Subject
 		p[keyDetail] = v.Detail
 		provenancePayload(v.Provenance, p)
-		out[3].points = append(out[3].points, point{
+		out.points = append(out.points, point{
 			// The index is in the key because two violations can be identical
 			// in every field a reader cares about — the same malformed row
 			// kind twice — and collapsing them would make §5's violation count
@@ -134,15 +150,19 @@ func build(res alchemy.Result, fp, loadID string) []batchOf {
 			ID: pointID(fp, kindViolation, fmt.Sprintf("%d\x00%s\x00%s", i, v.Kind, v.Subject)), Vector: vectorless(), Payload: p,
 		})
 	}
+	return out
+}
 
-	for i, d := range res.Duplicates {
+func duplicatePoints(loadID, fp string, batch []alchemy.Duplicate) batchOf {
+	out := batchOf{kind: kindDuplicate, points: make([]point, 0, len(batch))}
+	for i, d := range batch {
 		p := base(loadID, kindDuplicate)
 		p[keySignal] = string(d.Signal)
 		p[keySubject] = d.Subject
 		p[keyDetail] = d.Detail
 		p[keyLeft] = side(d.Left)
 		p[keyRight] = side(d.Right)
-		out[4].points = append(out[4].points, point{
+		out.points = append(out.points, point{
 			ID: pointID(fp, kindDuplicate, fmt.Sprintf("%d\x00%s", i, d.Subject)), Vector: vectorless(), Payload: p,
 		})
 	}
@@ -193,7 +213,7 @@ func relationKey(i int, r alchemy.Relation) string {
 // two do not is a buyer believing they loaded a graph. Every line here is a
 // question the store will answer wrongly or not at all, said before they ask
 // it.
-func lost(res alchemy.Result, dim int) []string {
+func lost(dim, chunks, vectors int) []string {
 	out := []string{
 		"traversal is not stored as traversal: a relation is a point with two ids in its payload, not an edge, so one hop " +
 			"is an indexed lookup and n hops are n round trips, " +
@@ -204,9 +224,9 @@ func lost(res alchemy.Result, dim int) []string {
 	if dim == 0 {
 		out = append(out, "this result carried no embeddings, so the collection was created with no embedding vector; "+
 			"Qdrant cannot add one to a collection that exists, so a later result with vectors will need a new collection")
-	} else if n := len(res.Chunks) - len(res.Vectors); n > 0 {
+	} else if n := chunks - vectors; n > 0 {
 		out = append(out, fmt.Sprintf("%d of %d chunks arrived without an embedding and are stored as text only; "+
-			"a similarity search cannot reach them", n, len(res.Chunks)))
+			"a similarity search cannot reach them", n, chunks))
 	}
 	return out
 }

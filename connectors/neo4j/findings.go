@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // Findings — violations, duplicates, guesses and unread material — are loaded,
@@ -123,13 +126,13 @@ func seq(n int) []int {
 // cannot have a relationship, so a FROM_CHUNK edge could exist for nodes and
 // never for edges, and an affordance that works on half the graph reads as a
 // bug in the other half.
-func (l *Loader) writeChunks(ctx context.Context, p *plan, rep *Report) error {
-	if l.opts.SkipChunks || len(p.res.Chunks) == 0 {
+func (l *Loader) writeChunks(ctx context.Context, batch []sink.Chunk, rep *Report) error {
+	if l.opts.SkipChunks || len(batch) == 0 {
 		return nil
 	}
 	pre := l.opts.ReservedPrefix
-	rows := make([]any, 0, len(p.res.Chunks))
-	for _, c := range p.res.Chunks {
+	rows := make([]any, 0, len(batch))
+	for _, c := range batch {
 		props := map[string]any{
 			pre + "index": int64(c.Index), pre + "text": c.Text, pre + keySource: c.Source,
 			pre + "strategy": c.Strategy, pre + "start": int64(c.Start), pre + "end": int64(c.End),
@@ -142,12 +145,56 @@ func (l *Loader) writeChunks(ctx context.Context, p *plan, rep *Report) error {
 			"props": props,
 		})
 	}
-	rep.Chunks = len(rows)
+	rep.Chunks += len(rows)
 	return l.writeAux(ctx, "Chunk", linkChunk, rows, "", rep)
 }
 
+// writeRuleSets loads the standing policy the records were extracted under.
+//
+// It closes the one gap this connector shipped with. Every entity, relation and
+// finding it writes can carry a `_rule_set` property, which alchemy defines as
+// "the set's *name* … and not the set itself; the contents are on the result
+// once, in Result.RuleSets, and the name is how a record points at them" — and
+// nothing here loaded the sets, so the names pointed at nothing. The graph read
+// as if a policy had been in force and gave no way to find out what it said, or
+// on whose word, which is the half of §5b that survives a load only if somebody
+// loads it.
+//
+// A set is a node under the run rather than a property of the run, keyed on the
+// name a record already carries, so resolving a pointer is a MATCH rather than a
+// scan and a string-split. Neo4j properties are flat, so the rules go in as two
+// parallel lists — the names and the sentences the model was shown — in the
+// order the set states them, which pkg/review already sorts. Two lists rather
+// than one list of JSON blobs because a reader looking up "which rule is this
+// _ruled_by" wants a list membership test, not a parse.
+func (l *Loader) writeRuleSets(ctx context.Context, sets []alchemy.RuleSet, rep *Report) error {
+	if len(sets) == 0 {
+		return nil
+	}
+	pre := l.opts.ReservedPrefix
+	rows := make([]any, 0, len(sets))
+	for _, s := range sets {
+		names := make([]any, 0, len(s.Rules))
+		told := make([]any, 0, len(s.Rules))
+		for _, r := range s.Rules {
+			names = append(names, r.Name)
+			told = append(told, r.Told)
+		}
+		rows = append(rows, map[string]any{
+			"id": s.Name,
+			"props": map[string]any{
+				pre + "name": s.Name, pre + "rule_names": names, pre + "rule_told": told,
+			},
+		})
+	}
+	rep.RuleSets = len(rows)
+	// IN_RUN rather than FOUND_IN: a policy is not a finding about the graph,
+	// it is source material the same way a chunk is — what the model was shown.
+	return l.writeAux(ctx, "RuleSet", linkChunk, rows, "", rep)
+}
+
 // writeFindings loads everything that describes the graph.
-func (l *Loader) writeFindings(ctx context.Context, p *plan, rep *Report) error {
+func (l *Loader) writeFindings(ctx context.Context, f sink.Findings, rep *Report) error {
 	if l.opts.SkipFindings {
 		return nil
 	}
@@ -167,8 +214,8 @@ func (l *Loader) writeFindings(ctx context.Context, p *plan, rep *Report) error 
 			base, pre, keyRun, alias, keyID, field, relType)
 	}
 
-	rows := make([]any, 0, len(p.res.Violations))
-	for _, v := range p.res.Violations {
+	rows := make([]any, 0, len(f.Violations))
+	for _, v := range f.Violations {
 		props := map[string]any{pre + "kind": string(v.Kind), pre + "detail": v.Detail, pre + "subject": v.Subject}
 		for k, val := range provenanceProps(v.Provenance, pre) {
 			props[k] = val
@@ -183,7 +230,7 @@ func (l *Loader) writeFindings(ctx context.Context, p *plan, rep *Report) error 
 	}
 
 	rows = rows[:0]
-	for _, d := range p.res.Duplicates {
+	for _, d := range f.Duplicates {
 		props := map[string]any{
 			pre + "signal": string(d.Signal), pre + "subject": d.Subject, pre + "detail": d.Detail,
 			pre + "left_name": d.Left.Name, pre + "right_name": d.Right.Name,
@@ -203,7 +250,7 @@ func (l *Loader) writeFindings(ctx context.Context, p *plan, rep *Report) error 
 	}
 
 	rows = rows[:0]
-	for _, g := range p.res.Guesses {
+	for _, g := range f.Guesses {
 		props := map[string]any{
 			pre + "field": g.Field, pre + "chosen_as": g.ChosenAs, pre + "reason": g.Reason,
 			pre + "alternatives": toAny(g.Alternatives),
@@ -219,7 +266,7 @@ func (l *Loader) writeFindings(ctx context.Context, p *plan, rep *Report) error 
 	}
 
 	rows = rows[:0]
-	for _, u := range p.res.Unread {
+	for _, u := range f.Unread {
 		rows = append(rows, map[string]any{
 			"id": findingID("unread", u.Source, u.Locator),
 			"props": map[string]any{

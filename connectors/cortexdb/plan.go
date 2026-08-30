@@ -9,7 +9,8 @@ import (
 	"strconv"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
-	"github.com/liliang-cn/alchemy/pkg/review"
+	check "github.com/liliang-cn/alchemy/pkg/preflight"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // The identifiers this connector writes under. Every one of them is namespaced
@@ -72,6 +73,15 @@ type plan struct {
 	dim int
 
 	sourceSeen map[string]struct{}
+	// ids and relIndex are what make the plan buildable a batch at a time
+	// rather than only from a whole result. They are the two lookups the
+	// per-record checks need — is this ID already claimed, and which group does
+	// this edge belong to — and they are here rather than local to a loop
+	// because pkg/sink hands this store a stream and preflight hands it a
+	// slice, and both have to reach the same plan.
+	ids      map[string]int
+	relIndex map[string]int
+	chunkAt  map[int]int
 
 	// skipped names the relations that will not be written, and why, so that
 	// "the graph is missing an edge" is never something a buyer discovers by
@@ -119,45 +129,58 @@ var cortexEdgeProps = map[string]struct{}{
 func preflight(res alchemy.Result, o Options) (*plan, error) {
 	o = o.withDefaults()
 	if o.RunID == "" {
+		// The result names the job that produced it, and that is the fact
+		// Options.RunID says only the caller has: stated by the service rather
+		// than generated, so it is the same after a crash and the same when
+		// another node takes the job over (§8.3), and different for a genuinely
+		// different import. A caller who wants two names for one graph still
+		// says so and still wins.
+		o.RunID = res.Job
+	}
+	if o.RunID == "" {
 		return nil, ErrNoRunID
 	}
 
 	// §7.3 first, before anything else is even looked at. "Unanswered" is
 	// review.Held's definition and not a copy of it: two definitions of what
 	// holds a job is how the guarantee ends.
-	if open := review.Held(res); len(open) > 0 {
+	if open := res.Held(); len(open) > 0 {
 		return nil, fmt.Errorf("%w: %d of %d conflict(s) unanswered, first is %s (%s)",
 			ErrHeld, len(open), len(res.Conflicts), open[0].Subject, open[0].Kind)
 	}
 
-	p := &plan{res: res, opts: o, digest: digest(res), vectorFor: map[int]int{}, sourceSeen: map[string]struct{}{}}
-
-	ids := make(map[string]int, len(res.Entities))
-	for i, e := range res.Entities {
-		if e.ID == "" {
-			return nil, fmt.Errorf("entity %d has no ID, so nothing can refer to it", i)
-		}
-		// CortexDB's node upsert is ON CONFLICT DO UPDATE: two entities of one
-		// result sharing an ID would leave the second silently wearing the
-		// first's edges. Refused rather than resolved, because resolving it
-		// means picking a winner nobody asked for.
-		if prev, dup := ids[e.ID]; dup {
-			return nil, fmt.Errorf("entities %d and %d share the ID %q; one would silently overwrite the other", prev, i, e.ID)
-		}
-		if err := checkAttributes(e.Attributes, o.ReservedPrefix, cortexNodeProps, "CortexDB writes on an entity node"); err != nil {
-			return nil, fmt.Errorf("entity %s: %w", e.ID, err)
-		}
-		ids[e.ID] = i
-		p.source(e.Provenance.Source)
-		p.entities = append(p.entities, i)
-	}
-
-	if err := p.planChunks(); err != nil {
+	p := newPlan(o, sink.Digest(res))
+	if err := p.addEntities(res.Entities); err != nil {
 		return nil, err
 	}
-	if err := p.planRelations(ids); err != nil {
+	if err := p.addChunks(pairs(res)); err != nil {
 		return nil, err
 	}
+	if err := p.addRelations(res.Relations); err != nil {
+		return nil, err
+	}
+	if err := p.checkParallelEdges(); err != nil {
+		return nil, err
+	}
+
+	// The refusals every store had to write for itself, asked once.
+	//
+	// It runs last, so everything this connector already caught still comes
+	// back as this connector's own error with this connector's own wording;
+	// what changes is only the set of results that used to reach a write. Four
+	// stores, written without sight of each other, each defended a different
+	// subset of one list — and the gaps were not opinions, they were silent
+	// overwrites nobody could see, because nothing said the invariants existed.
+	//
+	// Everything on the list is refused here, including the parts that would
+	// harm some other store and not this one. §7.3's own sentence is the
+	// argument: a guarantee that only holds where it is convenient is not a
+	// guarantee, and a result that pgvector rejects and this accepts is a
+	// corpus loaded into half of a buyer's estate.
+	if err := check.Refuse(res); err != nil {
+		return nil, err
+	}
+
 	return p, nil
 }
 
@@ -166,23 +189,27 @@ func preflight(res alchemy.Result, o Options) (*plan, error) {
 // A vector whose chunk is not in the result is dropped: it describes text
 // nobody can read, and a citation pointing at text that is not there is exactly
 // what §5b promises against.
-func (p *plan) planChunks() error {
+func (p *plan) addChunks(batch []sink.Chunk) error {
 	if p.opts.SkipChunks {
 		return nil
 	}
-	byIndex := make(map[int]int, len(p.res.Chunks))
-	for i, c := range p.res.Chunks {
-		if prev, dup := byIndex[c.Index]; dup {
+	for _, c := range batch {
+		i := len(p.res.Chunks)
+		if prev, dup := p.chunkAt[c.Index]; dup {
 			return fmt.Errorf("chunks %d and %d both claim index %d", prev, i, c.Index)
 		}
-		byIndex[c.Index] = i
+		if p.chunkAt == nil {
+			p.chunkAt = map[int]int{}
+		}
+		p.chunkAt[c.Index] = i
+		p.res.Chunks = append(p.res.Chunks, c.Chunk)
 		p.source(c.Source)
 		p.chunks = append(p.chunks, i)
-	}
-	for i, v := range p.res.Vectors {
-		if _, ok := byIndex[v.Chunk]; !ok {
+		if c.Vector == nil {
 			continue
 		}
+		v := alchemy.Vector{Chunk: c.Index, Values: c.Vector, Model: c.Model}
+		p.res.Vectors = append(p.res.Vectors, v)
 		// One collection holds one dimension. Two embedding models in one
 		// result is a result the caller has to split, and finding that out
 		// halfway through a write is finding it out too late.
@@ -192,16 +219,76 @@ func (p *plan) planChunks() error {
 			return fmt.Errorf("vector for chunk %d has %d dimensions and an earlier one has %d; "+
 				"a collection holds one dimension", v.Chunk, len(v.Values), p.dim)
 		}
-		p.vectorFor[v.Chunk] = i
+		p.vectorFor[v.Chunk] = len(p.res.Vectors) - 1
 	}
 	return nil
 }
 
-// planRelations groups the edges by CortexDB's identity and refuses the
-// collisions CortexDB's model cannot hold.
-func (p *plan) planRelations(ids map[string]int) error {
-	index := map[string]int{}
-	for i, r := range p.res.Relations {
+func newPlan(o Options, digest string) *plan {
+	return &plan{
+		opts: o, digest: digest,
+		vectorFor: map[int]int{}, sourceSeen: map[string]struct{}{},
+		ids: map[string]int{}, relIndex: map[string]int{}, chunkAt: map[int]int{},
+	}
+}
+
+// pairs is the whole-result path's version of what the envelope hands a
+// streaming one: every chunk with the embedding that describes it. It exists
+// so that addChunks has one caller shape rather than two.
+func pairs(res alchemy.Result) []sink.Chunk {
+	byChunk := make(map[int]int, len(res.Vectors))
+	for i, v := range res.Vectors {
+		byChunk[v.Chunk] = i
+	}
+	out := make([]sink.Chunk, 0, len(res.Chunks))
+	for _, c := range res.Chunks {
+		pc := sink.Chunk{Chunk: c}
+		if i, ok := byChunk[c.Index]; ok {
+			pc.Vector, pc.Model = res.Vectors[i].Values, res.Vectors[i].Model
+		}
+		out = append(out, pc)
+	}
+	return out
+}
+
+// addEntities checks one batch of nodes and files them.
+func (p *plan) addEntities(batch []alchemy.Entity) error {
+	for _, e := range batch {
+		i := len(p.res.Entities)
+		if e.ID == "" {
+			return fmt.Errorf("entity %d has no ID, so nothing can refer to it", i)
+		}
+		// CortexDB's node upsert is ON CONFLICT DO UPDATE: two entities of one
+		// result sharing an ID would leave the second silently wearing the
+		// first's edges. Refused rather than resolved, because resolving it
+		// means picking a winner nobody asked for.
+		if prev, dup := p.ids[e.ID]; dup {
+			return fmt.Errorf("entities %d and %d share the ID %q; one would silently overwrite the other", prev, i, e.ID)
+		}
+		if err := checkAttributes(e.Attributes, p.opts.ReservedPrefix, cortexNodeProps, "CortexDB writes on an entity node"); err != nil {
+			return fmt.Errorf("entity %s: %w", e.ID, err)
+		}
+		p.res.Entities = append(p.res.Entities, e)
+		p.ids[e.ID] = i
+		p.source(e.Provenance.Source)
+		p.entities = append(p.entities, i)
+	}
+	return nil
+}
+
+// addRelations groups one batch of edges by CortexDB's identity.
+//
+// It is a batch rather than the whole slice because pkg/sink streams, and the
+// grouping index lives on the plan for the same reason. What it cannot do is
+// decide anything about a group until every batch has arrived — see
+// checkParallelEdges — which is this store's own constraint: CortexDB
+// identifies an edge by (from, to, type, document), so two records that are one
+// edge can be pages apart in a paged result and the store must see both before
+// it writes either.
+func (p *plan) addRelations(batch []alchemy.Relation) error {
+	for _, r := range batch {
+		i := len(p.res.Relations)
+		p.res.Relations = append(p.res.Relations, r)
 		if err := checkAttributes(r.Attributes, p.opts.ReservedPrefix, cortexEdgeProps, "CortexDB writes on a relation edge"); err != nil {
 			return fmt.Errorf("relation %s-[%s]->%s: %w", r.From, r.Type, r.To, err)
 		}
@@ -211,8 +298,8 @@ func (p *plan) planRelations(ids map[string]int) error {
 		// would reject it too (the store enforces the endpoints as a foreign
 		// key), but it would reject it in the middle of a batch, where the
 		// news is a count rather than a name.
-		_, from := ids[r.From]
-		_, to := ids[r.To]
+		_, from := p.ids[r.From]
+		_, to := p.ids[r.To]
 		if !from || !to {
 			p.skipped = append(p.skipped, fmt.Sprintf("%s -[%s]-> %s (%s)", r.From, r.Type, r.To, missing(from, to)))
 			continue
@@ -225,10 +312,10 @@ func (p *plan) planRelations(ids map[string]int) error {
 			doc:  documentID(p.opts.RunID, r.Provenance.Source),
 		}
 		key := g.from + "\x00" + g.to + "\x00" + g.typ + "\x00" + g.doc
-		at, seen := index[key]
+		at, seen := p.relIndex[key]
 		if !seen {
 			at = len(p.groups)
-			index[key] = at
+			p.relIndex[key] = at
 			p.groups = append(p.groups, g)
 		}
 		grp := &p.groups[at]
@@ -237,7 +324,13 @@ func (p *plan) planRelations(ids map[string]int) error {
 			grp.keys = append(grp.keys, r.Key)
 		}
 	}
+	return nil
+}
 
+// checkParallelEdges is the finding this connector exists to make visible, and
+// it can only be made once every edge has arrived: two records that CortexDB's
+// identity rule calls one edge can be pages apart.
+func (p *plan) checkParallelEdges() error {
 	for _, g := range p.groups {
 		if len(g.keys) < 2 {
 			continue

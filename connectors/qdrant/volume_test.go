@@ -55,8 +55,19 @@ func TestALoadThatDiesHalfwayIsInvisibleAndVisiblyIncomplete(t *testing.T) {
 	l := f.openRaw(t, Config{Batch: 50})
 	ctx := context.Background()
 	boom := errors.New("the network went away")
+	// The batch counter moved. upsert's `written` used to be cumulative over a
+	// whole result; the envelope (pkg/sink) now hands this store one batch at a
+	// time, which is the point of it — a large graph reaches a store as a
+	// stream and never as a struct — so the running total is kept here. The
+	// failure lands where it always did: after 100 entity points are in the
+	// collection and before the rest.
+	landed := 0
 	l.hooks.afterBatch = func(kind string, written int) error {
-		if kind == "entity" && written >= 100 {
+		if kind != "entity" {
+			return nil
+		}
+		landed += written
+		if landed >= 100 {
 			return boom
 		}
 		return nil

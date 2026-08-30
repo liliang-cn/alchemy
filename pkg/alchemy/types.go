@@ -6,8 +6,6 @@
 // stages it should not know exist.
 package alchemy
 
-import "time"
-
 // Producer names what made an entity or a relation. It is the field DESIGN.md
 // §5b calls "the field that matters": ProducerDDL and ProducerGraphImport mean
 // a machine read something that already said this, ProducerLLMExtract means a
@@ -49,8 +47,18 @@ func (p Producer) Deterministic() bool {
 type Provenance struct {
 	// Source is the name of the file or connection the fact came from.
 	Source string `json:"source"`
-	// Chunk is the index of the chunk it was extracted from, or -1 when the
-	// producer did not work in chunks (DDL, graph import).
+	// Chunk is the Chunk.Index of the chunk it was extracted from, or -1 when
+	// the producer did not work in chunks (DDL, graph import).
+	//
+	// It is a Chunk.Index and not a position in Result.Chunks, and the two are
+	// only the same thing by accident. §8.4 pages a large result, so an entity
+	// can arrive in a message whose Chunks slice is empty or holds a different
+	// window of the job; a consumer that indexed the slice with this would
+	// silently read the wrong chunk or run off the end. Join on Chunk.Index.
+	//
+	// That join is well-defined because a job's chunk indexes are unique across
+	// the whole job — see Chunk.Index, which is where that invariant is stated
+	// and pkg/preflight where it is checked.
 	Chunk int `json:"chunk"`
 	// Producer is what made it.
 	Producer Producer `json:"producer"`
@@ -123,6 +131,28 @@ type Entity struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
 	// Attributes are whatever the source stated beyond type and name.
+	//
+	// The values are what encoding/json produces and nothing else: string,
+	// float64, bool, nil, []any and map[string]any, nested to any depth. §4
+	// makes the JSON the contract, so the domain of an attribute value is the
+	// JSON value domain — and saying so is not pedantry, because four stores
+	// were written against this map by four people and each had to decide for
+	// itself what a nested value even is. Two of them invented the same
+	// breadcrumb convention for values their property model cannot hold; two
+	// needed none. All four were right, and none of them could tell.
+	//
+	// So the split is stated rather than left to be discovered: what may be in
+	// here is this package's business, and what a store does with a value its
+	// type system cannot hold is that store's — a property graph flattening a
+	// nested object to JSON text is a faithful store making the best of its own
+	// model, and it owes its reader a way to see that it did.
+	//
+	// A producer that puts anything else in here — a time.Time, a struct, an
+	// int that survives only because nobody marshalled it yet — breaks the
+	// contract for every consumer at once, and quietly: it round-trips through
+	// this process and changes type on the way to the next one. pkg/preflight
+	// checks it, which is what turns this paragraph into something a run can
+	// fail rather than a claim in a comment.
 	Attributes map[string]any `json:"attributes,omitempty"`
 	Provenance Provenance     `json:"provenance"`
 }
@@ -170,7 +200,14 @@ type Relation struct {
 	// document's edge id collide with another's; two records that carry the
 	// same key between the same two nodes are two claims about one edge, which
 	// is exactly the reading wanted.
-	Key        string         `json:"key,omitempty"`
+	//
+	// Key is what an edge's identity is made of and not the whole of it; see
+	// Identity, which renders the whole of it, because leaving the rule stated
+	// here and rendered nowhere is what let four stores each invent a different
+	// one.
+	Key string `json:"key,omitempty"`
+	// Attributes are whatever the source stated about the edge. The value
+	// domain is Entity.Attributes'; the argument is there and is the same one.
 	Attributes map[string]any `json:"attributes,omitempty"`
 	Provenance Provenance     `json:"provenance"`
 }
@@ -179,9 +216,32 @@ type Relation struct {
 // boundaries decide what an extractor can see, so the strategy that produced
 // one travels with it.
 type Chunk struct {
+	// Index is this chunk's number within the whole job, not within its
+	// source, and it is the only name a chunk has.
+	//
+	// The distinction is the whole of it, and this type reads as if the
+	// opposite were true: an Index sitting next to a Source is exactly how one
+	// would spell "the third chunk of this file". It is not. Provenance.Chunk
+	// and Vector.Chunk are plain ints with no source beside them, so the only
+	// way either of them names one span of one file is if the number is unique
+	// across the entire result — and it is, because pkg/pipeline's adopt
+	// renumbers every source's chunks as it takes them in.
+	//
+	// That invariant was true and unwritten, which is a bad combination: a
+	// store that joined a vector to a chunk by index would work perfectly until
+	// two files' first chunks both arrived numbered 0, and then it would write
+	// one chunk, lose the other, and report having written two. One of the four
+	// stores found that path and refuses it by name; the others were exposed to
+	// it and had no way to know. So it is stated here, checked in
+	// pkg/preflight, and enforced by the pipeline on its own output.
+	//
+	// A result assembled by something other than this pipeline owes the same
+	// promise. It is not "renumber your chunks"; it is "a chunk index names one
+	// chunk", which is what everything downstream already assumes.
 	Index int    `json:"index"`
 	Text  string `json:"text"`
-	// Source is the file the text came from.
+	// Source is the file the text came from. It is the chunk's origin, not part
+	// of its identity — see Index.
 	Source string `json:"source"`
 	// Strategy is the chunking strategy that produced this chunk.
 	Strategy string `json:"strategy"`
@@ -196,375 +256,9 @@ type Chunk struct {
 // Vector is an embedding of one chunk. §5c: vectors are computed after review,
 // so they describe the text that survived it.
 type Vector struct {
+	// Chunk is the Chunk.Index of the text this embeds — a chunk's number, not
+	// a position in Result.Chunks, for the reason Provenance.Chunk gives.
 	Chunk  int       `json:"chunk"`
 	Values []float32 `json:"values"`
 	Model  string    `json:"model"`
-}
-
-// ViolationKind says which rule an extraction broke.
-type ViolationKind string
-
-const (
-	// ViolationUnknownEntityType — an entity whose type the ontology does not declare.
-	ViolationUnknownEntityType ViolationKind = "unknown_entity_type"
-	// ViolationUnknownRelationType — a relation whose type the ontology does not declare.
-	ViolationUnknownRelationType ViolationKind = "unknown_relation_type"
-	// ViolationRelationNotAllowed — a declared relation type used between entity
-	// types the ontology does not allow it between.
-	ViolationRelationNotAllowed ViolationKind = "relation_not_allowed"
-	// ViolationDanglingRelation — a relation naming an entity the result does not contain.
-	ViolationDanglingRelation ViolationKind = "dangling_relation"
-)
-
-// The kinds above are ontology-shaped: a source said something the declared
-// vocabulary does not allow. The kinds below are source-shaped — a file that
-// does not fit its own header, which is a way a table can fail and a schema
-// cannot.
-//
-// Both families live here for one reason: Result.Violations is the JSON a
-// buyer parses, so its "kind" field has to be a closed set. A reader that
-// declares its own kinds privately leaves that field open while the contract
-// claims it is not, and a consumer switching on it silently falls through.
-const (
-	// ViolationMalformedRow — a row that cannot be read against its header.
-	ViolationMalformedRow ViolationKind = "malformed_row"
-	// ViolationUnnamedColumn — a header cell with no name, so no mapping can
-	// refer to the column and its values are left out.
-	ViolationUnnamedColumn ViolationKind = "unnamed_column"
-	// ViolationMissingID — a record whose identifying field is empty.
-	ViolationMissingID ViolationKind = "missing_id"
-	// ViolationDuplicateID — two records claiming the same identity, differently.
-	ViolationDuplicateID ViolationKind = "duplicate_id"
-)
-
-// Violation is one source saying something the ontology does not allow. §7.3:
-// it is attributable, excludable, and the rest of the graph is usable without
-// it — which is why a violation does not hold the job.
-type Violation struct {
-	Kind ViolationKind `json:"kind"`
-	// Detail says what was wrong in words a person can act on.
-	Detail string `json:"detail"`
-	// Subject is the entity ID or the "from -[type]-> to" that broke the rule.
-	Subject    string     `json:"subject"`
-	Provenance Provenance `json:"provenance"`
-}
-
-// Guess is an inferred mapping the pipeline made and is obliged to report.
-// §2.1: a guess that does not announce itself is a bug with a three-month fuse.
-type Guess struct {
-	// Field is what was being mapped, e.g. a source column name.
-	Field string `json:"field"`
-	// ChosenAs is what it was mapped to.
-	ChosenAs string `json:"chosen_as"`
-	// Alternatives are the candidates that were not chosen. A guess with a
-	// non-empty Alternatives list is one a reviewer should look at first.
-	Alternatives []string `json:"alternatives,omitempty"`
-	// Reason says why this candidate won.
-	Reason     string     `json:"reason,omitempty"`
-	Provenance Provenance `json:"provenance"`
-}
-
-// ConflictKind says what shape of disagreement was found.
-type ConflictKind string
-
-const (
-	// ConflictEntityAttributes — the same entity arrived twice with different attributes.
-	ConflictEntityAttributes ConflictKind = "entity_attributes"
-	// ConflictEntityType — the same entity arrived twice with different types.
-	ConflictEntityType ConflictKind = "entity_type"
-	// ConflictRelationDirection — one source says A→B, another says B→A.
-	ConflictRelationDirection ConflictKind = "relation_direction"
-	// ConflictContradiction — a deterministic edge contradicted by an inferred one.
-	ConflictContradiction ConflictKind = "contradiction"
-	// ConflictRelationAttributes — the same edge given different attribute values
-	// by two sources of equal standing. It is separate from
-	// ConflictContradiction because that kind tells a reviewer a schema is
-	// involved, and here none is: neither side has more standing than the
-	// other, which is precisely what leaves the question for a person.
-	ConflictRelationAttributes ConflictKind = "relation_attributes"
-)
-
-// Conflict is two sources both claiming to be right, with nothing in the data
-// to decide between them. §7.3: a conflict always holds the job, whether or not
-// review mode is on.
-type Conflict struct {
-	Kind ConflictKind `json:"kind"`
-	// Subject is what the two sources disagree about.
-	Subject string `json:"subject"`
-	// Detail states the disagreement in words.
-	Detail string `json:"detail"`
-	// Left and Right are the two claims, each with its own provenance, so a
-	// reviewer can see a schema on one side and a PDF on the other.
-	Left  Claim `json:"left"`
-	Right Claim `json:"right"`
-}
-
-// Claim is one side of a Conflict.
-type Claim struct {
-	// Statement renders the claim for a person reading the queue.
-	Statement  string     `json:"statement"`
-	Provenance Provenance `json:"provenance"`
-}
-
-// DuplicateSignal names the deterministic evidence that two nodes may be one
-// thing. It is on the finding rather than left implicit because a reviewer
-// answering "are these the same?" is entitled to know what asked them, and
-// because a signal that turns out to be noisy has to be identifiable in a
-// corpus of past decisions before anybody can argue for removing it.
-type DuplicateSignal string
-
-const (
-	// DuplicateNameAffix — under one type, one node's name is the other's with
-	// whole words added at the front or the back: "document" and "document
-	// package", "SQL" and "SQL dumps". It is the shape a per-chunk extractor
-	// produces, because each chunk is a separate call that cannot see how the
-	// others named the thing, and the commonest addition is the type word
-	// itself.
-	//
-	// What it will wrongly join is a name that was qualified because it names
-	// something narrower: "language" and "language model", "Ada" and "Ada
-	// Lovelace". That is why this is a finding and not a merge — the evidence
-	// is real, and it is not enough to act on alone.
-	DuplicateNameAffix DuplicateSignal = "name_affix"
-)
-
-// Duplicate is two nodes that may be one node, and are not joined.
-//
-// It is a third kind of finding beside Violation and Conflict because it is
-// neither of them, and pushing it into either would make that one mean less.
-// A violation is one source saying something the ontology does not allow: the
-// ontology can name the rule that was broken, and the graph minus the offending
-// record is still usable. Neither holds here — no declared rule says a
-// vocabulary may not contain two names for one thing, and there is no record to
-// remove, since removing either node takes its edges with it. A conflict is two
-// sources both claiming to be right with nothing in the data to decide between
-// them (§7.3), and these two records do not disagree about anything; they agree
-// and are merely not joined. Making it a conflict would also hold every prose
-// job, since roughly one node in six was one of these in the run that motivated
-// it — which turns §7.3's refusal to let a caller opt out of a person into a
-// dialog people learn to click through.
-//
-// So: nothing is wrong, and the graph is delivered. What is owed is the number
-// (Counts.Duplicates) and the pair, so that a reader can distrust the graph by
-// exactly as much as it deserves.
-type Duplicate struct {
-	Signal DuplicateSignal `json:"signal"`
-	// Subject is the pair, rendered "left ~ right". It is one string because
-	// every other finding has a single Subject and the queue, the rules and
-	// the stamping all key on it.
-	Subject string `json:"subject"`
-	// Detail states the case in words a person can answer without opening the
-	// source: both names, both chunks, and what joined them.
-	Detail string `json:"detail"`
-	// Left and Right are the two nodes. Left is the one whose name is
-	// contained in the other's, which is a property of the pair rather than of
-	// the order they were extracted in — so the same corpus names the same
-	// side left however its sections were ordered.
-	//
-	// Neither side is the "wrong" one. A Conflict has an incumbent and a
-	// dissenter because one of them arrived second at a key somebody already
-	// held; here nobody is holding anything, which is precisely the defect.
-	Left  DuplicateSide `json:"left"`
-	Right DuplicateSide `json:"right"`
-}
-
-// DuplicateSide is one node of a candidate pair, carrying what a reviewer
-// needs to answer without a lookup: which node, what it is called, and where it
-// came from.
-type DuplicateSide struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
-	Name string `json:"name"`
-	// Provenance is this node's, whole. §5b: a wrong edge is attributable, and
-	// the answer to "are these the same thing?" is usually "which chunk said
-	// which, and did the second one know about the first".
-	Provenance Provenance `json:"provenance"`
-}
-
-// Counts is the block that makes the difference between a graph you can act on
-// and one you merely have. §5: every returned graph is accompanied by the
-// numbers needed to distrust it.
-type Counts struct {
-	Entities      int `json:"entities"`
-	Relations     int `json:"relations"`
-	Deterministic int `json:"deterministic"`
-	Inferred      int `json:"inferred"`
-	Violations    int `json:"violations"`
-	Conflicts     int `json:"conflicts"`
-	Guesses       int `json:"guesses"`
-	// Duplicates is how many pairs of nodes may be one node (see Duplicate).
-	//
-	// It is in this block for the reason the block exists: "one node in six may
-	// be a duplicate of another" is exactly a number needed to distrust a
-	// graph, and it is one no reader can derive from the entities beside it —
-	// the two nodes are well-formed, correctly typed and separately
-	// attributable, and nothing about either says the other exists. A graph
-	// returned without it looks like a graph of 17 things when it may be a
-	// graph of 14.
-	Duplicates int `json:"duplicates"`
-	// ChunksEmpty is chunks that produced nothing. A high number means the
-	// extraction is failing quietly.
-	ChunksEmpty int `json:"chunks_empty"`
-	// ChunksUnread is source text that could not be read at all — a scanned PDF
-	// page with no OCR model supplied. §5: never silently returned as empty.
-	ChunksUnread int `json:"chunks_unread"`
-	// Dropped is how many entities and relations a standing rule (§5c's
-	// `always`) removed without anybody being asked about them.
-	//
-	// It exists because a rule may now say "reject", and a rejection that
-	// leaves no trace is the one way this design can lose a record silently.
-	// Everything else a graph is missing is reported: an unread page is in
-	// Unread, an empty chunk is in ChunksEmpty, a record a person threw away
-	// was thrown away by somebody who saw it. A record a written policy
-	// removed before any queue was shown to anyone is invisible in the result
-	// — the graph simply comes back one record shorter — and §5's obligation
-	// to return "the numbers needed to distrust" the graph would be quietly
-	// false without this one.
-	//
-	// It deliberately does not count what a person rejected while working a
-	// queue. That number would conflate a judgement somebody made on a record
-	// they read with a policy applied to a record nobody read, and it is the
-	// second that a reader needs to be able to see.
-	Dropped int `json:"dropped,omitempty"`
-}
-
-// ModelCall records what a job spent, by model and stage. §7.2: cost is not
-// optimised for, but it is never hidden.
-type ModelCall struct {
-	Model string `json:"model"`
-	Stage string `json:"stage"`
-	Calls int    `json:"calls"`
-	// Tokens is reported when the provider reports it, 0 otherwise.
-	Tokens int `json:"tokens,omitempty"`
-}
-
-// Result is what a finished job returns. §4: it is returned, not stored.
-type Result struct {
-	Entities  []Entity   `json:"entities"`
-	Relations []Relation `json:"relations"`
-	Chunks    []Chunk    `json:"chunks,omitempty"`
-	Vectors   []Vector   `json:"vectors,omitempty"`
-
-	Conflicts  []Conflict  `json:"conflicts"`
-	Violations []Violation `json:"violations"`
-	Guesses    []Guess     `json:"guesses"`
-	// Duplicates is returned whether or not review is on, for the same reason
-	// Violations is: a caller running unattended is owed the numbers needed to
-	// distrust what it got, and "these two nodes may be one" is not something
-	// it can work out later from a graph in which both look fine.
-	Duplicates []Duplicate `json:"duplicates"`
-
-	Counts     Counts      `json:"counts"`
-	ModelCalls []ModelCall `json:"model_calls,omitempty"`
-	// Unread names source material that could not be read, with why.
-	Unread []Unread `json:"unread,omitempty"`
-	// RuleSets is every standing policy this job's records were extracted
-	// under, each named once. Provenance.RuleSet is a name into it.
-	//
-	// There is more than one because the set changes while the job runs: §6's
-	// whole reason for choosing a stream is that "a person working a queue
-	// wants their decisions to take effect on work still running", so a rule
-	// made in minute three is in force for minute four and was not in force
-	// for minute two. A result that named "the job's rules" would be answering
-	// a question nobody asked; each set is the policy as it stood when some
-	// chunk was actually asked, and a record points at the one it was asked
-	// under.
-	//
-	// It is a separate field from the `always` rules a job's review produced
-	// (which this package does not carry at all, and the service returns
-	// beside the result) and the difference is not cosmetic. Those are this
-	// job's output — the policy a caller keeps and supplies to the next job
-	// (§4, §7.3) — and these are its input, whatever the model had been told.
-	// An authored rule that was in force and matched nothing is in here and
-	// will never be in there, which is exactly the rule a reader chasing a
-	// name from a record needs to resolve; and a caller who fed one field back
-	// as the other would be re-declaring somebody else's policy as their own
-	// job's finding.
-	RuleSets []RuleSet `json:"rule_sets,omitempty"`
-}
-
-// RuleSet is the standing policy in force at one moment of a job, named so
-// that a record can point at it rather than repeat it.
-type RuleSet struct {
-	// Name is this set's identity, and it is a digest rather than a label for
-	// two reasons. It has to be the same on every node that runs a piece of
-	// one job (§8.3), so it cannot be a counter or anything else a process
-	// invents; and it has to differ whenever the policy differs, because "two
-	// records were asked under different rules" is a fact a reader must not
-	// lose. It is computed from exactly the members below, so a reader can
-	// recompute it and check that this result is telling the truth about
-	// itself.
-	Name string `json:"name"`
-	// Rules is what was in force, in a stable order.
-	Rules []StandingRule `json:"rules"`
-}
-
-// StandingRule is one rule of such a set: what it is called, and what the
-// model was told about it.
-type StandingRule struct {
-	// Name is the rule's identity — its origin and its shape, as
-	// review.Rule.Name writes them. The shape is what the rule matches on, and
-	// the origin says whether a person decided a finding or declared a policy
-	// in advance; the second is the weaker warrant, and a name that dropped it
-	// would let it be read as the stronger.
-	Name string `json:"name"`
-	// Told is the sentence the model was shown for this rule — the reason the
-	// reviewer or the author gave, what to do about it, and who said so.
-	//
-	// It is here because "which rules were in force" and "what the model was
-	// actually told" are the same question at §6's level and not at §5b's: a
-	// shape says which class was suppressed, and only the sentence says what
-	// the model was asked to stop doing and on whose word. Keeping it means a
-	// reader holding the result alone can answer both, without the policy file
-	// the job was run with.
-	Told string `json:"told,omitempty"`
-}
-
-// Unread is source material the pipeline could not read. It exists so that
-// "no text here" is never indistinguishable from "an empty page".
-type Unread struct {
-	Source string `json:"source"`
-	// Locator is a page number, sheet name or byte range — whatever identifies
-	// the part that could not be read.
-	Locator string `json:"locator"`
-	Reason  string `json:"reason"`
-}
-
-// JobState is where a job is. §7.3: NeedsReview is reachable without review
-// mode being on, because a conflict always requires a person.
-type JobState string
-
-const (
-	JobPending     JobState = "PENDING"
-	JobRunning     JobState = "RUNNING"
-	JobNeedsReview JobState = "NEEDS_REVIEW"
-	JobSucceeded   JobState = "SUCCEEDED"
-	JobFailed      JobState = "FAILED"
-	JobExpired     JobState = "EXPIRED"
-	JobCancelled   JobState = "CANCELLED"
-)
-
-// SourceKind is which of the four readers handles a source.
-type SourceKind string
-
-const (
-	SourceTabular  SourceKind = "tabular"
-	SourceDDL      SourceKind = "ddl"
-	SourceDocument SourceKind = "document"
-	SourceGraph    SourceKind = "graph"
-)
-
-// Job is the unit of work, and the only thing the service holds. §5c: what is
-// held is work in progress, never a knowledge base.
-type Job struct {
-	ID        string    `json:"id"`
-	State     JobState  `json:"state"`
-	CreatedAt time.Time `json:"created_at"`
-	// ExpiresAt is when un-reviewed work is discarded. §5c: without it the
-	// "stateless" service quietly grows a database of abandoned reviews.
-	ExpiresAt time.Time `json:"expires_at"`
-	// Stage is the pipeline stage currently running, for progress reporting.
-	Stage string `json:"stage,omitempty"`
-	// Error is set when State is JobFailed.
-	Error string `json:"error,omitempty"`
 }

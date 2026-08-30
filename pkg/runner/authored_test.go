@@ -30,7 +30,7 @@ func TestConfiguredRulesReachAJobThatSuppliedNone(t *testing.T) {
 	rule := policy(t, "violation/unknown_entity_type/type=Flag/producer=llm-extract/model=fake-llm",
 		"--flag is a command-line switch, not an entity")
 
-	req, err := buildRequest(service.JobSpec{
+	req, err := buildRequest("job-under-test", service.JobSpec{
 		Sources: []service.Source{{ID: "s1", Kind: alchemy.SourceDDL, Path: "x"}},
 	}, nil, []review.Rule{rule})
 	if err != nil {
@@ -52,7 +52,7 @@ func TestAJobsOwnRulesAreCreditedBeforeTheProcessWideOnes(t *testing.T) {
 	perJob := policy(t, shape, "this corpus writes switches as entities")
 	perProcess := policy(t, shape, "no corpus of ours has entities that start with two dashes")
 
-	req, err := buildRequest(service.JobSpec{
+	req, err := buildRequest("job-under-test", service.JobSpec{
 		Sources: []service.Source{{ID: "s1", Kind: alchemy.SourceDDL, Path: "x"}},
 		Review:  review.Options{Rules: []review.Rule{perJob}},
 	}, nil, []review.Rule{perProcess})

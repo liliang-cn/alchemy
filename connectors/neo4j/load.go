@@ -25,11 +25,16 @@ import (
 	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 	driver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
 // Loader writes results into one Neo4j database under one set of options.
 type Loader struct {
+	// report is where a load in progress accumulates what it wrote. It is set
+	// by Load on a per-load copy of the Loader and is nil on the one a caller
+	// holds; see Load for why the numbers here are not the envelope's.
+	report *Report
 	driver driver.DriverWithContext
 	opts   Options
 	// owned says whether Close should shut the driver down. A caller who
@@ -81,6 +86,11 @@ type Report struct {
 	Duplicates int
 	Guesses    int
 	Unread     int
+	// RuleSets is how many standing policies were loaded beside the graph. It
+	// is a count rather than a silence because every record can carry a name
+	// into them, and a run that wrote none while its records named some is a
+	// graph whose provenance points nowhere.
+	RuleSets int
 
 	// SkippedRelations names the edges that were not written because an
 	// endpoint was not in the result. See preflight.
@@ -119,40 +129,39 @@ type Report struct {
 // re-Load to finish. Convergence is the reason the writes are MERGEs rather
 // than CREATEs even though CREATE is faster: a retry has to be a retry.
 func (l *Loader) Load(ctx context.Context, res alchemy.Result) (Report, error) {
+	// This connector's own refusals first, so that everything it has ever
+	// answered with ErrHeld, ErrNoRunID or a named attribute collision still
+	// answers the same way. §4.1 moved the *shared* refusals above the line and
+	// not this store's account of them: a caller matching on those sentinels is
+	// matching on this package's contract.
+	//
+	// It also resolves the run name — Options.RunID, or the job that produced
+	// the result where the caller set none.
 	p, err := preflight(res, l.opts)
 	if err != nil {
 		return Report{}, err
 	}
-	rep := Report{
-		Run: l.opts.RunID, Digest: p.digest,
-		SkippedRelations: p.skipped, SkippedVectors: len(res.Vectors),
-	}
 
-	if err := l.ensureIndex(ctx); err != nil {
-		return rep, err
-	}
-	replay, err := l.claimRun(ctx, p)
+	// The Report the writers fill is this one. A load is one call on one
+	// Loader value, so the copy is per-load and shared with nothing: it is how
+	// the envelope's Tx — which the caller never sees — hands back the numbers
+	// that are this store's rather than the driver's. They are different
+	// numbers on purpose. sink.Report counts what was handed over, which is
+	// what a failed load owes an operator; this counts what was written, which
+	// with SkipChunks or SkipFindings is deliberately less.
+	out := Report{Run: p.opts.RunID, SkippedVectors: len(res.Vectors)}
+	run := *l
+	run.opts = p.opts
+	run.report = &out
+
+	rep, err := sink.Load(ctx, &run, res, sink.Options{
+		Load: p.opts.RunID, Replace: l.opts.Overwrite, Batch: l.opts.BatchSize,
+	})
+	out.Digest = rep.Digest
 	if err != nil {
-		return rep, err
+		return out, err
 	}
-	rep.Replay = replay
-
-	if err := l.writeEntities(ctx, p, &rep); err != nil {
-		return rep, err
-	}
-	if err := l.writeRelations(ctx, p, &rep); err != nil {
-		return rep, err
-	}
-	if err := l.writeChunks(ctx, p, &rep); err != nil {
-		return rep, err
-	}
-	if err := l.writeFindings(ctx, p, &rep); err != nil {
-		return rep, err
-	}
-	if err := l.completeRun(ctx, p, &rep); err != nil {
-		return rep, err
-	}
-	return rep, nil
+	return out, nil
 }
 
 // internal labels are derived from the base label rather than fixed, so that
@@ -163,7 +172,8 @@ func (l *Loader) internalLabel(kind string) string { return l.opts.BaseLabel + k
 
 func (o Options) internalLabels() []string {
 	return []string{o.BaseLabel + "Run", o.BaseLabel + "Chunk", o.BaseLabel + "Violation",
-		o.BaseLabel + "Duplicate", o.BaseLabel + "Guess", o.BaseLabel + "Unread"}
+		o.BaseLabel + "Duplicate", o.BaseLabel + "Guess", o.BaseLabel + "Unread",
+		o.BaseLabel + "RuleSet"}
 }
 
 // indexNames is the set of indexes this Loader creates. It is a method so that
@@ -205,31 +215,40 @@ func (l *Loader) ensureIndex(ctx context.Context) error {
 //   - A different run ID: a different graph. Nothing is merged across runs,
 //     ever, because Entity.ID says nothing across runs and joining on it would
 //     be entity resolution done wrong (§5 defers it to a second release).
-func (l *Loader) claimRun(ctx context.Context, p *plan) (bool, error) {
+func (l *Loader) claimRun(ctx context.Context, digest string, replace bool) (replay, done bool, err error) {
 	base, _ := quoteIdent(l.opts.BaseLabel)
 	runLabel, err := quoteIdent(l.internalLabel("Run"))
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	pre := l.opts.ReservedPrefix
 	recs, err := l.read(ctx, fmt.Sprintf("MATCH (r:%s:%s {`%s%s`: $run}) RETURN r.`%s%s` AS digest, r.`%scomplete` AS complete",
 		base, runLabel, pre, keyID, pre, "digest", pre), map[string]any{"run": l.opts.RunID})
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	replay := false
 	if len(recs) > 0 {
 		prev, _ := recs[0]["digest"].(string)
 		switch {
-		case prev == p.digest:
+		case prev == digest:
+			// The same graph. Whether it finished decides whether there is
+			// anything to do: a complete run needs nothing rewritten, and an
+			// incomplete one is exactly the crashed load that is finished by
+			// running the same MERGEs again (§8.3).
 			replay = true
-		case l.opts.Overwrite:
+			done, _ = recs[0]["complete"].(bool)
+		case replace || l.opts.Overwrite:
 			if err := l.deleteRun(ctx); err != nil {
-				return false, err
+				return false, false, err
 			}
 		default:
-			return false, fmt.Errorf("%w: run %q holds a graph with digest %s, this result is %s; "+
-				"use a new RunID, or Options.Overwrite to replace it", ErrRunExists, l.opts.RunID, short(prev), short(p.digest))
+			// Both sentinels: sink.ErrExists is what a caller asks when it
+			// does not care which store answered, and ErrRunExists is what a
+			// caller of this package has always matched on. Joining them keeps
+			// every existing reader and adds the shared one.
+			return false, false, fmt.Errorf("%w: %w: run %q holds a graph with digest %s, this result is %s; "+
+				"use a new RunID, or Options.Overwrite to replace it",
+				sink.ErrExists, ErrRunExists, l.opts.RunID, short(prev), short(digest))
 		}
 	}
 
@@ -237,8 +256,14 @@ func (l *Loader) claimRun(ctx context.Context, p *plan) (bool, error) {
 	// the graph is partial is a window in which the graph says so.
 	stmt := fmt.Sprintf("MERGE (r:%s:%s {`%s%s`: $run}) SET r.`%s%s` = $run, r.`%scomplete` = false, r.`%sstarted_at` = $now, r.`%sdigest` = $digest",
 		base, runLabel, pre, keyID, pre, keyRun, pre, pre, pre)
-	return replay, l.write(ctx, func(tx driver.ManagedTransaction) error {
-		_, err := tx.Run(ctx, stmt, map[string]any{"run": l.opts.RunID, "now": time.Now().UTC(), "digest": p.digest})
+	// A complete run is left alone. Rewriting the marker would set
+	// complete=false on a graph that is finished, which is the one moment a
+	// reader could see a whole run claiming to be partial.
+	if replay && done {
+		return replay, done, nil
+	}
+	return replay, done, l.write(ctx, func(tx driver.ManagedTransaction) error {
+		_, err := tx.Run(ctx, stmt, map[string]any{"run": l.opts.RunID, "now": time.Now().UTC(), "digest": digest})
 		return err
 	})
 }
@@ -248,14 +273,14 @@ func (l *Loader) claimRun(ctx context.Context, p *plan) (bool, error) {
 // distrust it". They are on the run node rather than left in the JSON, because
 // a graph in Neo4j whose quality numbers are in a file on somebody's laptop is
 // a graph you merely have.
-func (l *Loader) completeRun(ctx context.Context, p *plan, rep *Report) error {
+func (l *Loader) completeRun(ctx context.Context, digest string, counts alchemy.Counts, rep *Report) error {
 	base, _ := quoteIdent(l.opts.BaseLabel)
 	runLabel, _ := quoteIdent(l.internalLabel("Run"))
 	pre := l.opts.ReservedPrefix
 	props := map[string]any{
 		pre + "complete":    true,
 		pre + "finished_at": time.Now().UTC(),
-		pre + "digest":      p.digest,
+		pre + "digest":      digest,
 		// The loader's own numbers, beside the pipeline's: they differ when a
 		// relation was skipped, and the difference is the thing a buyer would
 		// otherwise have to find by counting.
@@ -270,7 +295,7 @@ func (l *Loader) completeRun(ctx context.Context, p *plan, rep *Report) error {
 		}(),
 		pre + "skipped_vectors": int64(rep.SkippedVectors),
 	}
-	for k, v := range countProps(p.res.Counts, pre) {
+	for k, v := range countProps(counts, pre) {
 		props[k] = v
 	}
 	stmt := fmt.Sprintf("MATCH (r:%s:%s {`%s%s`: $run}) SET r += $props", base, runLabel, pre, keyID)

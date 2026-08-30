@@ -175,7 +175,7 @@ func (s *Server) resolve(id string, r *jobRun) error {
 		return invalid("%s", err)
 	}
 
-	if len(review.Held(out)) > 0 {
+	if len(out.Held()) > 0 {
 		return nil // §7.3: a conflict nobody has put their name to still holds it.
 	}
 	decided := map[string]bool{}

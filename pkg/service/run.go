@@ -228,7 +228,7 @@ func (s *Server) finish(lease job.Lease, r *jobRun, res alchemy.Result, err erro
 	r.hub.offer(items...)
 
 	switch {
-	case len(review.Held(res)) > 0:
+	case len(res.Held()) > 0:
 		// §7.3's one refusal to let a caller opt out of a person.
 		_ = s.store.Hold(ctx, lease, job.HoldConflict)
 	case r.spec.Review.Reviewing && len(open(items, nil)) > 0:

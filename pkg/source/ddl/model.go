@@ -216,7 +216,18 @@ func danglingViolation(source string, from *table, fk foreignKey, reason string)
 		Detail: fmt.Sprintf("%s.%s references %s(%s) but %s",
 			from.name, strings.Join(fk.columns, ","),
 			refName(fk), strings.Join(fk.refColumns, ","), reason),
-		Subject:    fmt.Sprintf("%s -[%s]-> %s", entityID(from.schema, from.name), RelationType, refName(fk)),
+		Subject: fmt.Sprintf("%s -[%s]-> %s", entityID(from.schema, from.name), RelationType, refName(fk)),
+		// The same edge in fields, so a consumer can act on the finding without
+		// parsing the sentence above. To is the reference as the DDL wrote it
+		// rather than an entity ID, because that is the whole finding: there is
+		// no entity for it to be the ID of. The key travels for the reason
+		// alchemy.Relation.Key exists — a table with two unresolvable foreign
+		// keys onto one name states two of these, and a Ref that could not tell
+		// them apart would let one report stand for both.
+		About: alchemy.Ref{
+			Kind: alchemy.RefRelation, Type: RelationType, Key: edgeKey(fk),
+			From: entityID(from.schema, from.name), To: refName(fk),
+		},
 		Provenance: prov(source),
 	}
 }
@@ -233,9 +244,9 @@ func refOf(schema, name string) string {
 }
 
 func relationFor(source string, from *table, fk foreignKey, to string) alchemy.Relation {
-	attrs := map[string]any{"columns": fk.columns}
+	attrs := map[string]any{"columns": jsonList(fk.columns)}
 	if len(fk.refColumns) > 0 {
-		attrs["references"] = fk.refColumns
+		attrs["references"] = jsonList(fk.refColumns)
 	}
 	if fk.constraint != "" {
 		attrs["constraint"] = fk.constraint
@@ -266,6 +277,28 @@ func relationFor(source string, from *table, fk foreignKey, to string) alchemy.R
 // right and separating any other pair is right. Falling back matters because
 // schemas that name no constraints are common, and a fix that only worked for
 // customers who name theirs would be half a fix.
+// jsonList widens a list of names into the shape alchemy.Entity.Attributes
+// declares: []any, the thing encoding/json produces when it decodes a JSON
+// array into an any.
+//
+// A []string is the natural Go value here and is the wrong one, for a reason
+// that only shows up once there are two consumers. It marshals to the identical
+// JSON, so nothing in a document changes; what changes is the Go type a
+// consumer meets, and a consumer holding this Result directly would meet
+// []string where one reading the same result off §6's wire meets []any. A store
+// branching on the type — and one of the four does, to decide whether a value
+// is a list its property model can hold or a nested value it has to render as
+// text with a breadcrumb — then writes the same schema two ways depending on
+// which side of a wire its caller was on. Widening here is what makes those two
+// paths one graph.
+func jsonList(in []string) []any {
+	out := make([]any, len(in))
+	for i, s := range in {
+		out[i] = s
+	}
+	return out
+}
+
 func edgeKey(fk foreignKey) string {
 	if fk.constraint != "" {
 		return fk.constraint
@@ -294,12 +327,12 @@ func entityFor(source string, t *table, ix tableIndex) alchemy.Entity {
 		attrs["schema"] = t.schema
 	}
 	if len(t.primaryKey) > 0 {
-		attrs["primary_key"] = t.primaryKey
+		attrs["primary_key"] = jsonList(t.primaryKey)
 	}
 	if links, ok := junctionOf(t, ix); ok {
 		attrs["junction"] = true
 		if links != nil {
-			attrs["junction_of"] = links
+			attrs["junction_of"] = jsonList(links)
 		}
 	}
 	return alchemy.Entity{

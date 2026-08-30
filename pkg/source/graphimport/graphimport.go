@@ -382,7 +382,13 @@ func Parse(source string, r io.Reader) (Result, error) {
 				Kind: alchemy.ViolationDanglingRelation,
 				Detail: fmt.Sprintf("%s names %d node(s) this document does not contain: %s",
 					where, len(missing), strings.Join(quoteAll(missing), ", ")),
-				Subject:    fmt.Sprintf("%s -[%s]-> %s", from, typ, to),
+				Subject: fmt.Sprintf("%s -[%s]-> %s", from, typ, to),
+				// The edge in fields as well as in words, and with the key the
+				// document gave it, so a consumer excluding the dangling half
+				// of an import excludes this edge and not its sibling.
+				About: alchemy.Ref{
+					Kind: alchemy.RefRelation, From: from, To: to, Type: typ, Key: key,
+				},
 				Provenance: prov(source),
 			})
 		}

@@ -42,6 +42,7 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 		out = append(out, alchemy.Violation{
 			Kind:       alchemy.ViolationUnknownEntityType,
 			Subject:    e.ID,
+			About:      entityRef(e),
 			Detail:     fmt.Sprintf("entity type %q is not declared by %s; it declares %s", e.Type, describe(rs.ontologyID), quoted(entityNames(rs.vocab))),
 			Provenance: e.Provenance,
 		})
@@ -61,6 +62,7 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 			out = append(out, alchemy.Violation{
 				Kind:       alchemy.ViolationUnknownRelationType,
 				Subject:    edge(r),
+				About:      relationRef(r),
 				Detail:     fmt.Sprintf("relation type %q is not declared by %s; it declares %s", r.Type, describe(rs.ontologyID), quoted(relationNames(rs.vocab))),
 				Provenance: r.Provenance,
 			})
@@ -73,6 +75,7 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 			out = append(out, alchemy.Violation{
 				Kind:       alchemy.ViolationDanglingRelation,
 				Subject:    edge(r),
+				About:      relationRef(r),
 				Detail:     fmt.Sprintf("%s names %s, which this result does not contain", edge(r), strings.Join(missing, " and ")),
 				Provenance: r.Provenance,
 			})
@@ -87,6 +90,7 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 			out = append(out, alchemy.Violation{
 				Kind:       alchemy.ViolationRelationNotAllowed,
 				Subject:    edge(r),
+				About:      relationRef(r),
 				Detail:     reason,
 				Provenance: r.Provenance,
 			})
@@ -94,6 +98,28 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 	}
 
 	return out
+}
+
+// entityRef and relationRef name the record a finding is about in fields, so a
+// consumer can join a violation to the record without parsing edge() back into
+// its parts.
+//
+// They are built from the record here rather than parsed out of the subject
+// there, which is the same rule pkg/review's index is under and for the same
+// reason: "a -[USES]-> b.role" is ambiguous between an edge attribute and an
+// entity whose ID contains a dot, and a parser in another package would be a
+// private copy of this one's output format that no test in either would notice
+// drifting.
+//
+// The type is the canonical one, because canonicalise has already run and the
+// record in the report carries it. A Ref naming the spelling the source used
+// would not match the entity the reader is holding.
+func entityRef(e alchemy.Entity) alchemy.Ref {
+	return alchemy.Ref{Kind: alchemy.RefEntity, ID: e.ID, Type: e.Type}
+}
+
+func relationRef(r alchemy.Relation) alchemy.Ref {
+	return alchemy.Ref{Kind: alchemy.RefRelation, From: r.From, To: r.To, Type: r.Type, Key: r.Key}
 }
 
 // edge renders a relation the way §7.3's reviewer reads it, and is the Subject

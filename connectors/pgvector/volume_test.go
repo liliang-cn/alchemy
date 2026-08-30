@@ -45,12 +45,13 @@ func TestAFailureHalfwayLeavesNothing(t *testing.T) {
 	f := newFixture(t)
 	l := f.open(t, Config{Batch: 500})
 	boom := errors.New("the model endpoint's disk filled up")
-	l.hooks.afterBatch = func(table string, n int) error {
-		if table == "entities" && n == 1 {
-			return boom
-		}
-		return nil
-	}
+	// The batch counter moved. It used to be copyRows' own loop over a whole
+	// result; the envelope (pkg/sink) now hands this store one batch at a time,
+	// so copyRows sees one batch per call and the count that says "die between
+	// batches" is kept here. Same failure at the same point — after the second
+	// five hundred entities are committed and before the third — asserted by
+	// the same row counts below.
+	l.hooks.afterBatch = failAfterEntityBatches(l, 2, false, boom)
 	_, err := l.Load(context.Background(), bigResult(2000, 4), LoadOptions{})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want the injected failure", err)
@@ -71,16 +72,9 @@ func TestAFailureWhoseCleanupAlsoFailsLeavesAnInvisibleLoad(t *testing.T) {
 	f := newFixture(t)
 	l := f.open(t, Config{Batch: 500})
 	boom := errors.New("the node lost its network")
-	l.hooks.afterBatch = func(table string, n int) error {
-		if table == "entities" && n == 1 {
-			// Killing the pool is how a crashed loader looks from the
-			// database's side: the rows are committed and nothing is coming
-			// back to tidy them.
-			l.pool.Close()
-			return boom
-		}
-		return nil
-	}
+	// Two batches of entities land, then the loader dies with its cleanup. See
+	// failAfterEntityBatches for why the counting moved out of copyRows.
+	l.hooks.afterBatch = failAfterEntityBatches(l, 2, true, boom)
 	if _, err := l.Load(context.Background(), bigResult(2000, 4), LoadOptions{}); !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want the injected failure", err)
 	}
@@ -147,13 +141,7 @@ func TestSweepLeavesAYoungIncompleteLoadAlone(t *testing.T) {
 	f := newFixture(t)
 	l := f.open(t, Config{Batch: 500})
 	boom := errors.New("stop")
-	l.hooks.afterBatch = func(table string, n int) error {
-		if table == "entities" && n == 1 {
-			l.pool.Close()
-			return boom
-		}
-		return nil
-	}
+	l.hooks.afterBatch = failAfterEntityBatches(l, 2, true, boom)
 	_, _ = l.Load(context.Background(), bigResult(2000, 4), LoadOptions{})
 
 	fresh := f.open(t, Config{})
@@ -175,13 +163,7 @@ func TestReplaceTakesOverACrashedLoad(t *testing.T) {
 	f := newFixture(t)
 	l := f.open(t, Config{Batch: 500})
 	boom := errors.New("stop")
-	l.hooks.afterBatch = func(table string, n int) error {
-		if table == "entities" && n == 1 {
-			l.pool.Close()
-			return boom
-		}
-		return nil
-	}
+	l.hooks.afterBatch = failAfterEntityBatches(l, 2, true, boom)
 	res := bigResult(2000, 4)
 	_, _ = l.Load(context.Background(), res, LoadOptions{ID: "nightly"})
 
@@ -199,5 +181,34 @@ func TestReplaceTakesOverACrashedLoad(t *testing.T) {
 	}
 	if n := f.count(t, "entities"); n != 2000 {
 		t.Errorf("entities = %d, want exactly 2000: the crashed half was not replaced but added to", n)
+	}
+}
+
+// failAfterEntityBatches kills a load once n batches of entities have been
+// committed, and takes the pool with it when the failure is meant to look like
+// a crashed node.
+//
+// It exists because the batching moved above this connector. copyRows used to
+// walk a whole result and could be told "fail on your second inner batch";
+// pkg/sink now hands this store one batch per call, which is the point of the
+// envelope — a large graph reaches a store as a stream and never as a struct —
+// so the count that used to be copyRows' is the test's. The failure lands at
+// the same place it always did: after 1000 of 2000 entities are on disk.
+func failAfterEntityBatches(l *Loader, n int, kill bool, boom error) func(string, int) error {
+	seen := 0
+	return func(table string, _ int) error {
+		if table != "entities" {
+			return nil
+		}
+		seen++
+		if seen < n {
+			return nil
+		}
+		// Killing the pool is how a crashed loader looks from the database's
+		// side: the rows are committed and nothing is coming back to tidy them.
+		if kill {
+			l.pool.Close()
+		}
+		return boom
 	}
 }

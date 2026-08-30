@@ -80,7 +80,7 @@ func TestAHalfLoadedRunSaysSo(t *testing.T) {
 		t.Fatalf("preflight: %v", err)
 	}
 	var rep Report
-	if _, err := l.claimRun(ctx, p, &rep); err != nil {
+	if _, err := l.claimRun(ctx, p.digest, false, &rep); err != nil {
 		t.Fatalf("claimRun: %v", err)
 	}
 

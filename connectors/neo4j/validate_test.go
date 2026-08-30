@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 func ent(id, typ, name string) alchemy.Entity {
@@ -145,18 +146,18 @@ func TestRunDigest(t *testing.T) {
 		Entities:  []alchemy.Entity{ent("e2", "System", "CortexDB"), ent("e1", "System", "SuperAI")},
 		Relations: []alchemy.Relation{rel("e1", "e2", "USES")},
 	}
-	if digest(a) != digest(b) {
-		t.Fatalf("digest depends on the order records arrived in: %s vs %s", digest(a), digest(b))
+	if sink.Digest(a) != sink.Digest(b) {
+		t.Fatalf("digest depends on the order records arrived in: %s vs %s", sink.Digest(a), sink.Digest(b))
 	}
 	c := a
 	c.Entities = append([]alchemy.Entity{}, a.Entities...)
 	c.Entities[0].Name = "SuperAI Ltd"
-	if digest(a) == digest(c) {
+	if sink.Digest(a) == sink.Digest(c) {
 		t.Fatal("digest is blind to a changed entity name: two different graphs share one run identity")
 	}
 	d := a
 	d.Relations = []alchemy.Relation{rel("e2", "e1", "USES")}
-	if digest(a) == digest(d) {
+	if sink.Digest(a) == sink.Digest(d) {
 		t.Fatal("digest is blind to a reversed relation")
 	}
 	// Provenance is part of the graph's identity: the same edge attributed to
@@ -164,7 +165,7 @@ func TestRunDigest(t *testing.T) {
 	e := a
 	e.Relations = append([]alchemy.Relation{}, a.Relations...)
 	e.Relations[0].Provenance.Model = "some-other-model"
-	if digest(a) == digest(e) {
+	if sink.Digest(a) == sink.Digest(e) {
 		t.Fatal("digest is blind to provenance: a re-run against another model would replay as if unchanged")
 	}
 }
@@ -213,22 +214,22 @@ func TestDigestCoversFindings(t *testing.T) {
 	a := alchemy.Result{Entities: []alchemy.Entity{ent("e1", "System", "SuperAI")}}
 	b := a
 	b.Violations = []alchemy.Violation{{Kind: alchemy.ViolationUnknownEntityType, Subject: "e1", Detail: "no"}}
-	if digest(a) == digest(b) {
+	if sink.Digest(a) == sink.Digest(b) {
 		t.Fatal("digest is blind to violations: a result that found a problem replays as one that did not")
 	}
 	c := a
 	c.Duplicates = []alchemy.Duplicate{{Signal: alchemy.DuplicateNameAffix, Subject: "a ~ b"}}
-	if digest(a) == digest(c) {
+	if sink.Digest(a) == sink.Digest(c) {
 		t.Fatal("digest is blind to duplicates")
 	}
 	d := a
 	d.Unread = []alchemy.Unread{{Source: "a.pdf", Locator: "page 9", Reason: "scanned"}}
-	if digest(a) == digest(d) {
+	if sink.Digest(a) == sink.Digest(d) {
 		t.Fatal("digest is blind to unread source material")
 	}
 	e := a
 	e.Guesses = []alchemy.Guess{{Field: "owner_id", ChosenAs: "Person"}}
-	if digest(a) == digest(e) {
+	if sink.Digest(a) == sink.Digest(e) {
 		t.Fatal("digest is blind to guesses")
 	}
 }

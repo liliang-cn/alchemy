@@ -5,7 +5,8 @@ import (
 	"strings"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
-	"github.com/liliang-cn/alchemy/pkg/review"
+	check "github.com/liliang-cn/alchemy/pkg/preflight"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // plan is a whole result checked and ready to write. Nothing reaches the
@@ -40,6 +41,15 @@ type plan struct {
 func preflight(res alchemy.Result, o Options) (*plan, error) {
 	o = o.withDefaults()
 	if o.RunID == "" {
+		// The result names the job that produced it, and that is exactly the
+		// fact Options.RunID says only the caller has: it is stated by the
+		// service rather than generated, so it is the same after a crash, the
+		// same on §8.3's takeover by another node, and different for a genuinely
+		// different import. A caller that wants two names for one graph — a
+		// rehearsal and the real thing — still says so and still wins.
+		o.RunID = res.Job
+	}
+	if o.RunID == "" {
 		return nil, ErrNoRunID
 	}
 
@@ -49,15 +59,15 @@ func preflight(res alchemy.Result, o Options) (*plan, error) {
 	// fixture — and this is the last place before a contradiction becomes a
 	// graph an agent will answer from, confidently, with a citation.
 	//
-	// "Unanswered" is review.Held's definition and not a copy of it. Two
+	// "Unanswered" is alchemy.Result.Held's definition and not a copy of it. Two
 	// definitions of what holds a job is how the guarantee ends: the service
 	// would refuse a result the connector would take.
-	if open := review.Held(res); len(open) > 0 {
+	if open := res.Held(); len(open) > 0 {
 		return nil, fmt.Errorf("%w: %d of %d conflict(s) unanswered, first is %s (%s)",
 			ErrHeld, len(open), len(res.Conflicts), open[0].Subject, open[0].Kind)
 	}
 
-	p := &plan{res: res, opts: o, digest: digest(res)}
+	p := &plan{res: res, opts: o, digest: sink.Digest(res)}
 
 	// The labels this connector keeps for its own bookkeeping. A buyer's
 	// ontology type that lands on one of them would make the findings query
@@ -111,6 +121,24 @@ func preflight(res alchemy.Result, o Options) (*plan, error) {
 			continue
 		}
 		p.relations = append(p.relations, i)
+	}
+
+	// The refusals every store had to write for itself, asked once.
+	//
+	// It runs last, so everything this connector already caught still comes
+	// back as this connector's own error with this connector's own wording;
+	// what changes is only the set of results that used to reach a write. Four
+	// stores, written without sight of each other, each defended a different
+	// subset of one list — and the gaps were not opinions, they were silent
+	// overwrites nobody could see, because nothing said the invariants existed.
+	//
+	// Everything on the list is refused here, including the parts that would
+	// harm some other store and not this one. §7.3's own sentence is the
+	// argument: a guarantee that only holds where it is convenient is not a
+	// guarantee, and a result that pgvector rejects and this accepts is a
+	// corpus loaded into half of a buyer's estate.
+	if err := check.Refuse(res); err != nil {
+		return nil, err
 	}
 	return p, nil
 }

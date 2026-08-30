@@ -70,7 +70,7 @@ func TestEveryFindingTheRealVerifierProducesFindsItsRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v, want none", err)
 	}
-	if open := review.Held(got); len(open) != 0 {
+	if open := got.Held(); len(open) != 0 {
 		t.Fatalf("held = %+v, want every conflict answered", open)
 	}
 	for _, v := range got.Violations {

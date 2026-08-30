@@ -116,8 +116,8 @@ func TestRunReturnsAHeldJobAsAPendingResultNotAnError(t *testing.T) {
 		t.Fatal("the pending result carries no conflicts, so the service cannot see the hold")
 	}
 	// This is what pkg/service actually tests to decide the hold.
-	if len(review.Held(res)) == 0 {
-		t.Fatal("review.Held saw nothing to hold the job on")
+	if len(res.Held()) == 0 {
+		t.Fatal("Result.Held saw nothing to hold the job on")
 	}
 	if len(res.Entities) == 0 {
 		t.Fatal("the pending graph is empty; a reviewer has nothing to decide about")

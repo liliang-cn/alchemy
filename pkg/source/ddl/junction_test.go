@@ -33,7 +33,7 @@ func TestJunctionTableIsMarkedAndKept(t *testing.T) {
 	if attrs["junction"] != true {
 		t.Errorf("junction = %v, want true", attrs["junction"])
 	}
-	if got, _ := attrs["junction_of"].([]string); !reflect.DeepEqual(got, []string{"table:users", "table:roles"}) {
+	if got, _ := attrs["junction_of"].([]any); !reflect.DeepEqual(got, []any{"table:users", "table:roles"}) {
 		t.Errorf("junction_of = %#v", attrs["junction_of"])
 	}
 	// Both declared edges survive, and no third edge is invented.

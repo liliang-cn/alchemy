@@ -62,10 +62,10 @@ CREATE TABLE posts (
 		t.Fatalf("want one relation for one composite key, got %+v", res.Relations)
 	}
 	r := res.Relations[0]
-	if cols, _ := r.Attributes["columns"].([]string); !reflect.DeepEqual(cols, []string{"tenant_id", "author_id"}) {
+	if cols, _ := r.Attributes["columns"].([]any); !reflect.DeepEqual(cols, []any{"tenant_id", "author_id"}) {
 		t.Errorf("columns = %#v", r.Attributes["columns"])
 	}
-	if refs, _ := r.Attributes["references"].([]string); !reflect.DeepEqual(refs, []string{"tenant_id", "user_id"}) {
+	if refs, _ := r.Attributes["references"].([]any); !reflect.DeepEqual(refs, []any{"tenant_id", "user_id"}) {
 		t.Errorf("references = %#v", r.Attributes["references"])
 	}
 }
@@ -100,7 +100,7 @@ func TestAlterTableAddPrimaryKey(t *testing.T) {
 CREATE TABLE public.customers (id integer NOT NULL, name text);
 ALTER TABLE ONLY public.customers ADD CONSTRAINT customers_pkey PRIMARY KEY (id);`)
 	attrs := res.Entities[0].Attributes
-	if pk, _ := attrs["primary_key"].([]string); !reflect.DeepEqual(pk, []string{"id"}) {
+	if pk, _ := attrs["primary_key"].([]any); !reflect.DeepEqual(pk, []any{"id"}) {
 		t.Errorf("primary_key = %#v, want [id]", attrs["primary_key"])
 	}
 	cols, _ := attrs["columns"].(map[string]any)

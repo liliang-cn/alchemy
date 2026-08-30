@@ -474,8 +474,24 @@ message Vector {
 message Violation {
   ViolationKind kind = 1;
   string detail = 2;
+  // The subject rendered for a person: an entity id, or "from -[type]-> to".
+  // It is what a review item is filed under and what a standing rule matches
+  // on, so it is unchanged; `about` is the same subject in fields.
   string subject = 3;
   Provenance provenance = 4;
+  // The record this violation is about, in fields rather than in prose.
+  //
+  // §5b promises a wrong record is "checkable, correctable, and excludable",
+  // and excludable was the word that failed: a consumer holding the graph and
+  // the findings could only join them by parsing "a -[USES]-> b" back into
+  // three fields, which is a private copy of the verifier's output format that
+  // no test on either side would notice drifting. Duplicate got this right
+  // from the start with left.id and right.id.
+  //
+  // Unset for a violation about something that is not a graph record — a
+  // malformed row and an unnamed column are about a file, and a ref for them
+  // would be a join that resolves to nothing.
+  Ref about = 5;
 }
 
 // Guess is an inferred mapping the pipeline made and is obliged to report.
@@ -566,6 +582,16 @@ message Counts {
   // it does not fall when a merge is applied: which of them were answered is
   // in each finding's provenance.
   int32 duplicates = 11;
+  // How many chunks and vectors the job produced.
+  //
+  // They are here because §8.4 pages a large result and this block rides on
+  // the first page: a consumer streaming a graph knew how many entities it had
+  // seen of how many and could say nothing of the sort about chunks or
+  // vectors. They are also the denominator that makes chunks_empty and
+  // chunks_unread readable — "23 chunks produced nothing" is a different
+  // corpus at 30 chunks than at 3000.
+  int32 chunks = 12;
+  int32 vectors = 13;
 }
 
 // ModelCall records what a job spent. §7.2: cost is not optimised for, but it
@@ -586,6 +612,19 @@ message Unread {
 }
 
 message Result {
+  // The job that produced this graph, and the only identity a result has.
+  //
+  // It was missing, and every store written against this message had to invent
+  // something: two demanded a run id from their caller, and two independently
+  // digested the whole encoded result — an identity that changes whenever this
+  // message grows a field, so every previously loaded corpus is orphaned by an
+  // upgrade nobody consulted the store about. The service had the answer all
+  // along and simply never put it here.
+  //
+  // Empty is a graph nobody named, and it means what it says: a store must not
+  // pretend it can recognise this result again.
+  string job = 14;
+
   repeated Entity entities = 1;
   repeated Relation relations = 2;
   repeated Chunk chunks = 3;
@@ -664,6 +703,12 @@ message ResultPage {
   // Zero-based, so a client can tell a resumed stream from a fresh one.
   int32 page = 1;
   bool last = 2;
+  // The job that produced this graph, on the first page with the rest of the
+  // summary. A client already knows what it asked for; what it does not have
+  // is a way to hand the reassembled pages on as a complete Result, and a
+  // consumer that had to remember the request in order to fill in the identity
+  // is one that will fill in the wrong one after a retry.
+  string job = 16;
 
   repeated Entity entities = 3;
   repeated Relation relations = 4;
@@ -728,6 +773,12 @@ message Ref {
   // Narrows the Ref to the records one source produced. A conflict names two
   // claims about one subject and a decision is about one of them, so without
   // this a rejection would delete the side the reviewer kept.
+  //
+  // Set on a review target and unset on a Violation.about, and the asymmetry is
+  // the difference between the two questions. A decision acts on the records
+  // one source produced, so the source is part of what it names; a violation
+  // already carries its own provenance beside the ref, and repeating it inside
+  // would be two answers to one question that can disagree.
   Provenance provenance = 6;
 }
 

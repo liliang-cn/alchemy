@@ -99,7 +99,7 @@ func TestDuplicatesAreNotQueuedWithoutReviewAndNeverHoldTheJob(t *testing.T) {
 	if got := review.Queue(rep, res, review.Options{}); len(got) != 0 {
 		t.Fatalf("queue = %+v, want nothing: a caller who did not ask for review gets the finding, not the question", got)
 	}
-	if held := review.Held(res); len(held) != 0 {
+	if held := res.Held(); len(held) != 0 {
 		t.Fatalf("held = %+v, want nothing: two records that agree are not two sources claiming to be right", held)
 	}
 }

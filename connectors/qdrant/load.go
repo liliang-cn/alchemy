@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
-	"github.com/liliang-cn/alchemy/pkg/review"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // LoadOptions is what a caller can say about one load beyond the result.
@@ -68,10 +68,12 @@ type Loaded struct {
 // so it is the last place the rule can be enforced and the first place
 // breaking it costs something real.
 //
-// The test for "unanswered" is review.Held, imported rather than
-// reimplemented. A second, differently-worded copy of that rule here would be
-// a second answer to the question of when a job is finished, and the two would
-// disagree the first time either moved.
+// The test for "unanswered" is alchemy.Result.Held, asked of the result rather
+// than reimplemented. A second, differently-worded copy of that rule here would
+// be a second answer to the question of when a job is finished, and the two
+// would disagree the first time either moved. It used to live in pkg/review, so
+// every store had to import a review queue to ask a one-line question about a
+// conflict's provenance; it is now beside the field it reads.
 type HeldError struct {
 	Conflicts []alchemy.Conflict
 }
@@ -101,6 +103,12 @@ type ConflictingLoadError struct {
 	Want     string
 	Complete bool
 }
+
+// Unwrap makes this store's sentence and the envelope's question one error.
+// sink.ErrExists is what a caller asks when it does not care which store
+// answered; this type is what a caller asks when it wants the two fingerprints
+// and whether the incumbent finished. Wrapping keeps both readers working.
+func (e *ConflictingLoadError) Unwrap() error { return sink.ErrExists }
 
 func (e *ConflictingLoadError) Error() string {
 	state := "was left incomplete"
@@ -144,7 +152,10 @@ func (e *DuplicateEntityError) Error() string {
 // that the failure leaves a load a reader can see is half-loaded rather than a
 // collection that looks finished.
 func (l *Loader) Load(ctx context.Context, res alchemy.Result, opts LoadOptions) (Loaded, error) {
-	if held := review.Held(res); len(held) > 0 {
+	// This connector's own refusals first, so that everything it has ever
+	// answered with a typed error still answers with one. §4.1 moved the
+	// *shared* refusals above the line and not this store's account of them.
+	if held := res.Held(); len(held) > 0 {
 		return Loaded{}, &HeldError{Conflicts: held}
 	}
 	if err := checkEntityIDs(res); err != nil {
@@ -153,83 +164,56 @@ func (l *Loader) Load(ctx context.Context, res alchemy.Result, opts LoadOptions)
 	if err := checkChunkIndexes(res); err != nil {
 		return Loaded{}, err
 	}
-	dim, model, err := dimensionOf(res)
+	dim, _, err := dimensionOf(res)
 	if err != nil {
 		return Loaded{}, err
 	}
-	fp, err := Fingerprint(res)
-	if err != nil {
-		return Loaded{}, err
-	}
+
+	// And then the envelope: pkg/preflight before anything is opened, one
+	// identity, and a stream of batches rather than a materialised graph.
+	rep, err := sink.Load(ctx, l, res, sink.Options{
+		Load: opts.ID, Replace: opts.Replace, Batch: l.batch,
+	})
+	// The report is built on both paths. A load that died halfway owes an
+	// operator the number that says how much of it arrived and which load to go
+	// and clean up; an empty struct would make a half-written collection look
+	// like an untouched one, which is the same mistake §7.2 refuses one level
+	// up when it insists a failed job still reports what it spent.
 	out := Loaded{
-		Fingerprint: fp, Dimension: dim, ID: opts.ID,
+		ID: rep.Load, Fingerprint: rep.Digest, Already: rep.Converged, Dimension: dim,
 		Entities:   len(res.Entities),
 		Relations:  len(res.Relations),
 		Chunks:     len(res.Chunks),
 		Vectors:    len(res.Vectors),
 		Violations: len(res.Violations),
 		Duplicates: len(res.Duplicates),
-		Lost:       lost(res, dim),
+		// Points is what actually landed, which is the driver's count of what
+		// it handed over rather than the result's of what it holds.
+		Points:  rep.Entities + rep.Relations + rep.Chunks + rep.Violations + rep.Duplicates,
+		Batches: rep.Batches,
 	}
-	if out.ID == "" {
-		out.ID = "ld_" + fp[:24]
+	for _, loss := range rep.Lost {
+		out.Lost = append(out.Lost, loss.Why)
 	}
-
-	// The collection is created here, at the width this result actually
-	// carries, because there is no later moment: Qdrant fixes the width at
-	// creation and has no ALTER.
-	if err := l.ensure(ctx, dim, model); err != nil {
-		return Loaded{}, err
-	}
-	prior, err := l.marker(ctx, out.ID)
 	if err != nil {
-		return Loaded{}, err
-	}
-	if !opts.Replace {
-		if prior != nil && prior.Fingerprint == fp && prior.Complete {
-			out.Already = true
-			return out, nil
-		}
-		if prior != nil {
-			return Loaded{}, &ConflictingLoadError{ID: out.ID, Have: prior.Fingerprint, Want: fp, Complete: prior.Complete}
-		}
-		// A different name over the same graph is still the same graph. Doing
-		// it again under a second name would double every answer for a corpus
-		// nobody changed, which is the one thing idempotency has to prevent.
-		if id, ok, err := l.completeFingerprint(ctx, fp); err != nil {
-			return Loaded{}, err
-		} else if ok {
-			out.ID, out.Already = id, true
-			return out, nil
-		}
-	} else if prior != nil {
-		if err := l.deleteLoad(ctx, out.ID); err != nil {
-			return Loaded{}, err
-		}
-	}
-
-	if err := l.claim(ctx, out); err != nil {
-		return Loaded{}, err
-	}
-	batches := build(res, fp, out.ID)
-	for _, b := range batches {
-		n, reqs, err := l.upsert(ctx, b)
-		out.Points += n
-		out.Batches += reqs
-		if err != nil {
-			// Nothing is undone. The marker still says complete=false, every
-			// read excludes it, and Loads() shows an operator exactly which
-			// load stopped and how much of it arrived — which is more useful
-			// than a rollback that would itself be a bulk operation able to
-			// fail halfway.
-			return out, err
-		}
-	}
-	if err := l.complete(ctx, out, res); err != nil {
 		return out, err
 	}
 	return out, nil
 }
+
+// Fingerprint is the content address of a whole result.
+//
+// It is pkg/sink's now. The function stays because it is this package's API,
+// and it delegates rather than keeping a second implementation: two content
+// addresses for one result is the divergence §4.1 found across four connectors,
+// preserved inside one of them.
+//
+// The value differs from the one this package used to return, which is a
+// deliberate one-time break: nothing persists a fingerprint outside a store's
+// own marker, and the shared one is order-independent — so a result reassembled
+// from §8.4's pages is the same load, which the json.Marshal version this
+// package had was not.
+func Fingerprint(res alchemy.Result) (string, error) { return sink.Digest(res), nil }
 
 // checkEntityIDs is a pass over the result the type system does not do.
 // Entity.ID is documented as "stable within one result", which a caller can
@@ -306,15 +290,20 @@ func (l *Loader) upsert(ctx context.Context, b batchOf) (int, int, error) {
 // filters. A connector that wrote the marker last would leave a window in
 // which the points are there and nothing knows they are partial, which is the
 // one outcome this much machinery is bought to avoid.
-func (l *Loader) claim(ctx context.Context, out Loaded) error {
-	p := base(out.ID, kindLoad)
-	p[keyFingerprint] = out.Fingerprint
+func (l *Loader) claim(ctx context.Context, id, digest string, dim int) error {
+	p := base(id, kindLoad)
+	p[keyFingerprint] = digest
 	p[keyComplete] = false
 	p[keyStartedAt] = time.Now().UTC().Format(time.RFC3339Nano)
-	p[keyDimension] = out.Dimension
-	p[keyLost] = out.Lost
+	p[keyDimension] = dim
+	// The standing part of what this store cannot keep, written before the
+	// first point. The rest — how many chunks arrived without an embedding —
+	// is only knowable once they have, so complete writes the whole list. A
+	// marker that said nothing until then would leave a half-written load
+	// claiming to have kept everything.
+	p[keyLost] = lost(dim, 0, 0)
 	body := map[string]any{"points": []point{{
-		ID: pointID(out.Fingerprint, kindLoad, out.ID), Vector: vectorless(), Payload: p,
+		ID: pointID(digest, kindLoad, id), Vector: vectorless(), Payload: p,
 	}}}
 	return l.call(ctx, http.MethodPut, l.path("/points?wait=true"), body, nil)
 }
@@ -323,33 +312,33 @@ func (l *Loader) claim(ctx context.Context, out Loaded) error {
 // visible. §5's numbers are written here rather than at claim time, because a
 // marker advertising counts while its points were still arriving would be a
 // store making claims it could not yet answer with.
-func (l *Loader) complete(ctx context.Context, out Loaded, res alchemy.Result) error {
-	p := base(out.ID, kindLoad)
-	p[keyFingerprint] = out.Fingerprint
+func (l *Loader) complete(ctx context.Context, t *tx, s sink.Summary) error {
+	p := base(t.id, kindLoad)
+	p[keyFingerprint] = t.digest
 	p[keyComplete] = true
 	p[keyStartedAt] = time.Now().UTC().Format(time.RFC3339Nano)
 	p[keyFinishedAt] = time.Now().UTC().Format(time.RFC3339Nano)
-	p[keyDimension] = out.Dimension
-	p[keyLost] = out.Lost
-	p[keyPoints] = out.Points
+	p[keyDimension] = t.dim
+	p[keyLost] = lost(t.dim, t.rep.Chunks, t.rep.Vectors)
+	p[keyPoints] = t.rep.Entities + t.rep.Relations + t.rep.Chunks + t.rep.Violations + t.rep.Duplicates + 1
 	// §5's obligation travels with the graph: "every returned graph is
 	// accompanied by the numbers needed to distrust it". A store that kept the
 	// records and dropped the counts kept the half that looks good.
-	p[keyCounts] = res.Counts
+	p[keyCounts] = s.Counts
 	// The findings that are read whole rather than filtered on. The conflicts
 	// here are answered ones by construction — an unanswered one refused the
 	// load — and keeping them records that a person decided, rather than that
 	// nothing was ever in question.
-	p[keyConflicts] = res.Conflicts
-	p[keyGuesses] = res.Guesses
-	p[keyUnread] = res.Unread
-	p[keyRuleSets] = res.RuleSets
-	p[keyModelCalls] = res.ModelCalls
+	p[keyConflicts] = s.Conflicts
+	p[keyGuesses] = t.guesses
+	p[keyUnread] = t.unread
+	p[keyRuleSets] = s.RuleSets
+	p[keyModelCalls] = s.ModelCalls
 	body := map[string]any{"points": []point{{
-		ID: pointID(out.Fingerprint, kindLoad, out.ID), Vector: vectorless(), Payload: p,
+		ID: pointID(t.digest, kindLoad, t.id), Vector: vectorless(), Payload: p,
 	}}}
 	if err := l.call(ctx, http.MethodPut, l.path("/points?wait=true"), body, nil); err != nil {
-		return fmt.Errorf("qdrant: completing load %s: %w", out.ID, err)
+		return fmt.Errorf("qdrant: completing load %s: %w", t.id, err)
 	}
 	return nil
 }

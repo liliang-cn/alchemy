@@ -15,8 +15,15 @@
 // The flow is Queue, then Apply. Queue ranks the questions; Open is the part
 // of it a person still has to answer, the rest having been answered by an
 // `always` rule somebody wrote down. Apply carries the answers onto the
-// result, and Held reports whether §7.3's job is still blocked — a conflict
-// nobody has put their name to.
+// result.
+//
+// Whether §7.3's job is still blocked is asked of the result itself —
+// alchemy.Result.Held — and not of this package. It used to live here, and the
+// four stores written against the JSON each had to import a review queue in
+// order to ask a one-line question about a conflict's provenance; the fifth
+// would have forgotten. §7.3 is the one refusal this design does not let a
+// caller opt out of, so its test belongs beside the field it reads rather than
+// in the package that happens to answer the question afterwards.
 package review
 
 import (
@@ -117,12 +124,15 @@ func Open(items []Item) []Item {
 	return out
 }
 
-// RefKind says which half of the graph a Ref points into.
-type RefKind string
+// RefKind and its two values are alchemy's, re-exported so that a caller
+// working a queue does not have to import two packages to name one thing.
+// There is one set of names for "which half of the graph" and it lives beside
+// the records it points into.
+type RefKind = alchemy.RefKind
 
 const (
-	RefEntity   RefKind = "entity"
-	RefRelation RefKind = "relation"
+	RefEntity   = alchemy.RefEntity
+	RefRelation = alchemy.RefRelation
 )
 
 // Ref names graph records by what they say rather than by index. An index into
@@ -133,22 +143,25 @@ const (
 // One Ref can name several records: duplicates are how a conflict arises in
 // the first place, and a decision about "n1" is a decision about every record
 // claiming to be n1 from that source.
+//
+// It is alchemy.Ref plus one field, and the embedding is the claim that they
+// are the same thing plus a narrowing rather than two ideas that happen to
+// share five field names. alchemy.Ref answers "which record", which is what a
+// finding needs in order to be joinable at all; this answers "which record,
+// as told by which source", which is what a *decision* needs and nothing else
+// does. Embedding keeps the JSON identical — the fields inline — so the wire
+// and every reviewer's client are untouched.
 type Ref struct {
-	Kind RefKind `json:"kind"`
-	// ID is the entity ID when Kind is RefEntity.
-	ID string `json:"id,omitempty"`
-	// From, To and Type identify a relation when Kind is RefRelation, and Key
-	// says which of several parallel edges it is — see alchemy.Relation.Key.
-	// Without it two foreign keys between one pair of tables produce one Ref,
-	// and a decision about the second end of a connection removes the first.
-	From string `json:"from,omitempty"`
-	To   string `json:"to,omitempty"`
-	Type string `json:"type,omitempty"`
-	Key  string `json:"key,omitempty"`
+	alchemy.Ref
 	// Provenance narrows the Ref to the records one source produced. A
 	// conflict names two claims about one subject and a decision is about one
 	// of them, so without this a rejection would delete the side the reviewer
 	// kept along with the side they threw away.
+	//
+	// It is the field alchemy.Ref deliberately does not have. A violation
+	// carries its own provenance beside its About, so putting one inside the
+	// Ref there would be two answers to one question; here the Ref is the whole
+	// of what a decision acts on and the source is part of it.
 	Provenance alchemy.Provenance `json:"provenance"`
 }
 

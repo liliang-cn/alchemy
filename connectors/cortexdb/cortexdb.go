@@ -43,12 +43,23 @@ import (
 	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 	"github.com/liliang-cn/cortexdb/v2/pkg/core"
 	cdb "github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
 )
 
 // Loader writes results into one CortexDB instance under one set of options.
 type Loader struct {
+	// plan is the checked result Load built, handed to the load in progress so
+	// that a graph is held once rather than twice. It is nil on the Loader a
+	// caller holds and on a caller driving this store through sink.Load, which
+	// builds one from the stream instead.
+	plan *plan
+	// report is where a load in progress accumulates what it wrote. It is set
+	// by Load on a per-load copy of the Loader and is nil on the one a caller
+	// holds; see tx for why the numbers here are the store's rather than the
+	// envelope's.
+	report *Report
 	cortex *cdb.DB
 	opts   Options
 	// owned says whether Close should shut the database down. A caller who
@@ -137,38 +148,29 @@ type Report struct {
 //  5. The completion is written, carrying the digest, §5's counts and the
 //     findings.
 func (l *Loader) Load(ctx context.Context, res alchemy.Result) (Report, error) {
+	// This connector's own refusals first, so that ErrHeld, ErrNoRunID,
+	// ErrParallelEdges and every named attribute collision still answer the way
+	// they always have. §4.1 moved the *shared* refusals above the line and not
+	// this store's account of them. It also resolves the run name.
 	p, err := preflight(res, l.opts)
 	if err != nil {
 		return Report{}, err
 	}
-	rep := Report{
-		Run: l.opts.RunID, Digest: p.digest,
-		SkippedRelations: p.skipped, FusedRelations: p.fused,
-	}
 
-	if err := l.checkStore(ctx); err != nil {
-		return rep, err
-	}
-	replay, err := l.claimRun(ctx, p, &rep)
-	if err != nil {
-		return rep, err
-	}
-	rep.Replay = replay
+	out := Report{Run: p.opts.RunID, Digest: p.digest}
+	run := *l
+	run.opts = p.opts
+	run.report = &out
+	run.plan = p
 
-	if err := l.writeDocuments(ctx, p, &rep); err != nil {
-		return rep, err
-	}
-	written, err := l.writeChunks(ctx, p, &rep)
+	rep, err := sink.Load(ctx, &run, res, sink.Options{
+		Load: p.opts.RunID, Batch: l.opts.BatchSize,
+	})
+	out.Digest = rep.Digest
 	if err != nil {
-		return rep, err
+		return out, err
 	}
-	if err := l.writeEntities(ctx, p, written, &rep); err != nil {
-		return rep, err
-	}
-	if err := l.writeRelations(ctx, p, written, &rep); err != nil {
-		return rep, err
-	}
-	return rep, l.completeRun(ctx, p, &rep)
+	return out, nil
 }
 
 // checkStore refuses a target the load cannot honestly land in, before the
@@ -232,23 +234,47 @@ func completionID(run string) string { return runNodeID(run) + ":complete" }
 //     different things about one import and there is nothing in the data to
 //     decide which is current.
 //   - A different run: a different graph. Nothing is merged across runs.
-func (l *Loader) claimRun(ctx context.Context, p *plan, rep *Report) (bool, error) {
+func (l *Loader) claimRun(ctx context.Context, digest string, replace bool, rep *Report) (bool, error) {
 	store := l.cortex.Vector()
 	if doc, err := store.GetDocument(ctx, markerID(l.opts.RunID)); err == nil && doc != nil {
 		var prev runMarker
 		_ = json.Unmarshal([]byte(doc.Content), &prev)
-		if prev.Digest != p.digest {
-			return false, fmt.Errorf("%w: run %q holds a graph with digest %s, this result is %s; use a new RunID",
-				ErrRunExists, l.opts.RunID, short(prev.Digest), short(p.digest))
+		if prev.Digest != digest {
+			if !replace {
+				// Both sentinels: sink.ErrExists is what a caller asks when it
+				// does not care which store answered, and ErrRunExists is what
+				// a caller of this package has always matched on.
+				return false, fmt.Errorf("%w: %w: run %q holds a graph with digest %s, this result is %s; use a new RunID",
+					sink.ErrExists, ErrRunExists, l.opts.RunID, short(prev.Digest), short(digest))
+			}
+			if err := l.deleteRun(ctx, rep); err != nil {
+				return false, err
+			}
+			return false, l.writeMarker(ctx, digest, rep)
 		}
-		return true, nil
+		// The marker is there with this digest. Whether the completion is there
+		// too decides whether anything is left to do: a finished run needs
+		// nothing rewritten, and an unfinished one is the crashed load
+		// Incomplete() reports and a re-Load finishes.
+		if done, err := store.GetDocument(ctx, completionID(l.opts.RunID)); err == nil && done != nil {
+			rep.Replay = true
+			return true, nil
+		}
+		rep.Replay = true
+		return false, nil
 	}
-	body, err := json.Marshal(runMarker{Digest: p.digest, Started: time.Now().UTC()})
+	return false, l.writeMarker(ctx, digest, rep)
+}
+
+// writeMarker says a run is in progress, from before the first batch until the
+// completion lands beside it.
+func (l *Loader) writeMarker(ctx context.Context, digest string, rep *Report) error {
+	body, err := json.Marshal(runMarker{Digest: digest, Started: time.Now().UTC()})
 	if err != nil {
-		return false, fmt.Errorf("cortexdb: render run marker: %w", err)
+		return fmt.Errorf("cortexdb: render run marker: %w", err)
 	}
 	rep.Batches++
-	return false, store.CreateDocument(ctx, &core.Document{
+	return l.cortex.Vector().CreateDocument(ctx, &core.Document{
 		ID: markerID(l.opts.RunID), Title: "alchemy run " + l.opts.RunID,
 		Content: string(body), Author: author, Version: 1,
 	})
@@ -262,20 +288,20 @@ func (l *Loader) claimRun(ctx context.Context, p *plan, rep *Report) (bool, erro
 // Its existence is also the answer to "is this run finished?": a marker with no
 // completion beside it is a load that died halfway, which is one Get to find
 // and one re-Load to fix.
-func (l *Loader) completeRun(ctx context.Context, p *plan, rep *Report) error {
+func (l *Loader) completeRun(ctx context.Context, digest string, sum sink.Summary, f sink.Findings, rep *Report) error {
 	store := l.cortex.Vector()
 	if doc, err := store.GetDocument(ctx, completionID(l.opts.RunID)); err == nil && doc != nil {
 		return nil
 	}
 	findings, err := json.Marshal(map[string]any{
-		"violations": p.res.Violations, "duplicates": p.res.Duplicates,
-		"guesses": p.res.Guesses, "unread": p.res.Unread,
+		"violations": f.Violations, "duplicates": f.Duplicates,
+		"guesses": f.Guesses, "unread": f.Unread,
 		// Provenance.RuleSet is a name into Result.RuleSets, so the sets have to
 		// travel with the graph or every record points at nothing. §5c: "a rule
 		// is recorded with the decision that produced it, so a later reader can
 		// see why the rule exists" — and the later reader is holding a store,
 		// not the JSON.
-		"rule_sets":         p.res.RuleSets,
+		"rule_sets":         sum.RuleSets,
 		"skipped_relations": rep.SkippedRelations, "fused_relations": rep.FusedRelations,
 		"chunks_without_vectors": rep.ChunksWithoutVectors,
 	})
@@ -283,7 +309,7 @@ func (l *Loader) completeRun(ctx context.Context, p *plan, rep *Report) error {
 		return fmt.Errorf("cortexdb: render findings: %w", err)
 	}
 	body, err := json.Marshal(runMarker{
-		Digest: p.digest, Started: time.Now().UTC(), Counts: p.res.Counts, Findings: findings,
+		Digest: digest, Started: time.Now().UTC(), Counts: sum.Counts, Findings: findings,
 	})
 	if err != nil {
 		return fmt.Errorf("cortexdb: render run marker: %w", err)

@@ -225,7 +225,29 @@ func vectorToProto(v alchemy.Vector) *alchemyv1.Vector {
 func violationToProto(v alchemy.Violation) *alchemyv1.Violation {
 	return &alchemyv1.Violation{
 		Kind: violationKinds[v.Kind], Detail: v.Detail, Subject: v.Subject,
+		About:      aboutToProto(v.About),
 		Provenance: provenanceToProto(v.Provenance),
+	}
+}
+
+// aboutToProto carries the record a finding is about, in fields.
+//
+// A zero Ref becomes no message rather than an empty one, and that is the whole
+// of what this function adds over refToProto. A violation about a malformed row
+// is about a file and not about a graph record, and an empty Ref on the wire
+// would say "the entity with no id" — a claim that is both false and joinable,
+// which is the worse of the two ways to be wrong.
+//
+// The provenance field of the Ref is deliberately left unset. The violation
+// carries its own beside it, and two copies of one fact on one message is two
+// answers that can disagree; see the field's comment in the proto for why a
+// review target is the case where it does belong.
+func aboutToProto(r alchemy.Ref) *alchemyv1.Ref {
+	if r == (alchemy.Ref{}) {
+		return nil
+	}
+	return &alchemyv1.Ref{
+		Kind: refKinds[r.Kind], Id: r.ID, From: r.From, To: r.To, Type: r.Type, Key: r.Key,
 	}
 }
 
@@ -268,6 +290,7 @@ func countsToProto(c alchemy.Counts) *alchemyv1.Counts {
 		Guesses: int32(c.Guesses), ChunksEmpty: int32(c.ChunksEmpty),
 		ChunksUnread: int32(c.ChunksUnread), Dropped: int32(c.Dropped),
 		Duplicates: int32(c.Duplicates),
+		Chunks:     int32(c.Chunks), Vectors: int32(c.Vectors),
 	}
 }
 
@@ -292,6 +315,10 @@ func each[T any, R any](in []T, f func(T) R) []R {
 
 func resultToProto(r alchemy.Result) *alchemyv1.Result {
 	return &alchemyv1.Result{
+		// The identity the result already carries. §4 makes the JSON the
+		// contract and §6 makes this a translation of it, so a field the
+		// document has and the message does not is a second contract.
+		Job:        r.Job,
 		Entities:   each(r.Entities, entityToProto),
 		Relations:  each(r.Relations, relationToProto),
 		Chunks:     each(r.Chunks, chunkToProto),
@@ -322,17 +349,23 @@ func standingRuleToProto(r alchemy.StandingRule) *alchemyv1.StandingRule {
 }
 
 func refToProto(r review.Ref) *alchemyv1.Ref {
-	return &alchemyv1.Ref{
-		Kind: refKinds[r.Kind], Id: r.ID, From: r.From, To: r.To, Type: r.Type,
-		Key:        r.Key,
-		Provenance: provenanceToProto(r.Provenance),
+	out := aboutToProto(r.Ref)
+	if out == nil {
+		out = &alchemyv1.Ref{}
 	}
+	// A review target keeps its provenance: it is what narrows a decision to
+	// the records one source produced, and without it a rejection deletes the
+	// side of a conflict the reviewer kept.
+	out.Provenance = provenanceToProto(r.Provenance)
+	return out
 }
 
 func refFromProto(r *alchemyv1.Ref) review.Ref {
 	return review.Ref{
-		Kind: wireRefKinds[r.GetKind()], ID: r.GetId(), From: r.GetFrom(),
-		To: r.GetTo(), Type: r.GetType(), Key: r.GetKey(),
+		Ref: alchemy.Ref{
+			Kind: wireRefKinds[r.GetKind()], ID: r.GetId(), From: r.GetFrom(),
+			To: r.GetTo(), Type: r.GetType(), Key: r.GetKey(),
+		},
 		Provenance: provenanceFromProto(r.GetProvenance()),
 	}
 }

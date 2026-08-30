@@ -155,7 +155,7 @@ func TestAJobStaysHeldDespiteAnAuthoredConflictRule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if open := review.Held(got); len(open) != 1 {
+	if open := got.Held(); len(open) != 1 {
 		t.Fatalf("held = %+v, want the conflict still holding the job", open)
 	}
 }

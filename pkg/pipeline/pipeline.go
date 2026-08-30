@@ -66,6 +66,19 @@ type Source struct {
 
 // Request is one job.
 type Request struct {
+	// Job is the caller's identity for this job, and it becomes Result.Job.
+	//
+	// It is carried rather than derived because the caller is the only party
+	// that can say whether two runs are the same run: a resumption after §8.3's
+	// lease expiry is the same job on another node, and nothing in the corpus
+	// says so. A store that had to answer "have I loaded this already" without
+	// it was left digesting the whole result, which is an identity that changes
+	// whenever alchemy.Result grows a field — see alchemy.Result.Job.
+	//
+	// Empty is a library caller with no job store, and it means what it says:
+	// this graph has no identity.
+	Job string
+
 	Sources []Source
 	// Ontology is the vocabulary extraction is constrained by and verification
 	// checks against. It is required for document sources and there is no
@@ -154,6 +167,13 @@ func Run(ctx context.Context, req Request, events chan<- Event) (alchemy.Result,
 	if err := run.readSources(ctx); err != nil {
 		return run.spent(), err
 	}
+	// Asked here rather than at the end, and it is a post-condition on adopt
+	// rather than a check on the corpus: reading is the only stage that adds a
+	// chunk, so this is the first moment the answer is final and the last
+	// moment before anything is bought (§7.2). See ownChunkNumbering.
+	if err := ownChunkNumbering(run.result()); err != nil {
+		return run.spent(), err
+	}
 	if err := run.extract(ctx); err != nil {
 		return run.spent(), err
 	}
@@ -169,11 +189,11 @@ func Run(ctx context.Context, req Request, events chan<- Event) (alchemy.Result,
 	}
 	// §7.3's refusal, and the reason Run's second return value is not just an
 	// error: a conflict nobody has answered means this job does not finish,
-	// whether or not the caller asked for review. review.Held is the test
+	// whether or not the caller asked for review. Result.Held is the test
 	// rather than "are there conflicts" because a conflict a person has
 	// decided stays in the result, carrying their name, and a job that stayed
 	// stuck on an answered question would be a queue nobody could empty.
-	if open, unanswered := review.Held(res), openQuestions(queue, run.decided); len(open) > 0 || (req.Reviewing && len(unanswered) > 0) {
+	if open, unanswered := res.Held(), openQuestions(queue, run.decided); len(open) > 0 || (req.Reviewing && len(unanswered) > 0) {
 		return alchemy.Result{}, &HeldError{Conflicts: open, Queue: unanswered, Pending: run.finish(res)}
 	}
 	res, err = run.embedSurvivors(ctx, res)
@@ -353,6 +373,11 @@ func (r *run) stopped(ctx context.Context) error {
 // a count maintained by increments drifts away from its subject exactly once
 // and then lies forever.
 func (r *run) finish(res alchemy.Result) alchemy.Result {
+	// The job's own name, so a store loading this graph can recognise it again
+	// without digesting it (alchemy.Result.Job). It is set on the held graph as
+	// well as the finished one, because §7.3's hold is a state of a job rather
+	// than a different job.
+	res.Job = r.req.Job
 	res.Unread = r.unread
 	res.ModelCalls = aggregate(r.modelCalls)
 	// The policies the records were extracted under, so that the name every

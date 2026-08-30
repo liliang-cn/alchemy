@@ -5,7 +5,6 @@ import (
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/job"
-	"github.com/liliang-cn/alchemy/pkg/review"
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -64,6 +63,10 @@ func (s *Server) StreamResult(req *alchemyv1.GetResultRequest, stream grpc.Serve
 		page.Page = int32(n)
 		page.Last = !more
 		if n == 0 {
+			// The identity rides once, with the summary: a client reassembling
+			// pages into a Result should be able to hand it on complete rather
+			// than filling the job in from what it remembers asking for.
+			page.Job = res.Job
 			page.Counts = countsToProto(res.Counts)
 			page.ModelCalls = each(res.ModelCalls, modelCallToProto)
 			page.Unread = each(res.Unread, unreadToProto)
@@ -104,7 +107,7 @@ func (s *Server) finished(ctx context.Context, id string) (alchemy.Result, error
 		res, _ := r.pending()
 		return alchemy.Result{}, wrongState(
 			"job %s is held for a person: %d conflict(s) are unanswered, and a graph that contradicts itself is not a finished graph. Answer them on the Review stream",
-			id, len(review.Held(res)))
+			id, len(res.Held()))
 	default:
 		return alchemy.Result{}, wrongState("job %s is %s, so it has no result", id, j.State)
 	}

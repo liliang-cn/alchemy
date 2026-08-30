@@ -3,3 +3,6 @@
 /dist/
 *.test
 *.out
+
+# Agent worktrees are working state, not source.
+.claude/

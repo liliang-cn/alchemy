@@ -107,7 +107,7 @@ var _ service.Runner = (*Runner)(nil)
 // answers a held job with a *HeldError carrying the pending graph, and this
 // returns that graph with a nil error, because §7.3 lives in exactly one place
 // and it is not here: pkg/service computes the hold itself, from the result it
-// is handed, with review.Queue and review.Held. A runner that passed the error
+// is handed, with review.Queue and alchemy.Result.Held. A runner that passed the error
 // through would take that decision away from the one place that owns it — the
 // service would see a failure, never see the conflicts, and a job that needed a
 // person would be reported as a defect. Every other error is a real failure and
@@ -120,7 +120,7 @@ var _ service.Runner = (*Runner)(nil)
 // stage it was about. See buildRequest's inboxOf, and run_test.go for the
 // contract that pins it.
 func (r *Runner) Run(ctx context.Context, jobID string, spec service.JobSpec, events chan<- service.Event, in service.Inbox) (alchemy.Result, error) {
-	req, err := buildRequest(spec, in, r.cfg.Rules)
+	req, err := buildRequest(jobID, spec, in, r.cfg.Rules)
 	if err != nil {
 		return alchemy.Result{}, err
 	}

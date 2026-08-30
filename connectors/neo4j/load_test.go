@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	driver "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // The load a buyer will actually do: hand over a result, get a graph.
@@ -76,7 +78,7 @@ func TestLoadMarksTheRunComplete(t *testing.T) {
 	if props["_complete"] != true {
 		t.Fatalf("_complete = %v after a clean load", props["_complete"])
 	}
-	if props["_digest"] != digest(fixture()) {
+	if props["_digest"] != sink.Digest(fixture()) {
 		t.Fatalf("_digest = %v, want the result's digest", props["_digest"])
 	}
 	// §5's obligation: the numbers needed to distrust the graph travel with
