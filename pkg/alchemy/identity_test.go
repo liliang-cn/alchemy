@@ -56,6 +56,15 @@ func TestNoPairOfEndsCanForgeAnotherEdgesIdentity(t *testing.T) {
 // corpus is two corpora in two stores. Pinning the digest is how that stops
 // being a claim: this value is what the documented algorithm produces, and a
 // change to the algorithm has to change this line and say why.
+//
+// "What the documented algorithm produces" was itself only a claim until it
+// was checked. The constant has since been reproduced by an independent
+// implementation of the paragraph on Identity — in Python, reading the comment
+// and not this file — and matched byte for byte. That is the property being
+// asserted: not that Go computes this twice the same way, which a recording of
+// its own output would also show, but that the prose and the code describe one
+// algorithm. pkg/sink and pkg/review pin their digests the same way and for
+// the same reason.
 func TestTheIdentityOfAnEdgeIsAFixedValue(t *testing.T) {
 	r := Relation{From: "cluster:superai", To: "db:cortexdb", Type: "USES"}
 	const want = "ee7d7e492657407f496c569f3b31adacdabaaebbb39d5baa1fbf7654124de727"

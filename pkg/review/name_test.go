@@ -3,6 +3,8 @@ package review
 import (
 	"testing"
 	"time"
+
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
 )
 
 // declared is a rule as a person writes one down: the shape it covers, the
@@ -135,5 +137,48 @@ func TestAnEmptyPolicyHasNoName(t *testing.T) {
 		if got := InForce(rules); got.Name != "" || len(got.Rules) != 0 {
 			t.Errorf("InForce(%+v) = %+v, want the zero set", rules, got)
 		}
+	}
+}
+
+// TestARuleSetsNameIsAFixedValue pins one set's name as a literal computed
+// outside Go.
+//
+// The tests above are all comparisons: this set is named differently from that
+// one, this set is named the same however it arrived. Every one of them would
+// still pass if the encoding changed, because both sides would move together —
+// and the name is a wire value. §8.3 lets another node take over a job, read
+// the same policy from the same store and continue writing records under it;
+// Provenance.RuleSet on a record written before the handover has to equal the
+// one written after, or a reader filtering to "records extracted under this
+// policy" silently gets half the graph.
+//
+// So the expected value did not come from running this code. It was produced by
+// an independent implementation of setName's own paragraph, in Python:
+//
+//	h = sha256(); for f in ["alchemy/review/ruleset/1", n1, t1, n2, t2]:
+//	    h.update(pack('>Q', len(f.encode()))); h.update(f.encode())
+//	h.hexdigest()[:16]
+//
+// That it matches is the evidence the name is a property of the specification
+// rather than of this process. It also pins two things the prose asserts and
+// nothing else here checks: that the members are hashed in sorted order (the
+// two below are given in the order they sort, and TestARuleSetIsNamedTheSame…
+// checks the sorting independently), and that the name is the FIRST sixteen hex
+// characters — a truncation from the wrong end would pass every other test.
+//
+// Changing this constant re-names every policy and orphans the RuleSet field of
+// every record already written under one. It is done by bumping setDomain and
+// this line together, never by editing the line.
+func TestARuleSetsNameIsAFixedValue(t *testing.T) {
+	members := []alchemy.StandingRule{
+		{Name: "collapse-imports", Told: "imports between two files is one edge"},
+		{Name: "node-connections", Told: "both foreign keys are real"},
+	}
+	const want = "7ceaca1ff5eb9616"
+	if got := setName(members); got != want {
+		t.Fatalf("setName of the pinned policy = %q, want %q\n"+
+			"The constant was computed outside Go from setName's own comment. A mismatch "+
+			"re-names every policy in every store: bump setDomain with it, or find where the "+
+			"code and the documented algorithm drifted apart.", got, want)
 	}
 }
