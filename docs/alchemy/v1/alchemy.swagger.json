@@ -1182,6 +1182,19 @@
             "$ref": "#/definitions/v1Producer"
           }
         },
+        "declared_from": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What the ontology already says, for a widening. Here so a reader sees the\nchange as a diff rather than as a list to compare by hand."
+        },
+        "declared_to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "example": {
           "$ref": "#/definitions/v1Ref",
           "description": "One record that used it, so a reader can go and look."
@@ -1194,10 +1207,11 @@
       "enum": [
         "PROPOSAL_KIND_UNSPECIFIED",
         "PROPOSAL_KIND_ENTITY",
-        "PROPOSAL_KIND_RELATION"
+        "PROPOSAL_KIND_RELATION",
+        "PROPOSAL_KIND_RELATION_ENDS"
       ],
       "default": "PROPOSAL_KIND_UNSPECIFIED",
-      "description": "ProposalKind says which of an ontology's two lists a proposal belongs in."
+      "description": "ProposalKind says which of an ontology's two lists a proposal belongs in.\n\n - PROPOSAL_KIND_RELATION_ENDS: The type IS declared and was used between ends it does not allow. The\nchange is a widening of an existing rule rather than a new declaration,\nand it is a separate kind because accepting it is a different act with a\ndifferent risk: adding a type cannot make anything previously invalid\nvalid, and widening one does, for every record any producer writes from\nthen on."
     },
     "v1Provenance": {
       "type": "object",

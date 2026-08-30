@@ -22,7 +22,7 @@ import (
 // end whose own type is also undeclared is left out rather than proposed
 // alongside — a line proposing two undeclared things at once is a line nobody
 // can accept or reject as one thing.
-func proposals(violations []alchemy.Violation, entities []alchemy.Entity) []alchemy.Proposal {
+func proposals(violations []alchemy.Violation, entities []alchemy.Entity, rs *rules) []alchemy.Proposal {
 	if len(violations) == 0 {
 		return nil
 	}
@@ -70,6 +70,22 @@ func proposals(violations []alchemy.Violation, entities []alchemy.Entity) []alch
 		switch v.Kind {
 		case alchemy.ViolationUnknownEntityType:
 			note(alchemy.ProposalEntity, v.About.Type, v.About, v.Provenance)
+		case alchemy.ViolationRelationNotAllowed:
+			// The type is declared; what is not is the pair it was used
+			// between. Proposing it as a new type would be wrong twice — the
+			// name is already taken, and the change a person has to weigh is
+			// a widening of a rule that already governs records, not an
+			// addition that governs none.
+			a := note(alchemy.ProposalRelationEnds, v.About.Type, v.About, v.Provenance)
+			if declared, ok := rs.declaredEnds(v.About.Type); ok {
+				a.p.DeclaredFrom, a.p.DeclaredTo = declared.from, declared.to
+			}
+			if t, ok := declaredEnds[v.About.From]; ok && !undeclared[t] {
+				a.from[t] = true
+			}
+			if t, ok := declaredEnds[v.About.To]; ok && !undeclared[t] {
+				a.to[t] = true
+			}
 		case alchemy.ViolationUnknownRelationType:
 			a := note(alchemy.ProposalRelation, v.About.Type, v.About, v.Provenance)
 			// An end whose own type is undeclared, or which names an entity
@@ -101,7 +117,11 @@ func proposals(violations []alchemy.Violation, entities []alchemy.Entity) []alch
 	// bottom never leaves a line referring to something further down.
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Kind != out[j].Kind {
-			return out[i].Kind == alchemy.ProposalEntity
+			// Entity types first, then new relation types, then widenings.
+			// A list accepted top to bottom never has a line that depends on
+			// one further down, and the widenings come last because they are
+			// the only ones that change a rule already in force.
+			return kindOrder(out[i].Kind) < kindOrder(out[j].Kind)
 		}
 		return out[i].Type < out[j].Type
 	})
@@ -118,4 +138,15 @@ func keysOf(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func kindOrder(k alchemy.ProposalKind) int {
+	switch k {
+	case alchemy.ProposalEntity:
+		return 0
+	case alchemy.ProposalRelation:
+		return 1
+	default:
+		return 2
+	}
 }

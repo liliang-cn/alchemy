@@ -312,6 +312,19 @@ type ProposalKind string
 const (
 	ProposalEntity   ProposalKind = "entity"
 	ProposalRelation ProposalKind = "relation"
+	// ProposalRelationEnds — the type IS declared and was used between ends it
+	// does not allow. The change is a widening of an existing declaration
+	// rather than a new one.
+	//
+	// It is a third kind and not a flag on the second because accepting it is
+	// a different act with a different risk. Declaring a type that did not
+	// exist cannot make anything previously invalid valid; widening one can,
+	// for every record any producer writes from now on. "DEVELOPS runs Person
+	// -> Product and somebody used it Person -> Platform" is a question about
+	// what the word means, and answering it yes is a decision that reaches
+	// every future extraction — including the ones a model proposes, which is
+	// the reader §2.1 is about.
+	ProposalRelationEnds ProposalKind = "relation_ends"
 )
 
 // Proposal is a type a source used that the ontology does not declare, stated
@@ -362,6 +375,12 @@ type Proposal struct {
 	// from one a person asserted by name.
 	Sources   []string   `json:"sources,omitempty"`
 	Producers []Producer `json:"producers,omitempty"`
+	// DeclaredFrom and DeclaredTo are what the ontology already says, for a
+	// ProposalRelationEnds. They are here so a reader sees the widening as a
+	// diff — "Person -> Product|Component|Interface, used Person -> Platform"
+	// — rather than as a new list they have to go and compare by hand.
+	DeclaredFrom []string `json:"declared_from,omitempty"`
+	DeclaredTo   []string `json:"declared_to,omitempty"`
 	// Example is one record that used it, so a reader can go and look rather
 	// than take the summary's word for it.
 	Example Ref `json:"example"`

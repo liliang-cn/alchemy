@@ -174,3 +174,26 @@ func (r *rules) allowsRelation(typ, from, to string) (bool, string) {
 func (r *rules) governs() bool {
 	return r.ontologyID != "" || len(r.vocab.Entities) > 0 || len(r.vocab.Relations) > 0
 }
+
+// ends are the pair of end lists an ontology declares for a relation type.
+type ends struct{ from, to []string }
+
+// declaredEnds reports what the vocabulary already says a relation type runs
+// between, so a widening proposal can be read as a diff rather than as a list
+// somebody has to go and compare by hand.
+//
+// It goes through canonicalRelation for the reason every other lookup here
+// does: a type named in one spelling and declared in another has to resolve
+// the same way, and a second matching loop is the copy that drifts.
+func (r *rules) declaredEnds(typ string) (ends, bool) {
+	name, ok := r.canonicalRelation(typ)
+	if !ok {
+		return ends{}, false
+	}
+	for _, declared := range r.vocab.Relations {
+		if declared.Name == name {
+			return ends{from: declared.From, to: declared.To}, true
+		}
+	}
+	return ends{}, false
+}

@@ -167,3 +167,73 @@ func TestTheExtendedOntologyRoundTripsThroughItsOwnDocument(t *testing.T) {
 		t.Error("the accepted type did not survive the document it was written into")
 	}
 }
+
+const declared = `{"id":"freight-ops@10","parts":{"prose":{
+  "entities":[{"name":"Person"},{"name":"Product"},{"name":"Platform"}],
+  "relations":[{"name":"DEVELOPS","from":["Person"],"to":["Product"]}]}}}`
+
+// The other half of a vocabulary gap, and the more dangerous one. Adding a
+// type cannot make anything previously invalid valid; widening one does, for
+// every record any producer writes from then on.
+//
+// Found by running a real fact through it: "Bruno also works in CloudStack"
+// produced not an unknown type but a declared type used between ends it does
+// not allow, and the first version of proposals had nothing to say about it.
+func TestWideningADeclaredTypeRecordsWhatItRanBetweenBefore(t *testing.T) {
+	o := loaded(t, declared)
+	out, added, err := o.Extend("prose", []alchemy.Proposal{{
+		Kind: alchemy.ProposalRelationEnds, Type: "DEVELOPS", Records: 1,
+		From: []string{"Person"}, To: []string{"Platform"},
+		DeclaredFrom: []string{"Person"}, DeclaredTo: []string{"Product"},
+	}}, "liliang", "")
+	if err != nil {
+		t.Fatalf("Extend: %v", err)
+	}
+	if len(added) != 1 || added[0] != "DEVELOPS" {
+		t.Fatalf("added = %v, want [DEVELOPS]", added)
+	}
+	v, _ := out.Vocabulary("prose")
+	if ok, why := v.AllowsRelation("DEVELOPS", "Person", "Platform"); !ok {
+		t.Errorf("the widened pair is still refused: %s", why)
+	}
+	// The original pair survives: a widening adds, it does not replace.
+	if ok, why := v.AllowsRelation("DEVELOPS", "Person", "Product"); !ok {
+		t.Errorf("widening lost the pair that was already declared: %s", why)
+	}
+	for _, r := range v.Relations {
+		if r.Name != "DEVELOPS" {
+			continue
+		}
+		for _, want := range []string{"widened by liliang", "Person -> Product"} {
+			if !strings.Contains(r.Description, want) {
+				t.Errorf("the widened type does not record what it ran between before: %q", r.Description)
+			}
+		}
+	}
+	// A type that is not declared is not a widening, and saying so is the
+	// difference between adding a rule and changing one.
+	if _, _, err := o.Extend("prose", []alchemy.Proposal{{
+		Kind: alchemy.ProposalRelationEnds, Type: "MANAGES", From: []string{"Person"}, To: []string{"Product"},
+	}}, "liliang", ""); err == nil {
+		t.Error("a widening was accepted for a type this vocabulary does not declare")
+	}
+}
+
+// The trap in the other direction. An end declared empty is OPEN, so unioning
+// what one corpus happened to show into it would narrow the rule — a different
+// decision, made as a side effect of pressing Accept.
+func TestAnEndThatIsAlreadyOpenIsNotNarrowedByAcceptingAWidening(t *testing.T) {
+	o := loaded(t, `{"id":"x@1","parts":{"prose":{
+	  "entities":[{"name":"Person"},{"name":"Platform"}],
+	  "relations":[{"name":"TOUCHES","from":["Person"]}]}}}`)
+	_, _, err := o.Extend("prose", []alchemy.Proposal{{
+		Kind: alchemy.ProposalRelationEnds, Type: "TOUCHES",
+		From: []string{"Person"}, To: []string{"Platform"},
+	}}, "liliang", "")
+	if err == nil {
+		t.Fatal("an open end was narrowed to what one corpus showed, in the name of widening it")
+	}
+	if !strings.Contains(err.Error(), "narrow") {
+		t.Errorf("the refusal does not say which direction the rule would have moved: %v", err)
+	}
+}

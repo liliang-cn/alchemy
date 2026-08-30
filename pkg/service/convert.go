@@ -51,8 +51,9 @@ var wireProducers = invert(producers)
 var wireProposalKinds = invert(proposalKinds)
 
 var proposalKinds = map[alchemy.ProposalKind]alchemyv1.ProposalKind{
-	alchemy.ProposalEntity:   alchemyv1.ProposalKind_PROPOSAL_KIND_ENTITY,
-	alchemy.ProposalRelation: alchemyv1.ProposalKind_PROPOSAL_KIND_RELATION,
+	alchemy.ProposalEntity:       alchemyv1.ProposalKind_PROPOSAL_KIND_ENTITY,
+	alchemy.ProposalRelation:     alchemyv1.ProposalKind_PROPOSAL_KIND_RELATION,
+	alchemy.ProposalRelationEnds: alchemyv1.ProposalKind_PROPOSAL_KIND_RELATION_ENDS,
 }
 
 var violationKinds = map[alchemy.ViolationKind]alchemyv1.ViolationKind{
@@ -505,13 +506,15 @@ func supersessionToProto(s alchemy.Supersession) *alchemyv1.Supersession {
 // which is what TestEveryProducerHasAWireName exists to stop.
 func proposalToProto(p alchemy.Proposal) *alchemyv1.Proposal {
 	out := &alchemyv1.Proposal{
-		Kind:    proposalKinds[p.Kind],
-		Type:    p.Type,
-		Records: int32(p.Records),
-		From:    p.From,
-		To:      p.To,
-		Sources: p.Sources,
-		Example: aboutToProto(p.Example),
+		Kind:         proposalKinds[p.Kind],
+		Type:         p.Type,
+		Records:      int32(p.Records),
+		From:         p.From,
+		To:           p.To,
+		Sources:      p.Sources,
+		DeclaredFrom: p.DeclaredFrom,
+		DeclaredTo:   p.DeclaredTo,
+		Example:      aboutToProto(p.Example),
 	}
 	for _, pr := range p.Producers {
 		out.Producers = append(out.Producers, producers[pr])

@@ -74,7 +74,7 @@ func Check(in Input) Report {
 	}
 	// Derived from the violations rather than from a second walk, so the two
 	// can never disagree about what is undeclared. Empty when nothing is.
-	out.Proposals = proposals(out.Violations, entities)
+	out.Proposals = proposals(out.Violations, entities, rs)
 	out.Counts = count(out)
 	return out
 }

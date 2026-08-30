@@ -1095,6 +1095,13 @@ enum ProposalKind {
   PROPOSAL_KIND_UNSPECIFIED = 0;
   PROPOSAL_KIND_ENTITY = 1;
   PROPOSAL_KIND_RELATION = 2;
+  // The type IS declared and was used between ends it does not allow. The
+  // change is a widening of an existing rule rather than a new declaration,
+  // and it is a separate kind because accepting it is a different act with a
+  // different risk: adding a type cannot make anything previously invalid
+  // valid, and widening one does, for every record any producer writes from
+  // then on.
+  PROPOSAL_KIND_RELATION_ENDS = 3;
 }
 
 // Proposal is a type a source used that the ontology does not declare, stated
@@ -1129,6 +1136,10 @@ message Proposal {
   // one PDF used is a different suggestion from one a person asserted by name.
   repeated string sources = 6;
   repeated Producer producers = 7;
+  // What the ontology already says, for a widening. Here so a reader sees the
+  // change as a diff rather than as a list to compare by hand.
+  repeated string declared_from = 9;
+  repeated string declared_to = 10;
   // One record that used it, so a reader can go and look.
   Ref example = 8;
 }

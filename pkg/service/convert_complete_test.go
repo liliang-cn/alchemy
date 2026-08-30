@@ -101,6 +101,21 @@ func TestEveryClosedSetHasAWireName(t *testing.T) {
 		}
 	}
 
+	kinds := []alchemy.ProposalKind{
+		alchemy.ProposalEntity,
+		alchemy.ProposalRelation,
+		alchemy.ProposalRelationEnds,
+	}
+	if got, want := len(alchemyv1.ProposalKind_name), len(kinds)+1; got != want {
+		t.Errorf("the proto declares %d proposal kinds and this test names %d", got-1, len(kinds))
+	}
+	for _, k := range kinds {
+		if proposalKinds[k] == alchemyv1.ProposalKind_PROPOSAL_KIND_UNSPECIFIED {
+			t.Errorf("proposal kind %q has no wire name; a caller would be handed a change to "+
+				"their vocabulary without being told which kind of change it is", k)
+		}
+	}
+
 	signals := []alchemy.DuplicateSignal{
 		alchemy.DuplicateNameAffix,
 		alchemy.DuplicateNameAcrossProducers,

@@ -665,6 +665,13 @@ const (
 	ProposalKind_PROPOSAL_KIND_UNSPECIFIED ProposalKind = 0
 	ProposalKind_PROPOSAL_KIND_ENTITY      ProposalKind = 1
 	ProposalKind_PROPOSAL_KIND_RELATION    ProposalKind = 2
+	// The type IS declared and was used between ends it does not allow. The
+	// change is a widening of an existing rule rather than a new declaration,
+	// and it is a separate kind because accepting it is a different act with a
+	// different risk: adding a type cannot make anything previously invalid
+	// valid, and widening one does, for every record any producer writes from
+	// then on.
+	ProposalKind_PROPOSAL_KIND_RELATION_ENDS ProposalKind = 3
 )
 
 // Enum value maps for ProposalKind.
@@ -673,11 +680,13 @@ var (
 		0: "PROPOSAL_KIND_UNSPECIFIED",
 		1: "PROPOSAL_KIND_ENTITY",
 		2: "PROPOSAL_KIND_RELATION",
+		3: "PROPOSAL_KIND_RELATION_ENDS",
 	}
 	ProposalKind_value = map[string]int32{
-		"PROPOSAL_KIND_UNSPECIFIED": 0,
-		"PROPOSAL_KIND_ENTITY":      1,
-		"PROPOSAL_KIND_RELATION":    2,
+		"PROPOSAL_KIND_UNSPECIFIED":   0,
+		"PROPOSAL_KIND_ENTITY":        1,
+		"PROPOSAL_KIND_RELATION":      2,
+		"PROPOSAL_KIND_RELATION_ENDS": 3,
 	}
 )
 
@@ -4555,6 +4564,10 @@ type Proposal struct {
 	// one PDF used is a different suggestion from one a person asserted by name.
 	Sources   []string   `protobuf:"bytes,6,rep,name=sources,proto3" json:"sources,omitempty"`
 	Producers []Producer `protobuf:"varint,7,rep,packed,name=producers,proto3,enum=alchemy.v1.Producer" json:"producers,omitempty"`
+	// What the ontology already says, for a widening. Here so a reader sees the
+	// change as a diff rather than as a list to compare by hand.
+	DeclaredFrom []string `protobuf:"bytes,9,rep,name=declared_from,json=declaredFrom,proto3" json:"declared_from,omitempty"`
+	DeclaredTo   []string `protobuf:"bytes,10,rep,name=declared_to,json=declaredTo,proto3" json:"declared_to,omitempty"`
 	// One record that used it, so a reader can go and look.
 	Example       *Ref `protobuf:"bytes,8,opt,name=example,proto3" json:"example,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -4636,6 +4649,20 @@ func (x *Proposal) GetSources() []string {
 func (x *Proposal) GetProducers() []Producer {
 	if x != nil {
 		return x.Producers
+	}
+	return nil
+}
+
+func (x *Proposal) GetDeclaredFrom() []string {
+	if x != nil {
+		return x.DeclaredFrom
+	}
+	return nil
+}
+
+func (x *Proposal) GetDeclaredTo() []string {
+	if x != nil {
+		return x.DeclaredTo
 	}
 	return nil
 }
@@ -5083,7 +5110,7 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x126\n" +
 	"\n" +
 	"provenance\x18\x04 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
-	"provenance\"\x83\x02\n" +
+	"provenance\"\xc9\x02\n" +
 	"\bProposal\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.alchemy.v1.ProposalKindR\x04kind\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
@@ -5091,7 +5118,11 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x04from\x18\x04 \x03(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x05 \x03(\tR\x02to\x12\x18\n" +
 	"\asources\x18\x06 \x03(\tR\asources\x122\n" +
-	"\tproducers\x18\a \x03(\x0e2\x14.alchemy.v1.ProducerR\tproducers\x12)\n" +
+	"\tproducers\x18\a \x03(\x0e2\x14.alchemy.v1.ProducerR\tproducers\x12#\n" +
+	"\rdeclared_from\x18\t \x03(\tR\fdeclaredFrom\x12\x1f\n" +
+	"\vdeclared_to\x18\n" +
+	" \x03(\tR\n" +
+	"declaredTo\x12)\n" +
 	"\aexample\x18\b \x01(\v2\x0f.alchemy.v1.RefR\aexample\"\xe2\x01\n" +
 	"\x0eReviewDecision\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x17\n" +
@@ -5169,11 +5200,12 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"RuleOrigin\x12\x1b\n" +
 	"\x17RULE_ORIGIN_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14RULE_ORIGIN_REVIEWED\x10\x01\x12\x18\n" +
-	"\x14RULE_ORIGIN_AUTHORED\x10\x02*c\n" +
+	"\x14RULE_ORIGIN_AUTHORED\x10\x02*\x84\x01\n" +
 	"\fProposalKind\x12\x1d\n" +
 	"\x19PROPOSAL_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14PROPOSAL_KIND_ENTITY\x10\x01\x12\x1a\n" +
-	"\x16PROPOSAL_KIND_RELATION\x10\x022\xfa\b\n" +
+	"\x16PROPOSAL_KIND_RELATION\x10\x02\x12\x1f\n" +
+	"\x1bPROPOSAL_KIND_RELATION_ENDS\x10\x032\xfa\b\n" +
 	"\aAlchemy\x12O\n" +
 	"\tCreateJob\x12\x1c.alchemy.v1.CreateJobRequest\x1a\x0f.alchemy.v1.Job\"\x13\x82\xd3\xe4\x93\x02\r:\x01*\"\b/v1/jobs\x12O\n" +
 	"\x06GetJob\x12\x19.alchemy.v1.GetJobRequest\x1a\x0f.alchemy.v1.Job\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/jobs/{job_id}\x12_\n" +

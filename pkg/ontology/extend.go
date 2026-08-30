@@ -104,8 +104,47 @@ func (o *Ontology) Extend(part Part, accept []alchemy.Proposal, by, newID string
 				Description: origin(p, by, stamp),
 			})
 			added = append(added, p.Type)
+		case alchemy.ProposalRelationEnds:
+			i, found := indexOfRelation(v.Relations, p.Type)
+			if !found {
+				return nil, nil, fmt.Errorf(
+					"ontology: %q is proposed as a widening but this vocabulary does not declare it; "+
+						"a widening changes a rule that already governs records and there is no such rule here",
+					p.Type)
+			}
+			if len(p.From) == 0 && len(p.To) == 0 {
+				return nil, nil, fmt.Errorf(
+					"ontology: the widening proposed for %q observed no ends, because their own types "+
+						"are not declared either; accept the entity types first and run again", p.Type)
+			}
+			r := v.Relations[i]
+			// An end that is already open cannot be widened, and unioning the
+			// observed types into it would NARROW it — from "anything" to the
+			// handful this corpus happened to show. That is a different
+			// decision, in the opposite direction, and making it as a side
+			// effect of pressing Accept is exactly the silent movement of a
+			// rule this whole path exists to prevent.
+			if (len(r.From) == 0 && len(p.From) > 0) || (len(r.To) == 0 && len(p.To) > 0) {
+				return nil, nil, fmt.Errorf(
+					"ontology: %q already runs between any types on one end, so there is nothing to "+
+						"widen; accepting this would narrow it to what one corpus happened to show, "+
+						"which is a different decision and one nobody asked for here", p.Type)
+			}
+			widened := false
+			if added := union(r.From, p.From); len(added) > len(r.From) {
+				r.From, widened = added, true
+			}
+			if added := union(r.To, p.To); len(added) > len(r.To) {
+				r.To, widened = added, true
+			}
+			if !widened {
+				continue
+			}
+			r.Description = strings.TrimSpace(r.Description + " " + widening(v.Relations[i], p, by, stamp))
+			v.Relations[i] = r
+			added = append(added, p.Type)
 		default:
-			return nil, nil, fmt.Errorf("ontology: proposal for %q has no kind; it belongs in one of two lists and does not say which", p.Type)
+			return nil, nil, fmt.Errorf("ontology: proposal for %q has no kind; it belongs in one of the vocabulary's lists and does not say which", p.Type)
 		}
 	}
 
@@ -175,4 +214,46 @@ func nextID(id string) (string, error) {
 				"package's to guess at", id, version)
 	}
 	return fmt.Sprintf("%s@%d", name, n+1), nil
+}
+
+// indexOfRelation finds a declared relation type by the same folded match
+// every other lookup in this package uses.
+func indexOfRelation(rels []RelationType, name string) (int, bool) {
+	for i, r := range rels {
+		if fold(r.Name) == fold(name) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// union appends what is not already there, preserving the declared order so a
+// widened type reads as its original declaration plus what was added.
+func union(have, add []string) []string {
+	seen := make(map[string]bool, len(have))
+	for _, s := range have {
+		seen[fold(s)] = true
+	}
+	out := append([]string(nil), have...)
+	for _, s := range add {
+		if !seen[fold(s)] {
+			seen[fold(s)] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// widening is the sentence a widened type carries.
+//
+// It states what the rule was before, which the type itself no longer shows.
+// A vocabulary that quietly grew an end is one nobody can audit; the whole
+// value of writing this down is that somebody reading the graph in six months
+// can see that DEVELOPS did not always run to a Platform, and who decided it
+// should.
+func widening(before RelationType, p alchemy.Proposal, by, stamp string) string {
+	return fmt.Sprintf("widened by %s on %s from %s -> %s, after %d record(s) used it %s -> %s.",
+		by, stamp,
+		strings.Join(before.From, "|"), strings.Join(before.To, "|"),
+		p.Records, strings.Join(p.From, "|"), strings.Join(p.To, "|"))
 }

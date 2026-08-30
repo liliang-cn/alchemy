@@ -68,12 +68,14 @@ func (s *Server) ExtendOntology(ctx context.Context, req *alchemyv1.ExtendOntolo
 // are taken as sent rather than checked against anything.
 func proposalFromProto(p *alchemyv1.Proposal) alchemy.Proposal {
 	out := alchemy.Proposal{
-		Kind:    wireProposalKinds[p.GetKind()],
-		Type:    p.GetType(),
-		Records: int(p.GetRecords()),
-		From:    p.GetFrom(),
-		To:      p.GetTo(),
-		Sources: p.GetSources(),
+		Kind:         wireProposalKinds[p.GetKind()],
+		Type:         p.GetType(),
+		Records:      int(p.GetRecords()),
+		From:         p.GetFrom(),
+		To:           p.GetTo(),
+		Sources:      p.GetSources(),
+		DeclaredFrom: p.GetDeclaredFrom(),
+		DeclaredTo:   p.GetDeclaredTo(),
 	}
 	for _, pr := range p.GetProducers() {
 		out.Producers = append(out.Producers, wireProducers[pr])
