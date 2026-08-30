@@ -176,3 +176,87 @@ func assertPairs(t *testing.T, got []alchemy.Duplicate, want ...string) {
 		}
 	}
 }
+
+// supplied is an id a source chose rather than one this pipeline minted: a
+// graph import brings the document's own ids, which is the case the whole
+// second signal turns on.
+func supplied(id, typ, name string) alchemy.Entity {
+	return alchemy.Entity{ID: id, Type: typ, Name: name,
+		Provenance: alchemy.Provenance{Source: "northgate.json", Chunk: -1, Producer: alchemy.ProducerGraphImport}}
+}
+
+// The case the original rejection did not cover, measured on the evaluation corpus:
+// a graph import brought `org:northgate` and the extractor minted
+// `organization:northgate` for the same company under the same type, and the
+// duplicate count sat at two with neither of them this. Names are equal, so
+// name_affix cannot see it; ids are unequal, so nothing joined it.
+func TestOneNameFromTwoProducersWithTwoIdsIsACandidate(t *testing.T) {
+	in := proseVocab()
+	in.Vocabulary.Entities = append(in.Vocabulary.Entities, ontology.EntityType{Name: "Organization"})
+	in.Entities = []alchemy.Entity{
+		supplied("org:northgate", "Organization", "Northgate"),
+		entity("Organization", "Northgate", 3),
+	}
+
+	got := verify.Check(in).Duplicates
+
+	if len(got) != 1 {
+		t.Fatalf("duplicates = %+v, want the one pair", got)
+	}
+	if got[0].Signal != alchemy.DuplicateNameAcrossProducers {
+		t.Fatalf("signal = %q, want %q", got[0].Signal, alchemy.DuplicateNameAcrossProducers)
+	}
+	if got[0].Subject != "org:northgate ~ organization:northgate" {
+		t.Fatalf("subject = %q, want the two ids", got[0].Subject)
+	}
+	if got[0].Left.Provenance.Producer != alchemy.ProducerGraphImport || got[0].Right.Provenance.Producer != alchemy.ProducerLLMExtract {
+		t.Fatalf("candidate cites %q and %q, want each side to keep the producer that made it",
+			got[0].Left.Provenance.Producer, got[0].Right.Provenance.Producer)
+	}
+	// Reported, never resolved: two ids for one name is evidence, and the
+	// pipeline has no way to know which id the rest of the graph points at.
+	if len(verify.Check(in).Entities) != 2 {
+		t.Fatalf("entities = %d, want both nodes left standing", len(verify.Check(in).Entities))
+	}
+}
+
+// The property the narrowed rejection preserves. public.users and audit.users
+// are two tables one CREATE TABLE declared, both named "users", and asking a
+// person to confirm they are two is §5c's last row — the one it says teaches
+// people to click Approve without reading. One producer made both, so nothing
+// fires.
+func TestTwoTablesOneDDLDeclaredAreNeverACandidate(t *testing.T) {
+	ddl := func(id, name string) alchemy.Entity {
+		return alchemy.Entity{ID: id, Type: "Table", Name: name,
+			Provenance: alchemy.Provenance{Source: "schema.sql", Chunk: -1, Producer: alchemy.ProducerDDL}}
+	}
+	in := verify.Input{
+		OntologyID: "sql@1",
+		Vocabulary: ontology.Vocabulary{Entities: []ontology.EntityType{{Name: "Table"}}},
+		Entities: []alchemy.Entity{
+			ddl("table:public.users", "users"),
+			ddl("table:audit.users", "users"),
+		},
+	}
+
+	assertPairs(t, verify.Check(in).Duplicates)
+}
+
+// An entity nobody named is not evidence of anything. Two of them under one
+// type have equal folded names in the trivial sense and nothing has been
+// stated, so a signal that read that as "one name under two ids" would fire on
+// every pair of unnamed nodes a graph import and an extractor happen to share a
+// type on. name_affix never had to say this — a nameless entity has no affixes
+// — and this one does.
+func TestTwoUnnamedNodesFromTwoProducersAreNeverACandidate(t *testing.T) {
+	in := verify.Input{
+		OntologyID: "prose@1",
+		Vocabulary: ontology.Vocabulary{Entities: []ontology.EntityType{{Name: "Package"}}},
+		Entities: []alchemy.Entity{
+			supplied("pkg:one", "Package", ""),
+			{ID: "pkg:two", Type: "Package", Provenance: prose(1)},
+		},
+	}
+
+	assertPairs(t, verify.Check(in).Duplicates)
+}

@@ -1,9 +1,6 @@
 package cortexdb
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -388,55 +385,4 @@ func checkAttributes(attrs map[string]any, prefix string, reserved map[string]st
 		}
 	}
 	return nil
-}
-
-// digest is the identity of everything a Load writes: the same digest under the
-// same run is a replay and must converge, a different one is the caller telling
-// the store two different things about one import.
-//
-// It covers provenance as well as content, because §5b's guarantee is about
-// attribution: the same edges re-extracted by a different model are not the
-// same import. It is order-independent because a result that arrived paged
-// (§8.4) can be reassembled in a different order than it was produced in.
-func digest(res alchemy.Result) string {
-	lines := make([]string, 0, len(res.Entities)+len(res.Relations)+len(res.Chunks))
-	for _, e := range res.Entities {
-		lines = append(lines, "E\x00"+e.ID+"\x00"+e.Type+"\x00"+e.Name+"\x00"+canonical(e.Attributes)+"\x00"+canonical(e.Provenance))
-	}
-	for _, r := range res.Relations {
-		lines = append(lines, "R\x00"+r.From+"\x00"+r.To+"\x00"+r.Type+"\x00"+r.Key+"\x00"+canonical(r.Attributes)+"\x00"+canonical(r.Provenance))
-	}
-	// The chunks and the vectors are in the digest because they are written.
-	// Two results that agree about the graph and disagree about the text a
-	// citation resolves to are two different imports.
-	for _, c := range res.Chunks {
-		lines = append(lines, "C\x00"+strconv.Itoa(c.Index)+"\x00"+c.Source+"\x00"+c.Strategy+"\x00"+c.Text)
-	}
-	for _, v := range res.Vectors {
-		lines = append(lines, "V\x00"+strconv.Itoa(v.Chunk)+"\x00"+v.Model+"\x00"+canonical(v.Values))
-	}
-	// The findings are in it because they are written onto the run marker: a
-	// result that came back with a clean bill of health must not replay as one
-	// that did not.
-	lines = append(lines, "F\x00"+canonical(res.Violations)+"\x00"+canonical(res.Duplicates)+
-		"\x00"+canonical(res.Guesses)+"\x00"+canonical(res.Unread)+"\x00"+canonical(res.Counts)+
-		"\x00"+canonical(res.RuleSets))
-	sort.Strings(lines)
-	h := sha256.New()
-	for _, l := range lines {
-		// Length-prefixed so two records cannot be rearranged into the same
-		// byte stream.
-		fmt.Fprintf(h, "%d:%s", len(l), l)
-	}
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-// canonical renders a value for hashing. json.Marshal sorts map keys, which is
-// what makes an Attributes map hash the same twice.
-func canonical(v any) string {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Sprintf("%#v", v)
-	}
-	return string(b)
 }

@@ -236,6 +236,11 @@ enum ConflictKind {
   CONFLICT_KIND_RELATION_DIRECTION = 3;
   CONFLICT_KIND_CONTRADICTION = 4;
   CONFLICT_KIND_RELATION_ATTRIBUTES = 5;
+  // Two records assert an edge of a type the ontology declared at_most_one_in
+  // or at_most_one_out, at the end it constrained. The only conflict kind that
+  // compares two claims about one NODE rather than about one edge, and the one
+  // that makes a fact able to go out of date.
+  CONFLICT_KIND_CARDINALITY = 6;
 }
 
 // DuplicateSignal names the deterministic evidence that two nodes may be one
@@ -248,6 +253,12 @@ enum DuplicateSignal {
   // a per-chunk extractor produces, since each chunk is a separate call that
   // cannot see how the others named the thing.
   DUPLICATE_SIGNAL_NAME_AFFIX = 1;
+  // Under one type, two nodes with different ids fold to the same name and two
+  // different producers made them. Ids this pipeline mints are a function of
+  // type and name, so equal names are already one node; ids a source supplies
+  // — a graph import's, an assertion's — are not, and that is the only case
+  // this fires on.
+  DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS = 2;
 }
 
 // ReviewKind is §5c's ranking table as a set.
@@ -738,6 +749,8 @@ message Result {
   // job's finding, and would leave every existing reader holding a field whose
   // meaning had quietly changed underneath them.
   repeated RuleSet rule_sets = 12;
+  // What this run says is no longer true, and who said so.
+  repeated Supersession supersessions = 15;
 }
 
 // StandingRule is one rule of a set: what it is called, and what the model was
@@ -807,6 +820,7 @@ message ResultPage {
   // model was told, and making them pay for every entity first would be making
   // the answer arrive after the decision.
   repeated RuleSet rule_sets = 14;
+  repeated Supersession supersessions = 17;
 }
 
 // ---------------------------------------------------------------------------
@@ -975,6 +989,43 @@ message AssertRequest {
   string note = 4;
   string ontology = 5;
   string part = 6;
+  // What this assertion replaces. Each entry names a record — an Entity.id or
+  // a Relation identity — and says why.
+  //
+  // A person who knows the CTO changed is stating two things: that Bruno holds
+  // the office, and that Ada no longer does. Without this only the first had
+  // a shape, and the second arrived as a new edge beside the old one while the
+  // graph reported itself clean. The claim is carried, never executed; see
+  // Supersession.
+  repeated Supersedes supersedes = 7;
+}
+
+message Supersedes {
+  string retires = 1;
+  string reason = 2;
+}
+
+// Supersession is one record saying another is over.
+//
+// retires is an Entity.id or a Relation identity, and it deliberately need not
+// be present in this result: the thing being replaced is usually in a store
+// from a run that finished last month.
+//
+// Alchemy never acts on one. §4 means it holds no graph and could not, and a
+// producer that could delete another producer's fact by naming it would be
+// §2.1 with write access. Where both records are in one result the
+// disagreement is CONFLICT_KIND_CARDINALITY and §7.3 still stops the job. What
+// this carries is that the statement survives the pipeline: a store can act on
+// it deliberately, and a reader months later can see that somebody said the
+// old answer was over, and name them.
+message Supersession {
+  string retires = 1;
+  Ref by = 2;
+  string reason = 3;
+  // Who is making this claim — the supersession's own provenance, not the
+  // superseding record's. A reviewer may retire a record a model proposed, and
+  // those are two claims by two parties.
+  Provenance provenance = 4;
 }
 
 message ReviewDecision {

@@ -86,6 +86,12 @@ type Report struct {
 	Duplicates int
 	Guesses    int
 	Unread     int
+	// Supersessions is how many retirements were filed beside the graph. It is
+	// a count of claims recorded and never of records removed: this connector
+	// writes what a result says is over and changes nothing about the record it
+	// names, so a run whose report says 12 has 12 more nodes and exactly as
+	// many entities and edges as it had before.
+	Supersessions int
 	// RuleSets is how many standing policies were loaded beside the graph. It
 	// is a count rather than a silence because every record can carry a name
 	// into them, and a run that wrote none while its records named some is a
@@ -170,10 +176,18 @@ func (l *Loader) Load(ctx context.Context, res alchemy.Result) (Report, error) {
 // namespace, instead of being told their vocabulary is wrong.
 func (l *Loader) internalLabel(kind string) string { return l.opts.BaseLabel + kind }
 
+// internalLabels is every label writeAux is called with, plus the run's. It is
+// a list rather than a derivation because Cypher cannot take a label as a
+// parameter, so each kind is a literal at its call site -- and a kind missing
+// from here is not an error anywhere: a buyer's ontology type of that name
+// would be accepted, written under the same label, and make the bookkeeping
+// query return entities and the entity query return bookkeeping, with nothing
+// about either looking wrong. TestEveryInternalLabelIsRefusedAsAnOntologyType
+// is what keeps the two in step.
 func (o Options) internalLabels() []string {
 	return []string{o.BaseLabel + "Run", o.BaseLabel + "Chunk", o.BaseLabel + "Violation",
 		o.BaseLabel + "Duplicate", o.BaseLabel + "Guess", o.BaseLabel + "Unread",
-		o.BaseLabel + "RuleSet"}
+		o.BaseLabel + "RuleSet", o.BaseLabel + "Supersession"}
 }
 
 // indexNames is the set of indexes this Loader creates. It is a method so that

@@ -10,7 +10,13 @@ import (
 
 // childTables are every table a load owns, in the order a delete has to walk
 // them: children before the row they reference.
-var childTables = []string{"chunks", "entities", "relations", "violations", "duplicates"}
+//
+// A table missing from here is invisible until somebody deletes a load: the
+// rows survive their load, the load row's own DELETE then fails on the foreign
+// key, and the first symptom is a sweep that quietly stopped working. It is
+// derived from nothing, so TestEveryTableALoadOwnsIsOnTheDeletePath derives it
+// from the DDL and compares.
+var childTables = []string{"chunks", "entities", "relations", "violations", "duplicates", "supersessions"}
 
 // deleteLoad removes a load and everything it wrote, in batches.
 //

@@ -22,6 +22,7 @@ type recorder struct {
 	relations []alchemy.Relation
 	chunks    []sink.Chunk
 	findings  sink.Findings
+	retired   []alchemy.Supersession
 	summary   sink.Summary
 	aborted   bool
 	lost      []sink.Loss
@@ -61,6 +62,12 @@ func (r *recorder) Findings(_ context.Context, f sink.Findings) error {
 	r.calls = append(r.calls, "findings")
 	r.findings = f
 	return r.fail("findings")
+}
+
+func (r *recorder) Supersessions(_ context.Context, batch []alchemy.Supersession) error {
+	r.calls = append(r.calls, "supersessions")
+	r.retired = append(r.retired, batch...)
+	return r.fail("supersessions")
 }
 
 func (r *recorder) Commit(_ context.Context, s sink.Summary) (sink.Report, error) {
@@ -105,6 +112,11 @@ func graph() alchemy.Result {
 			{Chunk: 1, Values: []float32{0, 1}, Model: "e5"},
 		},
 		Violations: []alchemy.Violation{{Kind: alchemy.ViolationUnknownEntityType, Subject: "e1", Provenance: prov(0)}},
+		Supersessions: []alchemy.Supersession{{
+			Retires: "e-old", By: alchemy.Ref{Kind: alchemy.RefEntity, ID: "e1", Type: "System"},
+			Reason:     "the system was renamed in March",
+			Provenance: alchemy.Provenance{Source: "correction.md", Chunk: -1, Producer: alchemy.ProducerHuman, By: "ana@example.com"},
+		}},
 	}
 	res.Counts = res.Derivable()
 	return res
@@ -260,7 +272,7 @@ func TestARefusableResultNeverReachesTheStore(t *testing.T) {
 // A failure part-way through aborts, so the store is left saying it is
 // incomplete instead of looking finished.
 func TestAFailureMidStreamAborts(t *testing.T) {
-	for _, stage := range []string{"entities", "relations", "chunks", "findings", "commit"} {
+	for _, stage := range []string{"entities", "relations", "chunks", "findings", "supersessions", "commit"} {
 		t.Run(stage, func(t *testing.T) {
 			r := &recorder{failOn: stage}
 			if _, err := sink.Load(context.Background(), r, graph(), sink.Options{}); err == nil {
@@ -423,5 +435,123 @@ func TestTheReportCountsWhatWasHandedOver(t *testing.T) {
 	}
 	if rep.Entities != 2 || rep.Relations != 1 || rep.Chunks != 2 || rep.Vectors != 2 || rep.Violations != 1 {
 		t.Fatalf("report = %+v, want one count per record handed to the store", rep)
+	}
+}
+
+// And it covers what a result says is over.
+//
+// A supersession is not part of the graph and a store writes it anyway, which
+// is exactly the case the paragraph above is about. Two results that agree
+// about every entity, edge, chunk and count and disagree about which record is
+// retired are two different imports: the second would Converge against the
+// first, nothing would be written, and the store would go on holding the fact
+// somebody had just said was finished — with no record that anybody said it.
+func TestTheDigestCoversWhatAResultRetires(t *testing.T) {
+	sup := alchemy.Supersession{
+		Retires: "e-old",
+		By:      alchemy.Ref{Kind: alchemy.RefEntity, ID: "e1", Type: "System"},
+		Reason:  "the CTO changed in March",
+		Provenance: alchemy.Provenance{
+			Source: "correction.md", Chunk: -1, Producer: alchemy.ProducerHuman,
+			By: "ana@example.com", At: "2026-03-01",
+		},
+	}
+	base := graph()
+	base.Supersessions = []alchemy.Supersession{sup}
+
+	// A result that retires nothing emits no line at all, so its address is
+	// the one every corpus loaded before this field existed already has.
+	if bare := graph(); sink.Digest(bare) == sink.Digest(base) {
+		t.Fatal("a result that retires a record addresses the same as one that retires nothing")
+	}
+
+	for _, tc := range []struct {
+		name string
+		edit func(*alchemy.Supersession)
+	}{
+		{"what it retires", func(s *alchemy.Supersession) { s.Retires = "e-other" }},
+		{"what replaces it", func(s *alchemy.Supersession) { s.By.ID = "e2" }},
+		{"the reason given", func(s *alchemy.Supersession) { s.Reason = "some other reason" }},
+		{"who said so", func(s *alchemy.Supersession) { s.Provenance.By = "someone.else@example.com" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			other := graph()
+			edited := sup
+			tc.edit(&edited)
+			other.Supersessions = []alchemy.Supersession{edited}
+			if sink.Digest(base) == sink.Digest(other) {
+				t.Fatalf("the digest is blind to %s, so a correction replays as the graph it corrects", tc.name)
+			}
+		})
+	}
+}
+
+// A supersession reaches the store, and it reaches it as its own call.
+//
+// It is not a finding: Findings is what a job found wrong with the records it
+// is carrying, and "Ada is no longer the CTO" is not a defect in anything —
+// it is a claim about a record that is usually in the store already and not in
+// this result at all. A store that filed it under quality would file a
+// correction in the report a reader consults to decide whether to trust the
+// import.
+func TestWhatAResultRetiresReachesTheStore(t *testing.T) {
+	r := &recorder{}
+	rep, err := sink.Load(context.Background(), r, graph(), sink.Options{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(r.retired) != 1 || r.retired[0].Retires != "e-old" {
+		t.Fatalf("the store was handed %+v, want the record this result says is over", r.retired)
+	}
+	if rep.Supersessions != 1 {
+		t.Errorf("Report.Supersessions = %d, want the one that was handed over", rep.Supersessions)
+	}
+}
+
+// They arrive after the records, for the reason the findings do: a store that
+// links a supersession to the record it retires finds the record already
+// written when the result happens to contain it.
+func TestWhatAResultRetiresArrivesAfterTheRecords(t *testing.T) {
+	r := &recorder{}
+	if _, err := sink.Load(context.Background(), r, graph(), sink.Options{Batch: 1}); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sup := at(r.calls, "supersessions")
+	if sup < at(r.calls, "entities") || sup < at(r.calls, "relations") || sup < at(r.calls, "chunks") {
+		t.Fatalf("calls = %v, want the supersessions after the records they may name", r.calls)
+	}
+	if sup > at(r.calls, "commit") {
+		t.Fatalf("calls = %v, want the supersessions before the commit", r.calls)
+	}
+}
+
+// A converged load writes nothing, and a supersession is one of the things it
+// does not write: the store already holds this exact result, retirements
+// included, so restating them would be the second write a content address
+// exists to prevent.
+func TestAConvergedLoadRetiresNothingAgain(t *testing.T) {
+	r := &recorder{converged: true}
+	if _, err := sink.Load(context.Background(), r, graph(), sink.Options{}); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(r.retired) != 0 {
+		t.Fatalf("the store was handed %+v for a load already there", r.retired)
+	}
+}
+
+// A result that retires nothing does not call the store about it. §5c's
+// argument for Unread is the same one: a store must be able to tell "nothing
+// was retired" from "somebody retired something and it did not arrive", and an
+// empty call would be indistinguishable from the second.
+func TestAResultThatRetiresNothingSaysNothing(t *testing.T) {
+	r := &recorder{}
+	res := graph()
+	res.Supersessions = nil
+	res.Counts = res.Derivable()
+	if _, err := sink.Load(context.Background(), r, res, sink.Options{}); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if at(r.calls, "supersessions") >= 0 {
+		t.Fatalf("calls = %v, want no supersession call for a result that retires nothing", r.calls)
 	}
 }

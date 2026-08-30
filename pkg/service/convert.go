@@ -65,6 +65,7 @@ var conflictKinds = map[alchemy.ConflictKind]alchemyv1.ConflictKind{
 	alchemy.ConflictRelationDirection:  alchemyv1.ConflictKind_CONFLICT_KIND_RELATION_DIRECTION,
 	alchemy.ConflictContradiction:      alchemyv1.ConflictKind_CONFLICT_KIND_CONTRADICTION,
 	alchemy.ConflictRelationAttributes: alchemyv1.ConflictKind_CONFLICT_KIND_RELATION_ATTRIBUTES,
+	alchemy.ConflictCardinality:        alchemyv1.ConflictKind_CONFLICT_KIND_CARDINALITY,
 }
 
 var reviewKinds = map[review.Kind]alchemyv1.ReviewKind{
@@ -76,7 +77,8 @@ var reviewKinds = map[review.Kind]alchemyv1.ReviewKind{
 }
 
 var duplicateSignals = map[alchemy.DuplicateSignal]alchemyv1.DuplicateSignal{
-	alchemy.DuplicateNameAffix: alchemyv1.DuplicateSignal_DUPLICATE_SIGNAL_NAME_AFFIX,
+	alchemy.DuplicateNameAffix:           alchemyv1.DuplicateSignal_DUPLICATE_SIGNAL_NAME_AFFIX,
+	alchemy.DuplicateNameAcrossProducers: alchemyv1.DuplicateSignal_DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS,
 }
 
 var wireReviewKinds = invert(reviewKinds)
@@ -323,19 +325,20 @@ func resultToProto(r alchemy.Result) *alchemyv1.Result {
 		// The identity the result already carries. §4 makes the JSON the
 		// contract and §6 makes this a translation of it, so a field the
 		// document has and the message does not is a second contract.
-		Job:        r.Job,
-		Entities:   each(r.Entities, entityToProto),
-		Relations:  each(r.Relations, relationToProto),
-		Chunks:     each(r.Chunks, chunkToProto),
-		Vectors:    each(r.Vectors, vectorToProto),
-		Conflicts:  each(r.Conflicts, conflictToProto),
-		Violations: each(r.Violations, violationToProto),
-		Guesses:    each(r.Guesses, guessToProto),
-		Duplicates: each(r.Duplicates, duplicateToProto),
-		Counts:     countsToProto(r.Counts),
-		ModelCalls: each(r.ModelCalls, modelCallToProto),
-		Unread:     each(r.Unread, unreadToProto),
-		RuleSets:   each(r.RuleSets, ruleSetToProto),
+		Job:           r.Job,
+		Entities:      each(r.Entities, entityToProto),
+		Relations:     each(r.Relations, relationToProto),
+		Chunks:        each(r.Chunks, chunkToProto),
+		Vectors:       each(r.Vectors, vectorToProto),
+		Conflicts:     each(r.Conflicts, conflictToProto),
+		Violations:    each(r.Violations, violationToProto),
+		Guesses:       each(r.Guesses, guessToProto),
+		Duplicates:    each(r.Duplicates, duplicateToProto),
+		Counts:        countsToProto(r.Counts),
+		ModelCalls:    each(r.ModelCalls, modelCallToProto),
+		Unread:        each(r.Unread, unreadToProto),
+		RuleSets:      each(r.RuleSets, ruleSetToProto),
+		Supersessions: each(r.Supersessions, supersessionToProto),
 	}
 }
 
@@ -470,4 +473,19 @@ func eventToProto(state alchemy.JobState, e Event) *alchemyv1.JobEvent {
 		out.Conflict = conflictToProto(*e.Conflict)
 	}
 	return out
+}
+
+// supersessionToProto carries a statement that a record is over.
+//
+// It travels with its own provenance rather than borrowing the superseding
+// record's, because a reviewer may retire a record a model proposed: those are
+// two claims by two parties and a reader must be able to ask "who says so" of
+// each. See alchemy.Supersession.
+func supersessionToProto(s alchemy.Supersession) *alchemyv1.Supersession {
+	return &alchemyv1.Supersession{
+		Retires:    s.Retires,
+		By:         aboutToProto(s.By),
+		Reason:     s.Reason,
+		Provenance: provenanceToProto(s.Provenance),
+	}
 }

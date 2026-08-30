@@ -164,11 +164,17 @@ func (l *Loader) withDDLLock(ctx context.Context, f func(pgx.Tx) error) error {
 	return tx.Commit(ctx)
 }
 
-// provTables are the tables that carry provDDL. All three must receive every
-// provenance column or a COPY into the one that was missed fails at run time
-// with "extra data after last expected column" -- which is what the database
-// says when four lists that have to agree do not.
-var provTables = []string{"entities", "relations", "violations"}
+// provTables are the tables that carry provDDL. Every one of them must receive
+// every provenance column or a COPY into the one that was missed fails at run
+// time with "extra data after last expected column" -- which is what the
+// database says when four lists that have to agree do not.
+//
+// supersessions is on the list although it was created after provDDL already
+// had every column, so today its ALTERs do nothing. It is here for the next
+// provenance field rather than for the last one: a table left off is invisible
+// until somebody adds a column, and by then whoever adds it is looking at
+// provDDL rather than at this line.
+var provTables = []string{"entities", "relations", "violations", "supersessions"}
 
 // provAdded are the provenance columns added after this schema first shipped,
 // as ALTER fragments. A column added to provDDL from now on belongs here too.
@@ -304,6 +310,41 @@ func (l *Loader) ddl() []string {
 	right_prov jsonb NOT NULL,
 	PRIMARY KEY (load_id, seq)
 )`),
+		// Supersessions are a table rather than a jsonb blob on the load for
+		// the reason duplicates are: "this record is over" is a fact a reader
+		// needs beside the record at query time, joinable on entity_id, and a
+		// blob on the load row is something nobody joins to.
+		//
+		// It is beside the graph and never applied to it. Nothing here deletes
+		// the retired row, marks it, or hides it from a view -- alchemy states
+		// a retirement and does not perform one, and a store that quietly
+		// performed it would let one producer delete another producer's fact by
+		// naming it. What the buyer gets is the claim, with its provenance, and
+		// the decision about what to do with it.
+		l.q(`CREATE TABLE IF NOT EXISTS {s}.supersessions (
+	load_id text NOT NULL REFERENCES {s}.loads(id) ON DELETE CASCADE,
+	seq     int  NOT NULL,
+	-- retires is an Entity.ID or a Relation.Identity, and there is no foreign
+	-- key on it on purpose: the record being retired is usually in the store
+	-- from a load that finished last month, or in no store this database has.
+	-- A constraint here would refuse the correction for naming the very thing
+	-- it exists to name.
+	retires text NOT NULL,
+	reason  text NOT NULL,
+	-- The whole of the Ref that replaces it: which kind of record, and for an
+	-- edge the four fields its identity is a function of.
+	by_kind text NOT NULL,
+	by_id   text NOT NULL,
+	by_type text NOT NULL,
+	by_from text NOT NULL,
+	by_to   text NOT NULL,
+	by_key  text NOT NULL,` + provDDL + `,
+	PRIMARY KEY (load_id, seq)
+)`),
+		// The index a reader actually uses: "is anything in this store saying
+		// this record is over".
+		l.q(`CREATE INDEX IF NOT EXISTS supersessions_retires ON {s}.supersessions (load_id, retires)`),
+
 		l.q(`CREATE INDEX IF NOT EXISTS duplicates_left ON {s}.duplicates (load_id, left_id)`),
 		l.q(`CREATE INDEX IF NOT EXISTS duplicates_right ON {s}.duplicates (load_id, right_id)`),
 
@@ -344,6 +385,9 @@ func (l *Loader) ddl() []string {
 	WHERE l.state = '` + stateComplete + `'`),
 		l.q(`CREATE OR REPLACE VIEW {s}.loaded_violations AS
 	SELECT v.* FROM {s}.violations v JOIN {s}.loads l ON l.id = v.load_id
+	WHERE l.state = '` + stateComplete + `'`),
+		l.q(`CREATE OR REPLACE VIEW {s}.loaded_supersessions AS
+	SELECT s.* FROM {s}.supersessions s JOIN {s}.loads l ON l.id = s.load_id
 	WHERE l.state = '` + stateComplete + `'`),
 	}...)
 	return out

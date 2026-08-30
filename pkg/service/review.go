@@ -175,6 +175,32 @@ func (s *Server) resolve(id string, r *jobRun) error {
 		return invalid("%s", err)
 	}
 
+	// A decision edits the graph, and the findings were computed before any
+	// decision existed; see recheck. Anything new it turns up is a question
+	// nobody has been asked, so it is added to the pending result and queued
+	// from there.
+	//
+	// Onto the PENDING result and not onto the decided one, which is the whole
+	// subtlety. review.Apply is called with the result the queue was built
+	// from and refuses an item whose index it cannot resolve — "Apply needs
+	// the result the queue was built from" is its own sentence, and it is
+	// right: an item built from the merged graph and applied against the
+	// unmerged one points at a conflict that is not there. So the pending
+	// result grows the new questions, the queue is rebuilt from it, and the
+	// two stay one document. Nothing else about it changes: the merge itself
+	// lives in the decisions, which are re-applied from scratch every time, so
+	// this stays the idempotent replay it has always been.
+	if grown, added := s.discovered(r, res, out); added {
+		res = grown
+		r.setResult(res, r.recorded())
+		items = review.Queue(reportOf(res), res, r.spec.Review)
+		r.hub.offer(items...)
+		out, rules, err = review.Apply(res, items, decisions)
+		if err != nil {
+			return invalid("%s", err)
+		}
+	}
+
 	if len(out.Held()) > 0 {
 		return nil // §7.3: a conflict nobody has put their name to still holds it.
 	}

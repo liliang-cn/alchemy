@@ -104,10 +104,26 @@ func (s *Server) finished(ctx context.Context, id string) (alchemy.Result, error
 	switch j.State {
 	case alchemy.JobSucceeded:
 	case alchemy.JobNeedsReview:
-		res, _ := r.pending()
+		// NEEDS_REVIEW has two causes and the refusal used to name only one.
+		// §7.3's conflict is the one a caller cannot opt out of; review mode
+		// is the one they asked for. A job whose conflicts are all answered
+		// and whose queue still has open questions was being refused with
+		// "0 conflict(s) are unanswered", which is a refusal whose stated
+		// reason contradicts the refusal — the sentence a person reads at
+		// three in the morning when they cannot work out why a job will not
+		// finish.
+		if n := unanswered(r); n > 0 {
+			return alchemy.Result{}, wrongState(
+				"job %s is held for a person: %d conflict(s) are unanswered, and a graph that "+
+					"contradicts itself is not a finished graph. GET /v1/jobs/%s/findings lists "+
+					"them; answer them there or on the Review stream",
+				id, n, id)
+		}
 		return alchemy.Result{}, wrongState(
-			"job %s is held for a person: %d conflict(s) are unanswered, and a graph that contradicts itself is not a finished graph. Answer them on the Review stream",
-			id, len(res.Held()))
+			"job %s asked for review and %d item(s) in its queue are unanswered. No conflict is "+
+				"holding it — every disagreement has been answered — so this is the mode the "+
+				"caller chose, not §7.3's refusal. GET /v1/jobs/%s/findings lists what is left",
+			id, openItems(r), id)
 	default:
 		return alchemy.Result{}, wrongState("job %s is %s, so it has no result", id, j.State)
 	}

@@ -23,8 +23,8 @@ type Filter struct {
 	// for them — merging two runs is the thing it refuses to do — so this is
 	// how they choose.
 	Loads []string
-	// Kinds restricts to entities, relations, chunks, violations, duplicates
-	// or loads. Empty means all of them.
+	// Kinds restricts to entities, relations, chunks, violations, duplicates,
+	// supersessions or loads. Empty means all of them.
 	Kinds []string
 	// Type is an ontology type: an entity's type or a relation's type.
 	Type string

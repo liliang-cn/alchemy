@@ -90,6 +90,11 @@ type tx struct {
 	rep   *Report
 
 	findings sink.Findings
+	// retired is what this result says is over. It accumulates like the
+	// findings do and for the same reason -- the completion document is
+	// written once, at the end -- and it is a separate field rather than one
+	// more key in the findings blob because it is not a finding.
+	retired []alchemy.Supersession
 }
 
 // Converged is true only for a run that is already there and already finished.
@@ -138,6 +143,21 @@ func (t *tx) Findings(_ context.Context, f sink.Findings) error {
 	return nil
 }
 
+// Supersessions files what the result says is over. It rides on the run's
+// completion document beside the findings and not among them, and nothing acts
+// on it: no node is deleted, no edge is detached, and the record named in
+// Retires is exactly as the run that wrote it left it.
+//
+// A document rather than a graph node, for the reason the run marker is one: a
+// CortexDB graph node needs a vector, and the only vector this connector could
+// put on a retirement is one it made up. Fabricating an embedding to hold
+// bookkeeping is what the rest of this package refuses to do even for real
+// text.
+func (t *tx) Supersessions(_ context.Context, batch []alchemy.Supersession) error {
+	t.retired = append(t.retired, batch...)
+	return nil
+}
+
 // Commit is where this store's graph is actually written, for the reason the
 // type comment gives: the nodes need the chunk ids and the edges need every
 // member of their group, and neither is knowable until the stream has ended.
@@ -164,7 +184,8 @@ func (t *tx) Commit(ctx context.Context, s sink.Summary) (sink.Report, error) {
 	if err := t.l.writeRelations(ctx, t.p, t.written, t.rep); err != nil {
 		return sink.Report{}, err
 	}
-	if err := t.l.completeRun(ctx, t.p.digest, s, t.findings, t.rep); err != nil {
+	t.rep.Supersessions = len(t.retired)
+	if err := t.l.completeRun(ctx, t.p.digest, s, t.findings, t.retired, t.rep); err != nil {
 		return sink.Report{}, err
 	}
 	return sink.Report{

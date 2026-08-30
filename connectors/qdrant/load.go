@@ -47,6 +47,12 @@ type Loaded struct {
 	Vectors    int
 	Violations int
 	Duplicates int
+	// Supersessions is how many retirements were written as points beside the
+	// graph. It counts claims stored and never points removed: this connector
+	// records what a result says is over and deletes nothing, so a load
+	// reporting 12 holds exactly as many entity and relation points as it
+	// would have without them.
+	Supersessions int
 	// Points is how many points were written, which is the number that makes
 	// this store's bill legible; Batches is how many requests it took, which
 	// is what an operator wants when one of them failed.
@@ -181,15 +187,17 @@ func (l *Loader) Load(ctx context.Context, res alchemy.Result, opts LoadOptions)
 	// up when it insists a failed job still reports what it spent.
 	out := Loaded{
 		ID: rep.Load, Fingerprint: rep.Digest, Already: rep.Converged, Dimension: dim,
-		Entities:   len(res.Entities),
-		Relations:  len(res.Relations),
-		Chunks:     len(res.Chunks),
-		Vectors:    len(res.Vectors),
-		Violations: len(res.Violations),
-		Duplicates: len(res.Duplicates),
+		Entities:      len(res.Entities),
+		Relations:     len(res.Relations),
+		Chunks:        len(res.Chunks),
+		Vectors:       len(res.Vectors),
+		Violations:    len(res.Violations),
+		Duplicates:    len(res.Duplicates),
+		Supersessions: len(res.Supersessions),
 		// Points is what actually landed, which is the driver's count of what
 		// it handed over rather than the result's of what it holds.
-		Points:  rep.Entities + rep.Relations + rep.Chunks + rep.Violations + rep.Duplicates,
+		Points: rep.Entities + rep.Relations + rep.Chunks +
+			rep.Violations + rep.Duplicates + rep.Supersessions,
 		Batches: rep.Batches,
 	}
 	for _, loss := range rep.Lost {
@@ -320,7 +328,8 @@ func (l *Loader) complete(ctx context.Context, t *tx, s sink.Summary) error {
 	p[keyFinishedAt] = time.Now().UTC().Format(time.RFC3339Nano)
 	p[keyDimension] = t.dim
 	p[keyLost] = lost(t.dim, t.rep.Chunks, t.rep.Vectors)
-	p[keyPoints] = t.rep.Entities + t.rep.Relations + t.rep.Chunks + t.rep.Violations + t.rep.Duplicates + 1
+	p[keyPoints] = t.rep.Entities + t.rep.Relations + t.rep.Chunks +
+		t.rep.Violations + t.rep.Duplicates + t.rep.Supersessions + 1
 	// §5's obligation travels with the graph: "every returned graph is
 	// accompanied by the numbers needed to distrust it". A store that kept the
 	// records and dropped the counts kept the half that looks good.

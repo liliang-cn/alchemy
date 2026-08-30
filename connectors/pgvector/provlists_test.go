@@ -102,3 +102,63 @@ func TestProvenanceSurvivesTheRoundTripFieldForField(t *testing.T) {
 		t.Errorf("provenance did not survive the round trip\n got %+v\nwant %+v", got, want)
 	}
 }
+
+// TestTheSupersessionColumnListMatchesTheTableItCopiesInto reads the columns
+// out of the CREATE TABLE and compares them with the list COPY names.
+//
+// It is the same failure the test above exists for, caught one step earlier.
+// A COPY whose column list is shorter than the row it is handed fails at run
+// time with PostgreSQL's "extra data after last expected column", and a column
+// list shorter than the *table* fails at no time at all — the missing column
+// silently takes its default on every row ever written. Neither is a compile
+// error and neither shows up in a unit test that does not talk to a database,
+// which is exactly how By and At reached three of four lists and shipped.
+//
+// The comparison is on names and order together, because two lists of equal
+// length in the wrong order load cleanly and mean something else.
+func TestTheSupersessionColumnListMatchesTheTableItCopiesInto(t *testing.T) {
+	l := &Loader{schema: "alchemy"}
+	var ddl string
+	for _, stmt := range l.ddl() {
+		if strings.Contains(stmt, "CREATE TABLE IF NOT EXISTS alchemy.supersessions") {
+			ddl = stmt
+		}
+	}
+	if ddl == "" {
+		t.Fatal("no supersessions table in the DDL; nothing a store writes may be missing from it")
+	}
+
+	want := columnsOf(ddl)
+	got := with(supersessionCols, provNames)
+	if len(got) != len(want) {
+		t.Fatalf("COPY names %d columns and the table has %d\n copy: %v\ntable: %v", len(got), len(want), got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("column %d is %q in the COPY list and %q in the table; a row written through this "+
+				"loads cleanly and means something else", i, got[i], want[i])
+		}
+	}
+	// And the values agree with the names, which is the half a column list
+	// cannot check on its own.
+	if n := len(with(supersessionRow("ld", 0, alchemy.Supersession{}), provRow(alchemy.Provenance{}))); n != len(got) {
+		t.Fatalf("the row writes %d values into %d columns", n, len(got))
+	}
+}
+
+// columnsOf reads the column names out of a CREATE TABLE, in order. It is
+// deliberately naive — one column per line, name first — because that is the
+// shape every table in schema.go is written in, and a parser clever enough to
+// handle anything else would be able to agree with a mistake.
+func columnsOf(ddl string) []string {
+	var out []string
+	for _, line := range strings.Split(ddl, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "--") || strings.HasPrefix(line, "CREATE") ||
+			strings.HasPrefix(line, "PRIMARY KEY") || line == ")" {
+			continue
+		}
+		out = append(out, strings.Fields(line)[0])
+	}
+	return out
+}

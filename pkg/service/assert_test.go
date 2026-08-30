@@ -305,3 +305,81 @@ func TestAnAssertionThatWouldLoseARecordIsRefused(t *testing.T) {
 		t.Fatalf("code = %v, want InvalidArgument (err %v)", got, err)
 	}
 }
+
+// A correction states two facts and only one of them is a new edge. Until
+// Result.supersessions existed the second had nowhere to go: the assertion
+// arrived beside the record it was correcting and the graph reported itself
+// clean while holding both. Measured, on the evaluation corpus — one profile
+// saying Ada is CTO and one correction saying Bruno is, in a single job, zero
+// conflicts.
+func TestAnAssertionCanSayWhatItReplaces(t *testing.T) {
+	cli := dial(t, harness{})
+	res := asserted(t, cli, &alchemyv1.AssertRequest{
+		Entities:  []*alchemyv1.Entity{acme(), emea()},
+		Relations: []*alchemyv1.Relation{{From: "customer:acme", To: "region:emea", Type: "OPERATES_IN"}},
+		By:        "liliang",
+		Supersedes: []*alchemyv1.Supersedes{{
+			Retires: "d41d8cd98f00b204e9800998ecf8427e",
+			Reason:  "Acme moved out of APAC in June; the old edge is last year's org chart",
+		}},
+	})
+
+	sups := res.GetSupersessions()
+	if len(sups) != 1 {
+		t.Fatalf("the result carries %d supersessions, want 1", len(sups))
+	}
+	s := sups[0]
+	if s.GetRetires() != "d41d8cd98f00b204e9800998ecf8427e" {
+		t.Errorf("retires = %q", s.GetRetires())
+	}
+	if s.GetReason() == "" {
+		t.Error("the reason did not survive; a correction nobody explained cannot be argued with")
+	}
+	// The supersession carries its own provenance, so a reader can ask "who
+	// says this is over" and get a person rather than the record's producer.
+	if got := s.GetProvenance().GetProducer(); got != alchemyv1.Producer_PRODUCER_HUMAN {
+		t.Errorf("the supersession's producer = %v, want PRODUCER_HUMAN", got)
+	}
+	if got := s.GetProvenance().GetBy(); got != "liliang" {
+		t.Errorf("the supersession names %q as its author", got)
+	}
+	// It points back at the record that replaces the retired one, so the two
+	// halves of the correction are joined rather than merely adjacent.
+	if by := s.GetBy(); by.GetFrom() != "customer:acme" || by.GetType() != "OPERATES_IN" {
+		t.Errorf("the supersession's By is %+v, want the asserted edge", by)
+	}
+}
+
+// The record being replaced is normally in a store, from a run that finished
+// last month. Refusing an assertion because this result does not contain what
+// it retires would make the field useless for the only case it exists for.
+func TestRetiringSomethingThisResultDoesNotContainIsNotAnError(t *testing.T) {
+	cli := dial(t, harness{})
+	res := asserted(t, cli, &alchemyv1.AssertRequest{
+		Entities: []*alchemyv1.Entity{acme()},
+		By:       "liliang",
+		Supersedes: []*alchemyv1.Supersedes{{
+			Retires: "customer:acme-old",
+			Reason:  "merged into the Acme record after the acquisition closed",
+		}},
+	})
+	if len(res.GetSupersessions()) != 1 {
+		t.Fatalf("the claim was dropped; a supersession about a record in somebody else's store "+
+			"is the normal case, not an error (%d carried)", len(res.GetSupersessions()))
+	}
+}
+
+// §5c's argument about rules, applied to a correction. The one moment it costs
+// nothing to ask for the sentence is while the person who could write it is
+// still on the call.
+func TestASupersessionWithNoReasonIsRefused(t *testing.T) {
+	cli := dial(t, harness{})
+	_, err := cli.Assert(authed(context.Background()), &alchemyv1.AssertRequest{
+		Entities:   []*alchemyv1.Entity{acme()},
+		By:         "liliang",
+		Supersedes: []*alchemyv1.Supersedes{{Retires: "customer:acme-old"}},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument (err %v)", status.Code(err), err)
+	}
+}

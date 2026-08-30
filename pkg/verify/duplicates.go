@@ -21,7 +21,7 @@ import (
 // nodes intact and a person or a written rule decides. §5b: a node that
 // silently absorbed another explains nothing.
 //
-// The one signal, and what it will wrongly join:
+// The signals, and what each will wrongly join:
 //
 //	name_affix — under one type, one folded name is the other with whole words
 //	added at the front or the back. It fires on "document"/"document package"
@@ -31,8 +31,20 @@ import (
 //	something narrower — "language"/"language model", "Ada"/"Ada Lovelace",
 //	"order"/"order line" — which is exactly why it reports rather than merges.
 //
+//	name_across_producers — under one type, one folded name under two ids that
+//	two different producers made. It is the narrow half of the third rejected
+//	signal below, and the producers are what narrows it: an extractor's two
+//	spellings are name_affix's business and a schema's two same-named tables
+//	are nobody's, so what is left is an id somebody else chose meeting an id
+//	this pipeline minted. It will wrongly join two things that two sources
+//	happened to name alike — two customers' files each holding an "Acme" is
+//	one name and two companies — which is again why it reports rather than
+//	merges.
+//
 // Three signals were considered and rejected, and the reasons are worth
-// keeping because each looks obviously right until it is aimed at real output:
+// keeping because each looks obviously right until it is aimed at real output.
+// The third is rejected in the shape it was proposed in and implemented in a
+// narrower one, and the argument is what draws the line between them:
 //
 //   - Identical edge neighbourhood — same type, same edges to the same targets.
 //     Under a four-type ontology, siblings all have the same neighbourhood: a
@@ -40,19 +52,34 @@ import (
 //     PART_OF one System and nothing else are indistinguishable to it, and it
 //     would propose merging the two things a reader most needs kept apart.
 //     Every corpus with a taxonomy in it is full of them.
+//
 //   - Identical attributes — same type, same non-empty attribute map. Prose
 //     extraction produces sparse, repetitive attributes: every entity out of
 //     one section carries {"section": "2"}, so this joins a section rather than
 //     a thing. It also finds none of the real cases, which came from different
 //     chunks that stated different things.
-//   - Same name under one type with different ids. Two ids for one folded name
-//     is the strongest evidence there is, and it fires on nothing an extractor
-//     can produce — entityID is a function of type and name, so equal names are
-//     already one node — while firing on exactly what a schema deterministically
-//     stated: public.users and audit.users are two tables a CREATE TABLE
-//     declared, both named "users", and asking a person to confirm they are two
-//     is §5c's last row, the one it says teaches people to click Approve
-//     without reading.
+//
+//   - Same name under one type with different ids, whoever made them. Two ids
+//     for one folded name is the strongest evidence there is, and half of the
+//     argument against it has held up and half has not.
+//
+//     The half that holds is the one that rejects it: it fires on exactly what
+//     a schema deterministically stated — public.users and audit.users are two
+//     tables a CREATE TABLE declared, both named "users" — and asking a person
+//     to confirm they are two is §5c's last row, the one it says teaches people
+//     to click Approve without reading. Nothing about that has changed and this
+//     file must never ask it.
+//
+//     The half that does not is "it fires on nothing an extractor can produce,
+//     because entityID is a function of type and name". That is true of the ids
+//     this pipeline mints and false of the ids a source supplies: a graph
+//     import brings the document's own ids and an assertion brings the
+//     asserter's, so one company arrives as `org:northgate` from one and
+//     `organization:northgate` from the other, and no signal in this file could
+//     see it. Requiring two producers keeps both halves — the two `users`
+//     tables came from one DDL reader and do not fire, and neither do two
+//     spellings out of one per-chunk extractor, which is what name_affix is
+//     for. See alchemy.DuplicateNameAcrossProducers.
 //
 // Also rejected: any measure of lexical similarity — edit distance, stemming,
 // a shared prefix of characters rather than words. "gpt-4" and "gpt-3" are one
@@ -101,6 +128,28 @@ func duplicates(entities []alchemy.Entity) []alchemy.Duplicate {
 	said := make(map[string]bool)
 	for _, e := range entities {
 		typ := foldKey(e.Type)
+		// The exact name is looked up in the same map the affixes are, because
+		// the two signals differ in what they compare and not in how they find
+		// it: one folding, one index, one first-writer-wins rule. A second fold
+		// written for this would be the copy that drifts.
+		//
+		// A name nobody stated is not a name two nodes share. The affix side
+		// never had to say so — a nameless entity has no affixes to look up —
+		// but an equality test reads two blanks as a match and would ask about
+		// every pair of unnamed nodes two producers happened to type the same.
+		if name := foldKey(e.Name); name != "" {
+			// Two ids under one name are two nodes only if two producers made
+			// them: one producer stating a name twice is either a schema that
+			// meant two things — public.users and audit.users — or a chunked
+			// extractor, which is name_affix's business below.
+			if j, ok := first[typ+"\x00"+name]; ok {
+				held := entities[j]
+				if held.ID != e.ID && held.Provenance.Producer != e.Provenance.Producer && !said[held.ID+"\x00"+e.ID] {
+					said[held.ID+"\x00"+e.ID] = true
+					out = append(out, sameName(held, e))
+				}
+			}
+		}
 		for _, stem := range affixes(foldKey(e.Name)) {
 			j, ok := first[typ+"\x00"+stem]
 			if !ok {
@@ -172,6 +221,22 @@ func candidate(short, long alchemy.Entity, stem string) alchemy.Duplicate {
 			addedWords(foldKey(long.Name), stem)),
 		Left:  side(short),
 		Right: side(long),
+	}
+}
+
+// sameName renders the pair the way the person who has to answer it will read
+// it: one name, one type, two ids, and which producer chose each — because the
+// producers are the whole of why this is a question, and knowing that one id
+// came out of somebody else's graph is what tells a reviewer which of the two
+// the rest of their corpus points at.
+func sameName(held, later alchemy.Entity) alchemy.Duplicate {
+	return alchemy.Duplicate{
+		Signal:  alchemy.DuplicateNameAcrossProducers,
+		Subject: held.ID + " ~ " + later.ID,
+		Detail: fmt.Sprintf("%s %q is %q per %s and %q per %s; one name under one type with two ids because two producers made them, and nothing joined them",
+			held.Type, held.Name, held.ID, where(held.Provenance), later.ID, where(later.Provenance)),
+		Left:  side(held),
+		Right: side(later),
 	}
 }
 

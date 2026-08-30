@@ -34,6 +34,13 @@ const (
 	kindViolation kind = "violation"
 	// kindDuplicate is a pair of nodes that may be one node.
 	kindDuplicate kind = "duplicate"
+	// kindSupersession is a statement that some record is over, and who says
+	// so. It is its own kind rather than a finding because it is not one: a
+	// violation says a record is wrong and this says a record -- usually one
+	// that is not in this result at all -- is finished. A reader filtering to
+	// the findings to decide how far to trust an import must not get
+	// corrections back with them.
+	kindSupersession kind = "supersession"
 	// kindLoad is the marker point: one per load, carrying the counts, the
 	// findings that are read whole, and the flag that says whether the load
 	// finished. It is a point rather than a collection alias or a name
@@ -160,6 +167,17 @@ const (
 	keyLeft          = "left"
 	keyRight         = "right"
 
+	// The retirement's own keys. keyRetires holds an Entity.ID or a
+	// Relation.Identity, and it deliberately has no payload index: the rule
+	// payloadIndexes states is that a field is indexed when a query in this
+	// package filters on it, and Filter has no question about what is retired.
+	// Reading the retirements of a load is a Kinds filter, which is indexed,
+	// and adding an index for a filter nobody can write would be memory and
+	// write amplification bought for nothing.
+	keyRetires = "retires"
+	keyReason  = "reason"
+	keyBy      = "by"
+
 	keyProvSource        = "prov_source"
 	keyProvChunk         = "prov_chunk"
 	keyProvProducer      = "prov_producer"
@@ -259,6 +277,14 @@ func readProvenance(p map[string]any) alchemy.Provenance {
 		ReviewedBy: str(p[keyProvReviewedBy]),
 		RuleSet:    str(p[keyProvRuleSet]),
 		RuledBy:    str(p[keyProvRuledBy]),
+		// The asserter and the date. They were written by provenancePayload and
+		// not read here, so every record came back out of this store with the
+		// producer intact and the person who stated it gone -- §5b's guarantee
+		// inverted, silently, on the read side only. It matters most to a
+		// retirement, whose whole worth six months later is being able to name
+		// who said the old answer was over.
+		By: str(p[keyProvBy]),
+		At: str(p[keyProvAt]),
 	}
 }
 

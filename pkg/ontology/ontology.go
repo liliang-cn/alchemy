@@ -90,6 +90,35 @@ type RelationType struct {
 	// orders is still a question for a person, and a permissive default would
 	// have quietly retired it for every ontology in production.
 	BothWays bool `json:"both_ways,omitempty"`
+	// AtMostOneIn says a node may be on the `to` end of at most one edge of
+	// this type, and AtMostOneOut says the same for the `from` end.
+	//
+	// They are how an ontology says a fact can go out of date. Without them a
+	// corpus that learns the CTO is now somebody else does not disagree with
+	// itself: it holds two CHIEF_TECHNOLOGY_OFFICER_OF edges into one company
+	// and reports zero conflicts, because two edges of one type between
+	// different pairs are two facts and nothing here could say otherwise. That
+	// is measured, not hypothetical — one company profile and one correction in
+	// a single job produced exactly that graph, clean.
+	//
+	// The asymmetry is real and both directions are needed. "A company has one
+	// CTO" constrains the `to` end; "a person is CTO of one company" constrains
+	// the `from` end; a type may want either, both or neither, and PART_OF
+	// wants AtMostOneOut while MANAGES wants nothing at all.
+	//
+	// What they do NOT license is picking a winner. A second edge is
+	// ConflictCardinality, which is §7.3's refusal — the job stops and a person
+	// decides — and not a silent replacement. A verifier that dropped the older
+	// edge would be choosing between two sources on the strength of arrival
+	// order, which is the inference wearing a producer's badge that §2.1 is
+	// about; and it would be doing it to the one kind of fact where the older
+	// record is sometimes the right one, because a correction can be wrong.
+	//
+	// False is the default and it is the honest one. Every ontology written
+	// before these existed says nothing, and reading silence as "many are
+	// allowed" leaves those corpora exactly as they were.
+	AtMostOneIn  bool `json:"at_most_one_in,omitempty"`
+	AtMostOneOut bool `json:"at_most_one_out,omitempty"`
 }
 
 // Vocabulary is one part's closed list of types.

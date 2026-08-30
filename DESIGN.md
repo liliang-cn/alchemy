@@ -298,6 +298,45 @@ the chunk that produced it, so the failure is visible and locatable.
 This is the mechanism from §2.1 stated as a product guarantee: the graph is
 never more permissive than the ontology you declared.
 
+### A fact has to be able to go out of date
+
+The vocabulary says which edges may exist. Until it could also say how many, a
+corpus could not disagree with itself about a fact that changed hands.
+
+Measured, on this design's own evaluation corpus: a company profile saying
+"Ada is Chief Technology Officer" and a correction saying Bruno is, in one job,
+produced a graph holding both — `conflicts: 0`, job succeeded, nothing to see.
+Two edges of one type between different pairs are two facts, and nothing in the
+ontology could say a company has one CTO.
+
+So a relation type may declare `at_most_one_in` or `at_most_one_out`, and a
+second edge at the constrained end of a node is `cardinality` — the only
+conflict kind that compares two claims about a *node* rather than about one
+edge. It is a conflict and not a repair: §7.3 stops the job and a person
+decides, because choosing the later record would be picking a winner on arrival
+order, and a correction can itself be wrong.
+
+Two more things were missing with it, and all three are one problem.
+
+**Two producers can name one thing differently.** `verify` declined a
+same-name-different-id duplicate signal on the grounds that "entityID is a
+function of type and name, so equal names are already one node". That is true
+of ids this pipeline mints and false of ids a source supplies: a graph import
+brings the document's, an assertion brings the asserter's, and `org:northgate`
+never met `organization:northgate`. The signal now fires when the two producers
+differ, which leaves the case the original argument was protecting —
+`public.users` and `audit.users`, two tables one schema declared — exactly as
+it was.
+
+**A correction states two facts and only one of them is an edge.** That Bruno
+holds the office, and that Ada no longer does. `Result.supersessions` is where
+the second one goes: what is retired, what replaces it, why, and who says so.
+Alchemy never acts on it — §4 means it holds no graph, and a producer that
+could delete another producer's fact by naming it would be §2.1 with write
+access — but the statement survives the pipeline, so a store can act on it
+deliberately and a reader months later can see that somebody said the old
+answer was over, and name them.
+
 ### What this does not promise
 
 It does not promise the graph is *correct*. A model can produce a

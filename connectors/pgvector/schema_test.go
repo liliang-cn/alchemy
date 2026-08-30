@@ -51,3 +51,41 @@ func TestMigrateSaysWhichSchemaIsMissing(t *testing.T) {
 		t.Errorf("err = %v; it has to name the schema and what to do about it", err)
 	}
 }
+
+// TestEveryTableALoadOwnsIsOnTheDeletePath derives the child tables from the
+// DDL and holds childTables to them.
+//
+// A table left off that list is not an error anywhere. Delete and Sweep walk
+// the list, so its rows survive the load they belong to; the load row itself
+// then fails its own DELETE on the foreign key, or -- for a buyer who deletes
+// by hand and gets the ON DELETE CASCADE instead -- succeeds while the
+// connector's own path does not. Either way the first symptom is a sweep that
+// stopped working, months later, on somebody's disk usage graph.
+//
+// Derived from the DDL rather than written out twice, because a second hand-
+// written list is the thing that went wrong the first time.
+func TestEveryTableALoadOwnsIsOnTheDeletePath(t *testing.T) {
+	l := &Loader{schema: "alchemy"}
+	on := map[string]bool{}
+	for _, table := range childTables {
+		on[table] = true
+	}
+	for _, stmt := range l.ddl() {
+		name, ok := strings.CutPrefix(firstLine(stmt), "CREATE TABLE IF NOT EXISTS alchemy.")
+		if !ok {
+			continue
+		}
+		name = strings.TrimSuffix(name, " (")
+		if name == "loads" {
+			continue // the row the children reference, deleted last and by name
+		}
+		if !on[name] {
+			t.Errorf("%q references loads(id) and is not in childTables, so Delete and Sweep leave its rows "+
+				"behind and the load they belong to cannot be deleted at all", name)
+		}
+		delete(on, name)
+	}
+	for name := range on {
+		t.Errorf("childTables names %q and the DDL creates no such table", name)
+	}
+}

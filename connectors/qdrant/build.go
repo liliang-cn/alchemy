@@ -169,10 +169,66 @@ func duplicatePoints(loadID, fp string, batch []alchemy.Duplicate) batchOf {
 	return out
 }
 
+// supersessionPoints builds the claims this result makes about what is over.
+//
+// They are points beside the graph and nothing else happens. No entity point is
+// deleted, no relation point is rewritten, and no payload of the retired record
+// changes: alchemy states a retirement and does not perform one, and a store
+// that performed it would let one producer remove another producer's fact by
+// naming it. What the buyer gets is the claim, filterable on what it retires,
+// and the decision about what to do with it.
+//
+// keyRetires may name a record that is in no load in this collection, which is
+// the ordinary case rather than a defect -- the record being retired is usually
+// in a load that finished last month. There is nothing to check and nothing to
+// refuse: the id is stored as it was given, and a reader who filters on it and
+// finds nothing has learned something true.
+func supersessionPoints(loadID, fp string, at int, batch []alchemy.Supersession) batchOf {
+	out := batchOf{kind: kindSupersession, points: make([]point, 0, len(batch))}
+	for i, s := range batch {
+		p := base(loadID, kindSupersession)
+		p[keyRetires] = s.Retires
+		p[keyReason] = s.Reason
+		p[keyBy] = ref(s.By)
+		// The supersession's own provenance and not the superseding record's: a
+		// reviewer may retire a record a model proposed, and those are two
+		// claims by two parties.
+		provenancePayload(s.Provenance, p)
+		out.points = append(out.points, point{
+			// The position is in the key for the reason it is in a violation's:
+			// one record can be retired twice in one result, by two people for
+			// two reasons, and collapsing them onto one point would lose the
+			// second person entirely.
+			ID: pointID(fp, kindSupersession, fmt.Sprintf("%d\x00%s", at+i, s.Retires)), Vector: vectorless(), Payload: p,
+		})
+	}
+	return out
+}
+
 // base is what every point of every kind carries: what it is, and which import
 // it belongs to.
 func base(loadID string, k kind) map[string]any {
 	return map[string]any{keyKind: string(k), keyLoad: loadID}
+}
+
+// ref renders an alchemy.Ref, nested for the reason side() is: nobody filters
+// on which record replaces a retired one, they read it once they have the
+// claim in front of them. Every field goes in, because a Ref naming a relation
+// carries the four its identity is a function of and a reader in a store with
+// no joins cannot follow an id to go and look.
+func ref(r alchemy.Ref) map[string]any {
+	return map[string]any{
+		keyKind: string(r.Kind), keyEntityID: r.ID, keyType: r.Type,
+		keyRelFrom: r.From, keyRelTo: r.To, keyRelKey: r.Key,
+	}
+}
+
+func readRef(v any) alchemy.Ref {
+	m, _ := v.(map[string]any)
+	return alchemy.Ref{
+		Kind: alchemy.RefKind(str(m[keyKind])), ID: str(m[keyEntityID]), Type: str(m[keyType]),
+		From: str(m[keyRelFrom]), To: str(m[keyRelTo]), Key: str(m[keyRelKey]),
+	}
 }
 
 // side renders one half of a Duplicate, provenance and all. It is nested

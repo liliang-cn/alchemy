@@ -149,3 +149,75 @@ func TestAbsentAttributesStayAbsent(t *testing.T) {
 		}
 	}
 }
+
+// A retirement is written, is attributable, and takes nothing with it.
+//
+// The last clause is the one worth a database. alchemy states that a record is
+// over and never performs the retirement, and this store is one DELETE away
+// from performing it — so what is asserted here is that the entity named in
+// `retires` is still in the table afterwards, with its own provenance, exactly
+// as it was. The other assertion is the case the field exists for: a retirement
+// naming a record no load in this database has ever held is written like any
+// other, because the thing being retired is usually in a load that finished
+// last month.
+func TestARetirementIsRecordedAndTakesNothingWithIt(t *testing.T) {
+	f := newFixture(t)
+	l := f.open(t, Config{})
+
+	res := smallResult(4)
+	who := alchemy.Provenance{
+		Source: "correction.md", Chunk: -1, Producer: alchemy.ProducerHuman,
+		By: "ana@example.com", At: "2026-03-01T00:00:00Z",
+	}
+	res.Supersessions = []alchemy.Supersession{
+		{
+			Retires: "CortexDB", By: alchemy.Ref{Kind: alchemy.RefEntity, ID: "SuperAI", Type: "Service"},
+			Reason: "the store was replaced", Provenance: who,
+		},
+		{
+			Retires: "e-from-last-month",
+			By:      alchemy.Ref{Kind: alchemy.RefRelation, From: "SuperAI", To: "CortexDB", Type: "USES", Key: "fk_uses"},
+			Reason:  "the old edge named the wrong endpoint", Provenance: who,
+		},
+	}
+
+	out, err := l.Load(context.Background(), res, LoadOptions{ID: "ld-1"})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if out.Supersessions != 2 {
+		t.Fatalf("Loaded.Supersessions = %d, want both", out.Supersessions)
+	}
+	if n := f.count(t, "supersessions"); n != 2 {
+		t.Fatalf("%d rows in supersessions, want 2", n)
+	}
+
+	// The entity the first one retires is untouched: same row, same
+	// provenance. Nothing here applies a correction.
+	var producer string
+	f.scalar(t, &producer, "SELECT prov_producer FROM {s}.entities WHERE load_id='ld-1' AND entity_id='CortexDB'")
+	if producer != string(alchemy.ProducerLLMExtract) {
+		t.Fatalf("the retired entity reads %q, want it exactly as it was: a store that acted on a retirement "+
+			"would let one producer delete another producer's fact by naming it", producer)
+	}
+	if n := f.count(t, "entities"); n != 2 {
+		t.Fatalf("%d entities after two retirements, want 2", n)
+	}
+
+	// The claim itself, through the view a reader uses, with the person who
+	// made it — which is the whole of what a retirement is worth six months
+	// later.
+	var retires, byID, asserter string
+	f.scalar(t, &retires, "SELECT retires FROM {s}.loaded_supersessions WHERE load_id='ld-1' AND seq=1")
+	f.scalar(t, &byID, "SELECT by_key FROM {s}.loaded_supersessions WHERE load_id='ld-1' AND seq=1")
+	f.scalar(t, &asserter, "SELECT prov_by FROM {s}.loaded_supersessions WHERE load_id='ld-1' AND seq=1")
+	if retires != "e-from-last-month" {
+		t.Errorf("retires = %q, want the record no load here holds: that is the case the field exists for", retires)
+	}
+	if byID != "fk_uses" {
+		t.Errorf("by_key = %q, want the whole Ref, so a reader can tell which edge replaces the old one", byID)
+	}
+	if asserter != "ana@example.com" {
+		t.Errorf("prov_by = %q, want the person whose word this is", asserter)
+	}
+}

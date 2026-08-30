@@ -268,12 +268,25 @@ func (s *Server) publishState(r *jobRun, id string, e Event) {
 // pkg/review ranks. Nothing is recomputed: §5c says what is worth reviewing is
 // already computed, and a service that re-verified the graph would be a second
 // opinion with no provenance of its own.
+// reportOf rebuilds the verifier's report from a finished result, so a queue
+// can be built from a graph rather than from the pass that produced it.
+//
+// Duplicates were missing from it, and the omission was silent in the way that
+// matters: they are computed, they are counted, they are returned on the
+// result — and review.Queue reads them off THIS struct, so no duplicate could
+// ever reach a reviewer through the service. §5c's whole merge path was
+// unreachable over gRPC and over HTTP, and nothing failed, because a queue
+// that is short does not look like a queue that is wrong.
+//
+// Found by running it: one company under two ids, three duplicates on the
+// result, zero items in the queue.
 func reportOf(res alchemy.Result) verify.Report {
 	return verify.Report{
 		Entities:   res.Entities,
 		Relations:  res.Relations,
 		Violations: res.Violations,
 		Conflicts:  res.Conflicts,
+		Duplicates: res.Duplicates,
 		Counts:     res.Counts,
 	}
 }

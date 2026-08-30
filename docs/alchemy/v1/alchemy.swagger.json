@@ -524,6 +524,14 @@
         },
         "part": {
           "type": "string"
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Supersedes"
+          },
+          "description": "What this assertion replaces. Each entry names a record — an Entity.id or\na Relation identity — and says why.\n\nA person who knows the CTO changed is stating two things: that Bruno holds\nthe office, and that Ada no longer does. Without this only the first had\na shape, and the second arrived as a new edge beside the old one while the\ngraph reported itself clean. The claim is carried, never executed; see\nSupersession."
         }
       },
       "description": "AssertRequest is a fact a person states.\n\nThe entities and relations are given in the same shape every other producer\nemits, and their provenance is overwritten rather than read: the producer is\nPRODUCER_HUMAN, the source is the asserter, and by/at are stamped by the\nserver from `by` and its own clock. A caller cannot assert something on\nsomebody else's behalf by filling the field in, and cannot backdate one."
@@ -616,9 +624,11 @@
         "CONFLICT_KIND_ENTITY_TYPE",
         "CONFLICT_KIND_RELATION_DIRECTION",
         "CONFLICT_KIND_CONTRADICTION",
-        "CONFLICT_KIND_RELATION_ATTRIBUTES"
+        "CONFLICT_KIND_RELATION_ATTRIBUTES",
+        "CONFLICT_KIND_CARDINALITY"
       ],
-      "default": "CONFLICT_KIND_UNSPECIFIED"
+      "default": "CONFLICT_KIND_UNSPECIFIED",
+      "description": " - CONFLICT_KIND_CARDINALITY: Two records assert an edge of a type the ontology declared at_most_one_in\nor at_most_one_out, at the end it constrained. The only conflict kind that\ncompares two claims about one NODE rather than about one edge, and the one\nthat makes a fact able to go out of date."
     },
     "v1Counts": {
       "type": "object",
@@ -800,10 +810,11 @@
       "type": "string",
       "enum": [
         "DUPLICATE_SIGNAL_UNSPECIFIED",
-        "DUPLICATE_SIGNAL_NAME_AFFIX"
+        "DUPLICATE_SIGNAL_NAME_AFFIX",
+        "DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS"
       ],
       "default": "DUPLICATE_SIGNAL_UNSPECIFIED",
-      "description": "DuplicateSignal names the deterministic evidence that two nodes may be one\nthing. It is on the finding because a reviewer answering \"are these the\nsame?\" is entitled to know what asked them.\n\n - DUPLICATE_SIGNAL_NAME_AFFIX: Under one type, one node's name is the other's with whole words added at\nthe front or the back: \"document\" and \"document package\". It is the shape\na per-chunk extractor produces, since each chunk is a separate call that\ncannot see how the others named the thing."
+      "description": "DuplicateSignal names the deterministic evidence that two nodes may be one\nthing. It is on the finding because a reviewer answering \"are these the\nsame?\" is entitled to know what asked them.\n\n - DUPLICATE_SIGNAL_NAME_AFFIX: Under one type, one node's name is the other's with whole words added at\nthe front or the back: \"document\" and \"document package\". It is the shape\na per-chunk extractor produces, since each chunk is a separate call that\ncannot see how the others named the thing.\n - DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS: Under one type, two nodes with different ids fold to the same name and two\ndifferent producers made them. Ids this pipeline mints are a function of\ntype and name, so equal names are already one node; ids a source supplies\n— a graph import's, an assertion's — are not, and that is the only case\nthis fires on."
     },
     "v1Edit": {
       "type": "object",
@@ -1254,6 +1265,14 @@
             "$ref": "#/definitions/v1RuleSet"
           },
           "description": "Every standing policy this job's records were extracted under, each named\nonce. Provenance.rule_set is a name into this list.\n\nA second field rather than a widening of `rules`, and the difference is\nthe whole point. `rules` is this job's output: what its review decided,\nfor the caller to keep and hand to the next job. This is its input:\nwhatever the model had already been told, including an authored rule that\nwas in force and matched nothing — which will never appear in `rules` and\nis exactly the rule a reader chasing a name from a record needs to\nresolve. Widening `rules` to cover both would leave a caller round-tripping\nit as their policy while re-declaring somebody else's rules as their own\njob's finding, and would leave every existing reader holding a field whose\nmeaning had quietly changed underneath them."
+        },
+        "supersessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Supersession"
+          },
+          "description": "What this run says is no longer true, and who said so."
         }
       }
     },
@@ -1360,6 +1379,13 @@
             "$ref": "#/definitions/v1RuleSet"
           },
           "description": "The policies the records on every page were extracted under. They ride on\nthe first page with the rest of the summary, and for the same reason: a\nreader deciding whether to trust a paged graph is deciding on what the\nmodel was told, and making them pay for every entity first would be making\nthe answer arrive after the decision."
+        },
+        "supersessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Supersession"
+          }
         }
       },
       "description": "ResultPage is one page of a large result (§8.4). The summary rides on the\nfirst page rather than the last: an operator who wants the numbers needed to\ndistrust the graph should get them before deciding whether to read it, not\nafter paying for every entity."
@@ -1602,6 +1628,36 @@
         }
       },
       "description": "StandingRule is one rule of a set: what it is called, and what the model was\ntold about it."
+    },
+    "v1Supersedes": {
+      "type": "object",
+      "properties": {
+        "retires": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Supersession": {
+      "type": "object",
+      "properties": {
+        "retires": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/definitions/v1Ref"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance",
+          "description": "Who is making this claim — the supersession's own provenance, not the\nsuperseding record's. A reviewer may retire a record a model proposed, and\nthose are two claims by two parties."
+        }
+      },
+      "description": "Supersession is one record saying another is over.\n\nretires is an Entity.id or a Relation identity, and it deliberately need not\nbe present in this result: the thing being replaced is usually in a store\nfrom a run that finished last month.\n\nAlchemy never acts on one. §4 means it holds no graph and could not, and a\nproducer that could delete another producer's fact by naming it would be\n§2.1 with write access. Where both records are in one result the\ndisagreement is CONFLICT_KIND_CARDINALITY and §7.3 still stops the job. What\nthis carries is that the statement survives the pipeline: a store can act on\nit deliberately, and a reader months later can see that somebody said the\nold answer was over, and name them."
     },
     "v1Unread": {
       "type": "object",

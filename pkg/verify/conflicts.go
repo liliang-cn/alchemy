@@ -28,7 +28,11 @@ import (
 // distinct disagreement rather than half a million pairs.
 func conflicts(entities []alchemy.Entity, relations []alchemy.Relation, rs *rules) []alchemy.Conflict {
 	out := entityConflicts(entities)
-	return append(out, relationConflicts(relations, rs)...)
+	out = append(out, relationConflicts(relations, rs)...)
+	// Last, and in its own pass, because it is the one question here that is
+	// about a node rather than about an edge: see cardinality.go for why that
+	// cannot share the edge-keyed scan above.
+	return append(out, cardinalityConflicts(relations, rs)...)
 }
 
 // slot remembers the first claim made about one key and which later values have

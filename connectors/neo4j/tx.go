@@ -127,6 +127,13 @@ func (t *tx) Findings(ctx context.Context, f sink.Findings) error {
 	return t.l.writeFindings(ctx, f, t.rep)
 }
 
+// Supersessions files what the result says is over, without acting on it. See
+// writeSupersessions for why a graph store that could act is exactly the one
+// that must not.
+func (t *tx) Supersessions(ctx context.Context, batch []alchemy.Supersession) error {
+	return t.l.writeSupersessions(ctx, batch, t.rep)
+}
+
 // Commit writes the policy and flips the run marker, which is the only
 // statement that makes a load complete.
 func (t *tx) Commit(ctx context.Context, s sink.Summary) (sink.Report, error) {

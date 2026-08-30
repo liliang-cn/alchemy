@@ -233,3 +233,42 @@ func TestDigestCoversFindings(t *testing.T) {
 		t.Fatal("digest is blind to guesses")
 	}
 }
+
+// TestEveryInternalLabelIsRefusedAsAnOntologyType holds Options.internalLabels
+// to the kinds this connector actually writes nodes under.
+//
+// The list is written out by hand, because Cypher cannot take a label as a
+// parameter and every kind is therefore a string literal at its own call site.
+// A kind left off the list fails silently and in the worst direction: the
+// buyer's ontology type of that name is accepted, its entities are written
+// under the label this package uses for its own bookkeeping, and afterwards
+// "what did this run find" returns entities while "what entities are there"
+// returns bookkeeping — with neither query looking wrong. Supersession was the
+// eighth, and it is here because it was nearly the first to be forgotten.
+func TestEveryInternalLabelIsRefusedAsAnOntologyType(t *testing.T) {
+	// Every kind writeAux is called with, plus the run marker's own.
+	kinds := []string{"Run", "Chunk", "Violation", "Duplicate", "Guess", "Unread", "RuleSet", "Supersession"}
+	o := Options{RunID: "run-1"}.withDefaults()
+	have := map[string]bool{}
+	for _, l := range o.internalLabels() {
+		have[l] = true
+	}
+	for _, k := range kinds {
+		if !have[o.BaseLabel+k] {
+			t.Errorf("%q is a label this connector writes nodes under and internalLabels does not claim it, "+
+				"so an ontology type of that name would be written into this package's own namespace", o.BaseLabel+k)
+		}
+	}
+	if len(o.internalLabels()) != len(kinds) {
+		t.Errorf("internalLabels claims %d labels and this connector writes %d kinds; a label claimed but never "+
+			"written refuses a buyer's type for no reason", len(o.internalLabels()), len(kinds))
+	}
+
+	// And the claim has teeth: a result whose ontology uses one of them is
+	// refused, naming the knob that frees it.
+	res := fixture()
+	res.Entities[0].Type = o.BaseLabel + "Supersession"
+	if _, err := preflight(res, Options{RunID: "run-1"}); err == nil {
+		t.Fatal("an entity typed with an internal label was accepted")
+	}
+}

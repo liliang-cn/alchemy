@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
 )
 
 // The first of the three questions this connector exists to make answerable:
@@ -122,5 +124,75 @@ func TestAroundReturnsTheGraphThatSurroundsAHit(t *testing.T) {
 		if g.Relations[0].Attributes["since"] != "2025" {
 			t.Errorf("edge attributes = %+v, want the source's own words", g.Relations[0].Attributes)
 		}
+	}
+}
+
+// A retirement is stored, is readable, and takes nothing with it.
+//
+// The last clause is what the test is for. alchemy states that a record is over
+// and never performs the retirement, and this connector is a delete-by-filter
+// away from performing it — so what is asserted is that the entity named in
+// `retires` is still a point afterwards, and that the claim is beside it rather
+// than applied to it. The second retirement names a record no load in this
+// collection has ever held, which is the ordinary case for the field and must
+// be stored exactly like the first.
+func TestARetirementIsStoredBesideTheGraphAndNotAppliedToIt(t *testing.T) {
+	f := newFixture(t)
+	l := f.open(t, Config{})
+
+	res := smallResult(4)
+	who := alchemy.Provenance{
+		Source: "correction.md", Chunk: -1, Producer: alchemy.ProducerHuman,
+		By: "ana@example.com", At: "2026-03-01T00:00:00Z",
+	}
+	res.Supersessions = []alchemy.Supersession{
+		{Retires: "CortexDB", By: alchemy.Ref{Kind: alchemy.RefEntity, ID: "SuperAI", Type: "Service"},
+			Reason: "the store was replaced", Provenance: who},
+		{Retires: "e-from-last-month", By: alchemy.Ref{Kind: alchemy.RefEntity, ID: "SuperAI", Type: "Service"},
+			Reason: "the old profile is stale", Provenance: who},
+	}
+
+	out, err := l.Load(context.Background(), res, LoadOptions{ID: "ld-1"})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if out.Supersessions != 2 {
+		t.Fatalf("Loaded.Supersessions = %d, want both", out.Supersessions)
+	}
+
+	recs, err := l.Records(context.Background(), Filter{Loads: []string{"ld-1"}}, 0)
+	if err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+	if len(recs.Supersessions) != 2 {
+		t.Fatalf("%d retirements read back, want 2: a store that writes a point no reader returns holds "+
+			"a record nobody can see", len(recs.Supersessions))
+	}
+	// The entity the first one retires is still here, untouched.
+	if len(recs.Entities) != 2 {
+		t.Fatalf("%d entities after two retirements, want 2: alchemy states a retirement and never performs one",
+			len(recs.Entities))
+	}
+	// Found by what it retires rather than taken by position. Records sorts
+	// these by Retires and the order is a real guarantee, but an index here
+	// would be a test asserting the collation: "CortexDB" sorts before
+	// "e-from-last-month" because C is 0x43 and e is 0x65, which is true, easy
+	// to get backwards, and not the property this test is about.
+	//
+	// This is the one naming a record no load here holds — stored like any
+	// other, because that is the case the field exists for.
+	var got alchemy.Supersession
+	for _, s := range recs.Supersessions {
+		if s.Retires == "e-from-last-month" {
+			got = s
+		}
+	}
+	if got.Retires != "e-from-last-month" || got.By.ID != "SuperAI" {
+		t.Errorf("retirement = %+v, want what it retires and what replaces it; read back %+v",
+			got, recs.Supersessions)
+	}
+	if got.Provenance.By != "ana@example.com" {
+		t.Errorf("prov By = %q, want the person whose word this is: a retirement nobody can attribute is "+
+			"a deletion with a nicer name", got.Provenance.By)
 	}
 }

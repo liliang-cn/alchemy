@@ -64,6 +64,19 @@ func (s *Server) stated(req *alchemyv1.AssertRequest) (alchemy.Result, error) {
 		return alchemy.Result{}, invalid("assert: %s asserted nothing; an assertion with no entities and no relations is a mistake rather than an empty graph", by)
 	}
 
+	for i, sup := range req.GetSupersedes() {
+		if strings.TrimSpace(sup.GetRetires()) == "" {
+			return alchemy.Result{}, invalid("assert: supersedes[%d] retires nothing; a claim that something is over has to say what", i)
+		}
+		// §5c's argument about rules, applied to a correction: one nobody
+		// explained is one nobody can argue with later. The person who could
+		// write the sentence is on the other end of this call, which is the
+		// only moment it costs nothing to ask for.
+		if strings.TrimSpace(sup.GetReason()) == "" {
+			return alchemy.Result{}, invalid("assert: %s retires %q without saying why; a correction with no reason cannot be argued with by whoever finds it next", by, sup.GetRetires())
+		}
+	}
+
 	vocabulary, ontologyID, err := vocabularyOf(req)
 	if err != nil {
 		return alchemy.Result{}, err
@@ -114,6 +127,7 @@ func (s *Server) stated(req *alchemyv1.AssertRequest) (alchemy.Result, error) {
 	}
 
 	res := checked(req, entities, relations, vocabulary, ontologyID)
+	res.Supersessions = retired(req, stamp, relations)
 	res.Counts = res.Derivable()
 	if err := admissible(res); err != nil {
 		return alchemy.Result{}, err
@@ -287,4 +301,49 @@ func (s *Server) recordAssertion(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return id, nil
+}
+
+// retired turns the request's supersedes list into statements the result
+// carries.
+//
+// The Ref each one points back at is this assertion's first relation where
+// there is one and its first entity otherwise, which is a simplification with
+// a stated limit: a call asserting several records and retiring several others
+// cannot say which retires which. It is the right first shape because the case
+// this exists for is one correction — the CTO changed — and inventing a
+// pairing the caller did not give would be the guess §2.1 is about. A caller
+// who means two independent corrections makes two calls, and each one's
+// supersession then names its own record.
+//
+// A retires naming nothing in this result is deliberately not an error: the
+// record being replaced is normally in a store, from a run that finished last
+// month, and refusing the assertion because this result does not contain it
+// would make the field useless for the case it exists for.
+//
+// An entry with no reason is refused, and that is the one thing checked here.
+// §5c's argument about rules is the same argument: a correction nobody
+// explained is one nobody can argue with later, and the person who could have
+// written the sentence is on the other end of this call right now.
+func retired(req *alchemyv1.AssertRequest, stamp alchemy.Provenance, relations []alchemy.Relation) []alchemy.Supersession {
+	if len(req.GetSupersedes()) == 0 {
+		return nil
+	}
+	var by alchemy.Ref
+	switch {
+	case len(relations) > 0:
+		r := relations[0]
+		by = alchemy.Ref{Kind: alchemy.RefRelation, From: r.From, To: r.To, Type: r.Type, Key: r.Key}
+	case len(req.GetEntities()) > 0:
+		by = alchemy.Ref{Kind: alchemy.RefEntity, ID: req.GetEntities()[0].GetId()}
+	}
+	out := make([]alchemy.Supersession, 0, len(req.GetSupersedes()))
+	for _, sup := range req.GetSupersedes() {
+		out = append(out, alchemy.Supersession{
+			Retires:    sup.GetRetires(),
+			By:         by,
+			Reason:     sup.GetReason(),
+			Provenance: stamp,
+		})
+	}
+	return out
 }

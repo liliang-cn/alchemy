@@ -76,7 +76,11 @@ type tx struct {
 	converged bool
 
 	relations int
-	rep       sink.Report
+	// supersessions is the count so far, which is the seq of the next one: a
+	// load is a stream of batches, so the row's position in it is counted
+	// across them rather than read off a slice index.
+	supersessions int
+	rep           sink.Report
 
 	guesses []alchemy.Guess
 	unread  []alchemy.Unread
@@ -129,6 +133,18 @@ func (t *tx) Findings(ctx context.Context, f sink.Findings) error {
 	t.rep.Duplicates += len(f.Duplicates)
 	t.rep.Guesses += len(f.Guesses)
 	t.rep.Unread += len(f.Unread)
+	t.rep.Batches++
+	return nil
+}
+
+// Supersessions records what the result says is over, in a table of its own
+// beside the graph, and applies none of it. See writeSupersessionBatch.
+func (t *tx) Supersessions(ctx context.Context, batch []alchemy.Supersession) error {
+	if err := t.l.writeSupersessionBatch(ctx, t.id, t.supersessions, batch); err != nil {
+		return err
+	}
+	t.supersessions += len(batch)
+	t.rep.Supersessions += len(batch)
 	t.rep.Batches++
 	return nil
 }

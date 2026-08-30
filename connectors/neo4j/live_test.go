@@ -155,6 +155,25 @@ func fixture() alchemy.Result {
 		}},
 		Guesses: []alchemy.Guess{{Field: "owner_id", ChosenAs: "Person", Alternatives: []string{"Team"}, Reason: "column name", Provenance: ddl}},
 		Unread:  []alchemy.Unread{{Source: "architecture.pdf", Locator: "page 9", Reason: "scanned, no OCR model supplied"}},
+		// One retirement naming a record this result contains and one naming a
+		// record it does not, because both are ordinary. The second is the
+		// normal case for the field: the thing being retired is in the store
+		// from a run that finished last month.
+		Supersessions: []alchemy.Supersession{
+			{
+				Retires: "e2", By: alchemy.Ref{Kind: alchemy.RefEntity, ID: "e1", Type: "System"},
+				Reason: "the store was replaced and the old profile still names it",
+				Provenance: alchemy.Provenance{
+					Source: "correction.md", Chunk: -1, Producer: alchemy.ProducerHuman,
+					By: "ana@example.com", At: "2026-03-01T00:00:00Z",
+				},
+			},
+			{
+				Retires: "e-from-last-month", By: alchemy.Ref{Kind: alchemy.RefEntity, ID: "e3", Type: "Person"},
+				Reason:     "the office changed hands in March",
+				Provenance: alchemy.Provenance{Source: "correction.md", Chunk: -1, Producer: alchemy.ProducerHuman, By: "ana@example.com"},
+			},
+		},
 		Counts: alchemy.Counts{
 			Entities: 3, Relations: 2, Deterministic: 2, Inferred: 3,
 			Violations: 1, Duplicates: 1, Guesses: 1, ChunksEmpty: 2, ChunksUnread: 1,

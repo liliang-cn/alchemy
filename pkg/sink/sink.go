@@ -121,6 +121,27 @@ type Chunk struct {
 // end can accumulate, and they are small by construction — a violation per
 // broken record, a guess per mapped column, an unread per page nobody could
 // read.
+//
+// alchemy.Supersession is deliberately not one of these fields, and the reason
+// is what the four have in common. Every finding here is a defect in a record
+// this result is carrying: a violation says a record broke the ontology, a
+// duplicate says two of them may be one, a guess says a mapping was chosen
+// without evidence, an unread says a page did not become records at all. They
+// are the block a reader consults to decide how far to trust this import.
+//
+// A supersession says none of those things. It says a record — usually one
+// that is not in this result, and was loaded from a run that finished last
+// month — is over, and it names who says so. Nothing is wrong with it, and
+// nothing about this import is less trustworthy for it. Filing it under
+// findings would put a correction in the quality report, where a reader
+// weighing the graph would read it as a defect and a store writing findings
+// under one internal label would file it beside the malformed rows.
+//
+// So it is its own method on Tx, which is the other half of the decision: a
+// field on this struct would have compiled against all four connectors on the
+// day it was added and been dropped by all four of them, silently, in a store
+// that keeps the graph and loses what somebody said was finished about it. A
+// method breaks the build instead, which is the failure that gets fixed.
 type Findings struct {
 	Violations []alchemy.Violation
 	Duplicates []alchemy.Duplicate
@@ -185,6 +206,11 @@ type Report struct {
 	Duplicates int
 	Guesses    int
 	Unread     int
+	// Supersessions is how many retirements were handed over. It is counted
+	// like the records and not like the findings, because it is handed over
+	// like them: in batches, so a load that died with half the corrections
+	// written says how many landed.
+	Supersessions int
 
 	// Batches is how many round trips it took, which is the number an operator
 	// needs when a load dies halfway.
@@ -233,6 +259,29 @@ type Tx interface {
 	Relations(ctx context.Context, batch []alchemy.Relation) error
 	Chunks(ctx context.Context, batch []Chunk) error
 	Findings(ctx context.Context, f Findings) error
+	// Supersessions is what this result says is no longer true, and who says
+	// so. See Findings for why it is not one of those.
+	//
+	// A store may act on one and alchemy never does: §4 means alchemy holds no
+	// graph, and a producer able to delete another producer's fact by naming it
+	// would be an unreviewed writer with write access. What the envelope owes
+	// is that the statement survives the load — that a reader who fetches the
+	// graph months later can see somebody said the old answer was over, and
+	// name them. A store that retires the record, one that marks it, and one
+	// that only files the claim are all keeping that promise; a store that
+	// dropped it is not.
+	//
+	// Supersession.Retires names an alchemy.Entity.ID or an
+	// alchemy.Relation.Identity that need not be in this result — the record
+	// being retired is usually in the store already, from a run that finished
+	// last month. A store that cannot find it records the claim anyway and says
+	// so if it has somewhere to say it. It is never an error, and a store that
+	// refused would make the whole field useless for the case it exists for.
+	//
+	// Batched like the records rather than handed over whole like the findings,
+	// because it is bounded like them: a re-import of a corrected source retires
+	// as much as it restates, where a finding is bounded by what went wrong.
+	Supersessions(ctx context.Context, batch []alchemy.Supersession) error
 
 	// Commit writes the summary and marks the load finished. Until it returns,
 	// a reader of the store must be able to see that this load is unfinished.

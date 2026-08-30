@@ -73,10 +73,72 @@ func TestSkipOptions(t *testing.T) {
 	if rep.Chunks != 0 || rep.Violations != 0 {
 		t.Fatalf("report = %+v, want nothing but the graph", rep)
 	}
+	// SkipFindings does not skip a retirement. It is a buyer saying they do not
+	// want the quality report, and a statement that a record is over is not
+	// part of the quality report -- losing it to this flag would drop the one
+	// thing in the result that nothing else records.
+	if rep.Supersessions != 2 {
+		t.Fatalf("Supersessions = %d under SkipFindings, want both: a retirement is not a finding", rep.Supersessions)
+	}
 	recs := l.mustQuery(t, "MATCH (n:"+mustQuote(t, l.opts.BaseLabel)+") WHERE n.`_run`='run-F2' RETURN count(n) AS n", nil)
-	// Three entities plus the run marker, which is never optional: without it
-	// there is no way to tell a finished import from an abandoned one.
-	if recs[0]["n"] != int64(4) {
-		t.Fatalf("%v nodes, want 3 entities and the run marker", recs[0]["n"])
+	// Three entities, the run marker -- which is never optional, because
+	// without it there is no way to tell a finished import from an abandoned
+	// one -- and the two retirements, which SkipFindings does not cover.
+	if recs[0]["n"] != int64(6) {
+		t.Fatalf("%v nodes, want 3 entities, the run marker and 2 retirements", recs[0]["n"])
+	}
+}
+
+// A retirement is loaded, is attributable, and changes nothing about the record
+// it names.
+//
+// The last clause is the one worth a test. alchemy does not act on a
+// supersession and a graph store is the one that easily could: a DETACH DELETE
+// on the retired node is one line away, and a connector that took it would let
+// any producer remove another producer's fact by naming it. So the assertions
+// below are that the claim is there, that it says who made it, and that the
+// entity it retires is exactly as it was.
+func TestARetirementIsRecordedAndNotActedOn(t *testing.T) {
+	l := liveLoader(t, Options{RunID: "run-S"})
+	base := mustQuote(t, l.opts.BaseLabel)
+	rep, err := l.Load(context.Background(), fixture())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if rep.Supersessions != 2 {
+		t.Fatalf("report = %+v, want both retirements", rep)
+	}
+
+	// The retired entity is still there, still typed, still with its own
+	// provenance. Nothing was deleted and nothing was flagged.
+	recs := l.mustQuery(t, "MATCH (n:"+base+" {`_id`:'e2',`_run`:'run-S'}) RETURN n.name AS name, n.`_producer` AS producer", nil)
+	if len(recs) != 1 || recs[0]["name"] != "CortexDB" || recs[0]["producer"] != "ddl" {
+		t.Fatalf("the retired entity = %v, want it untouched: alchemy states a retirement and never performs one", recs)
+	}
+
+	// The claim hangs off the run on its own edge type, so "what did this run
+	// find wrong" does not come back with a correction in it.
+	recs = l.mustQuery(t, "MATCH (s:"+mustQuote(t, l.opts.BaseLabel+"Supersession")+")-[:STATED_IN]->() WHERE s.`_run`='run-S' "+
+		"RETURN s.`_retires` AS retires, s.`_by_id` AS by, s.`_by` AS asserter ORDER BY retires", nil)
+	if len(recs) != 2 {
+		t.Fatalf("%d retirement nodes, want 2", len(recs))
+	}
+	if recs[0]["retires"] != "e-from-last-month" || recs[0]["by"] != "e3" || recs[0]["asserter"] != "ana@example.com" {
+		t.Fatalf("retirement = %v, want what it retires, what replaces it, and who says so", recs[0])
+	}
+
+	// It reaches the record it retires when that record is here, and it does
+	// not become an edge between the old record and the new one -- the rule a
+	// Duplicate is under, for a sharper reason: an agent walking such an edge
+	// would have been handed one producer's decision as if the store had made it.
+	recs = l.mustQuery(t, "MATCH (s:"+mustQuote(t, l.opts.BaseLabel+"Supersession")+")-[:RETIRES]->(n) WHERE s.`_run`='run-S' RETURN n.`_id` AS id", nil)
+	if len(recs) != 1 || recs[0]["id"] != "e2" {
+		t.Fatalf("RETIRES reaches %v, want only e2: the other names a record no longer in this result, which is not an error", recs)
+	}
+	recs = l.mustQuery(t, "MATCH (:"+base+" {`_id`:'e2',`_run`:'run-S'})-[r]->(:"+base+" {`_id`:'e1',`_run`:'run-S'}) RETURN type(r) AS t", nil)
+	for _, r := range recs {
+		if r["t"] == "SUPERSEDED_BY" || r["t"] == "REPLACED_BY" {
+			t.Fatalf("the retirement became a traversable edge between the two records: %v", recs)
+		}
 	}
 }

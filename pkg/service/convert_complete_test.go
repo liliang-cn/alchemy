@@ -72,3 +72,46 @@ func TestEveryProducerHasAWireName(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryClosedSetHasAWireName holds the other two maps from closed sets to
+// their proto enums, for the reason the producers table earned the hard way: a
+// Go map returns the zero value for a key it does not have, so a kind added to
+// the core module and forgotten here does not fail, it serialises as
+// UNSPECIFIED. A conflict that reaches a caller as CONFLICT_KIND_UNSPECIFIED
+// is a job held for a reason nobody can read.
+//
+// Each list is named rather than derived, because Go cannot enumerate a
+// string-typed constant set; the proto enum's own length is what catches an
+// addition on either side.
+func TestEveryClosedSetHasAWireName(t *testing.T) {
+	conflicts := []alchemy.ConflictKind{
+		alchemy.ConflictEntityAttributes,
+		alchemy.ConflictEntityType,
+		alchemy.ConflictRelationDirection,
+		alchemy.ConflictContradiction,
+		alchemy.ConflictRelationAttributes,
+		alchemy.ConflictCardinality,
+	}
+	if got, want := len(alchemyv1.ConflictKind_name), len(conflicts)+1; got != want {
+		t.Errorf("the proto declares %d conflict kinds and this test names %d", got-1, len(conflicts))
+	}
+	for _, k := range conflicts {
+		if conflictKinds[k] == alchemyv1.ConflictKind_CONFLICT_KIND_UNSPECIFIED {
+			t.Errorf("conflict kind %q has no wire name; it would reach a caller as UNSPECIFIED", k)
+		}
+	}
+
+	signals := []alchemy.DuplicateSignal{
+		alchemy.DuplicateNameAffix,
+		alchemy.DuplicateNameAcrossProducers,
+	}
+	if got, want := len(alchemyv1.DuplicateSignal_name), len(signals)+1; got != want {
+		t.Errorf("the proto declares %d duplicate signals and this test names %d", got-1, len(signals))
+	}
+	for _, sig := range signals {
+		if duplicateSignals[sig] == alchemyv1.DuplicateSignal_DUPLICATE_SIGNAL_UNSPECIFIED {
+			t.Errorf("duplicate signal %q has no wire name; a reviewer would be told what asked "+
+				"them nothing at all", sig)
+		}
+	}
+}

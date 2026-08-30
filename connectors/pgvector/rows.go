@@ -130,6 +130,47 @@ func (l *Loader) writeViolationBatch(ctx context.Context, id string, batch []alc
 	})
 }
 
+// supersessionCols and supersessionRow are the two halves of one list, kept
+// beside each other for the reason the four provenance lists were not and cost
+// a production write for it: a column list and the row it names are checked
+// against each other by the database and by nothing in Go.
+//
+// The whole Ref is stored and not only its id. A supersession may retire a
+// relation, and a Ref naming an edge carries the four fields Relation.Identity
+// is a function of — so a reader holding this row can work out what replaces
+// the retired record without going back to the result it came in.
+var supersessionCols = []string{"load_id", "seq", "retires", "reason",
+	"by_kind", "by_id", "by_type", "by_from", "by_to", "by_key"}
+
+func supersessionRow(id string, i int, s alchemy.Supersession) []any {
+	return []any{id, i, s.Retires, s.Reason,
+		string(s.By.Kind), s.By.ID, s.By.Type, s.By.From, s.By.To, s.By.Key}
+}
+
+// writeSupersessionBatch records what the result says is over. It records it
+// and does not perform it: no row is deleted, no load is retracted, and the
+// entity or relation named in `retires` is exactly as it was. alchemy states a
+// retirement and never acts on one, and a connector is the step at which acting
+// would stop being a claim in a job and become a row missing from a table
+// somebody queries.
+//
+// There is no foreign key from `retires` to entities, for a stronger version of
+// the reason the relations table has none: Supersession.Retires "deliberately
+// need not be present in this result" — the record being retired is usually in
+// the store from a load that finished last month, or under a name this database
+// has never seen. A foreign key would refuse the correction for naming exactly
+// the thing it exists to name.
+func (l *Loader) writeSupersessionBatch(ctx context.Context, id string, at int, batch []alchemy.Supersession) error {
+	cols := with(supersessionCols, provNames)
+	return l.copyRows(ctx, "supersessions", cols, len(batch), func(i int) ([]any, error) {
+		s := batch[i]
+		// The supersession's own provenance rather than the superseding
+		// record's: a reviewer may retire a record a model proposed, and those
+		// are two claims by two parties.
+		return with(supersessionRow(id, at+i, s), provRow(s.Provenance)), nil
+	})
+}
+
 func (l *Loader) writeDuplicateBatch(ctx context.Context, id string, batch []alchemy.Duplicate) error {
 	cols := []string{"load_id", "seq", "signal", "subject", "detail",
 		"left_id", "left_type", "left_name", "left_prov",

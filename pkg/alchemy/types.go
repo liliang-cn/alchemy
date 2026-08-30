@@ -158,6 +158,12 @@ type Provenance struct {
 	By string `json:"by,omitempty"`
 	// At is when the assertion was made, RFC 3339.
 	//
+	// Every field on this struct is a comparable scalar and must stay one.
+	// review.Ref embeds a Provenance and is used as a map key, so a slice or a
+	// map added here is a compile error one package over — which is why
+	// Result.Supersessions is a list beside the graph rather than a field on
+	// the record that supersedes.
+	//
 	// A string rather than a time.Time so that an unset value marshals to
 	// nothing: every other optional field here omits when empty, and a struct
 	// cannot. That is not a formatting preference — sink.Digest hashes this

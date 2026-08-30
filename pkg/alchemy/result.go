@@ -133,6 +133,30 @@ type Result struct {
 	ModelCalls []ModelCall `json:"model_calls,omitempty"`
 	// Unread names source material that could not be read, with why.
 	Unread []Unread `json:"unread,omitempty"`
+	// Supersessions are the records this run says are over, and who said so.
+	//
+	// It is the third thing a correction has to be able to state and the one
+	// that had nowhere to go. A person who knows the CTO changed is stating
+	// two facts — that Bruno holds the office, and that Ada no longer does —
+	// and until this list existed only the first had a shape. The second
+	// arrived as a new edge beside the old one and the graph reported itself
+	// clean while holding both, which is measured rather than argued: one
+	// Northgate profile and one correction in a single job, conflicts zero, two
+	// CTOs.
+	//
+	// It is beside the graph rather than a field on the record that supersedes
+	// because alchemy.Provenance must stay comparable — review.Ref embeds one
+	// and is a map key — and because a supersession is a claim about a pair,
+	// like Conflict and Duplicate, not a property of one node.
+	//
+	// Alchemy does not act on it. §4 means it holds no graph and could not;
+	// and a producer that could delete another producer's fact by naming it
+	// would be §2.1 with write access. Where both records are in one result
+	// the disagreement is still ConflictCardinality and still §7.3. What this
+	// buys is that the statement survives the pipeline: a store can act on it
+	// deliberately, and a reader who fetches the graph months later can see
+	// that somebody said the old answer was over, and name them.
+	Supersessions []Supersession `json:"supersessions,omitempty"`
 	// RuleSets is every standing policy this job's records were extracted
 	// under, each named once. Provenance.RuleSet is a name into it.
 	//
@@ -242,4 +266,32 @@ type Job struct {
 	Stage string `json:"stage,omitempty"`
 	// Error is set when State is JobFailed.
 	Error string `json:"error,omitempty"`
+}
+
+// Supersession is one record saying another is over.
+//
+// Retires is an Entity.ID or a Relation.Identity, whichever kind of record is
+// being replaced, and it deliberately need not be present in this result: the
+// thing being superseded is usually in a store from a run that finished last
+// month, and refusing the claim because this result does not contain it would
+// make the whole field useless for the case it exists for. A consumer that
+// cannot find it says so; it does not fail.
+//
+// By is the record making the claim, so a reader can ask the same question of
+// a supersession they can ask of any other fact here — who says so — and get a
+// producer, a source and, for alchemy.ProducerHuman, a person and a date.
+type Supersession struct {
+	// Retires is the Entity.ID or Relation.Identity being replaced.
+	Retires string `json:"retires"`
+	// By is the record that replaces it.
+	By Ref `json:"by"`
+	// Reason is why, in the asserter's words. It is required in practice and
+	// not enforced here, for the reason §5c gives about rules: a correction
+	// nobody explained is one nobody can argue with later.
+	Reason string `json:"reason,omitempty"`
+	// Provenance is who is making this claim. It is the supersession's own,
+	// not the superseding record's, because a reviewer may retire a record
+	// that a model proposed and the two are different claims by different
+	// parties.
+	Provenance Provenance `json:"provenance"`
 }

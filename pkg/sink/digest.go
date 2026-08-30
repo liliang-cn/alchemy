@@ -48,13 +48,22 @@ const digestDomain = "alchemy/sink/digest/1"
 // has. One of the four had this right and one was blind to chunks, vectors and
 // counts, all three of which it wrote.
 //
+// A supersession is that same difference in its sharpest form. Two results can
+// agree about every entity, edge, chunk and count and disagree only about which
+// record is over: the graph is identical and what the store would hold is not,
+// and a digest that could not tell would converge the correction onto the thing
+// it corrects — writing nothing, and leaving the store holding a fact somebody
+// had just said was finished, with no record that anybody said it.
+//
 // It deliberately does not cover ModelCalls. What a job spent is a fact about
 // the job rather than about the graph, two runs that bought the same answer
 // from a cache spent differently (§8.2), and a digest that flipped on it would
 // refuse the resumed run the cache exists to make cheap.
 //
 // The algorithm, stated so a consumer in another language can reproduce it:
-// build one line per record as below, sort the lines as byte strings, then
+// build one line per record as below — one per entity, relation, chunk, vector,
+// violation, duplicate, guess, unread page, conflict, rule set and supersession,
+// plus the single counts line — sort the lines as byte strings, then
 // SHA-256 the domain tag followed by every line, each written as an unsigned
 // 64-bit big-endian byte length followed by its UTF-8 bytes, and render the
 // digest lower-case hex. The framing is length-prefixed rather than delimited
@@ -96,6 +105,14 @@ func Digest(res alchemy.Result) string {
 	}
 	for _, s := range res.RuleSets {
 		lines = append(lines, join("S", s.Name, canonical(s.Rules)))
+	}
+	for _, s := range res.Supersessions {
+		// P rather than S, which the rule set has. The whole claim is on the
+		// line — what is retired, what replaces it, why, and who says so —
+		// because a store writes all four, and two corrections retiring one
+		// record for two reasons on two people's word are two statements a
+		// reader has to be able to tell apart.
+		lines = append(lines, join("P", s.Retires, canonical(s.By), s.Reason, canonical(s.Provenance)))
 	}
 	// The counts are one line rather than one per field, because they are one
 	// claim: §5's block is read whole and a store writes it whole.

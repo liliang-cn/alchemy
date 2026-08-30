@@ -2,6 +2,7 @@ package qdrant
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -116,5 +117,38 @@ func TestEveryFilteredFieldIsPayloadIndexed(t *testing.T) {
 		if !have[idx.field] {
 			t.Errorf("payload field %q is filtered on and not indexed; on a real corpus that filter is a full scan", idx.field)
 		}
+	}
+}
+
+// TestProvenanceSurvivesTheRoundTripFieldForField writes every field and reads
+// it back.
+//
+// It is here because two of them did not. provenancePayload wrote prov_by and
+// prov_at and readProvenance did not read them, so every record came back out
+// of this store with its producer intact and the person who asserted it gone —
+// §5b's guarantee inverted on the read side only, which no test that compared
+// this package with itself could have seen. A retirement is where it costs the
+// most: what a supersession is worth six months later is being able to name
+// who said the old answer was over.
+func TestProvenanceSurvivesTheRoundTripFieldForField(t *testing.T) {
+	want := alchemy.Provenance{
+		Source: "architecture.pdf", Chunk: 14, Producer: alchemy.ProducerHuman,
+		Model: "m", Ontology: "o", Chunking: "c", Confidence: 0.5,
+		ReviewedBy: "rb", RuleSet: "rs", RuledBy: "rd",
+		By: "ana@example.com", At: "2026-03-01T00:00:00Z",
+	}
+	// Through JSON, because that is how a payload actually comes back: a
+	// number written as an int arrives as a float64, and a reader that only
+	// ever saw the map it wrote would not know.
+	raw, err := json.Marshal(provenancePayload(want, map[string]any{}))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := readProvenance(payload); got != want {
+		t.Errorf("provenance did not survive the round trip\n got %+v\nwant %+v", got, want)
 	}
 }

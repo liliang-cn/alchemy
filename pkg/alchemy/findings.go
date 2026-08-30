@@ -145,6 +145,23 @@ const (
 	// involved, and here none is: neither side has more standing than the
 	// other, which is precisely what leaves the question for a person.
 	ConflictRelationAttributes ConflictKind = "relation_attributes"
+	// ConflictCardinality — two records assert an edge of a type the ontology
+	// declared at_most_one_in or at_most_one_out, at the end it constrained.
+	//
+	// It is the only conflict kind that is a disagreement between records that
+	// do not overlap: every other one compares two claims about *one* edge or
+	// one entity, and this compares two claims about one NODE. Two people
+	// asserted as the CTO of one company are not two versions of one edge —
+	// they are two edges, both well-formed, neither violating anything, and
+	// the ontology is the only thing that can say a company has one of those.
+	//
+	// It is what makes a fact able to go out of date. Without it a corpus that
+	// learns something changed hands simply accumulates both answers and
+	// reports itself clean, which is the failure mode a graph is least able to
+	// survive: not a wrong edge, which provenance can attribute and a reader
+	// can exclude, but a right edge and a stale one side by side with nothing
+	// distinguishing them.
+	ConflictCardinality ConflictKind = "cardinality"
 )
 
 // Conflict is two sources both claiming to be right, with nothing in the data
@@ -205,6 +222,28 @@ const (
 	// Lovelace". That is why this is a finding and not a merge — the evidence
 	// is real, and it is not enough to act on alone.
 	DuplicateNameAffix DuplicateSignal = "name_affix"
+	// DuplicateNameAcrossProducers — under one type, two nodes with different
+	// ids fold to the same name, and two different producers made them.
+	//
+	// The plain version of this signal — same name, different ids, any
+	// producer — was considered when duplicates were written and rejected for
+	// a stated reason: "entityID is a function of type and name, so equal
+	// names are already one node", while it would fire on public.users and
+	// audit.users, two tables a CREATE TABLE deterministically declared.
+	//
+	// The first half of that is true of ids this pipeline MINTS and false of
+	// ids a source SUPPLIES. A graph import brings the document's own ids and
+	// an assertion brings the asserter's, so `org:northgate` from one and
+	// `organization:northgate` from an extractor are one company under two names
+	// that no signal could see — measured, on the evaluation corpus, with the
+	// duplicate count sitting at two and neither of them this.
+	//
+	// Requiring two producers is what keeps the rejected case rejected. Both
+	// `users` tables come from one DDL reader, so they do not fire; a
+	// per-chunk extractor's two spellings do not fire either, which is what
+	// name_affix is for. What fires is exactly the case the old argument did
+	// not cover: an id somebody else chose meeting an id this pipeline made.
+	DuplicateNameAcrossProducers DuplicateSignal = "name_across_producers"
 )
 
 // Duplicate is two nodes that may be one node, and are not joined.

@@ -90,6 +90,40 @@ func Run(t *testing.T, open Open) {
 		}
 	})
 
+	t.Run("a_result_that_retires_a_record_it_does_not_contain_loads", func(t *testing.T) {
+		// Graph carries one supersession naming a record that is not in it, so
+		// this is the whole suite's fixture asserting the rule rather than a
+		// case of its own. What is checked here is that the store wrote the
+		// load anyway: a connector that treated an unresolvable Retires as a
+		// broken reference would refuse every correction to a corpus loaded
+		// before it, which is every correction there is.
+		rep, err := sink.Load(context.Background(), open(t), Graph(4), sink.Options{Load: "load-1"})
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if rep.Supersessions != 1 {
+			t.Fatalf("Report.Supersessions = %d, want the one this result states", rep.Supersessions)
+		}
+	})
+
+	t.Run("a_result_that_retires_something_else_is_a_different_import", func(t *testing.T) {
+		// The graph is identical in both loads and only the retirement differs.
+		// A store whose content address were blind to it would converge the
+		// second onto the first, write nothing, and go on holding the record
+		// somebody had just said was over -- so this is the one case in the
+		// suite where "refused" is the passing answer and silence is the bug.
+		s := open(t)
+		if _, err := sink.Load(context.Background(), s, Graph(4), sink.Options{Load: "load-1"}); err != nil {
+			t.Fatalf("first Load: %v", err)
+		}
+		other := Graph(4)
+		other.Supersessions[0].Retires = "e-cto-somebody-else"
+		_, err := sink.Load(context.Background(), s, other, sink.Options{Load: "load-1"})
+		if !errors.Is(err, sink.ErrExists) {
+			t.Fatalf("err = %v, want sink.ErrExists: a result that retires another record is another import", err)
+		}
+	})
+
 	t.Run("a_result_with_no_vectors_loads", func(t *testing.T) {
 		res := Graph(0)
 		if _, err := sink.Load(context.Background(), open(t), res, sink.Options{Load: "load-1"}); err != nil {
@@ -161,6 +195,21 @@ func Graph(dim int) alchemy.Result {
 			Field: "customer_id", ChosenAs: "relation:PLACED_BY", Reason: "it names a table", Provenance: prov(0),
 		}},
 		Unread: []alchemy.Unread{{Source: "scan.pdf", Locator: "page 4", Reason: "no text layer and no OCR model"}},
+		// One retirement, and it names a record this result does not contain.
+		// That is the ordinary case rather than an awkward one: the thing being
+		// superseded is in the store from a run that finished last month, and
+		// alchemy.Supersession says plainly that a consumer which cannot find
+		// it says so rather than failing. A store that refused this fixture
+		// would be refusing the only case the field exists for.
+		Supersessions: []alchemy.Supersession{{
+			Retires: "e-cto-ada",
+			By:      alchemy.Ref{Kind: alchemy.RefEntity, ID: "e1", Type: "System"},
+			Reason:  "the office changed hands in March and the old profile still names Ada",
+			Provenance: alchemy.Provenance{
+				Source: "correction.md", Chunk: -1, Producer: alchemy.ProducerHuman,
+				By: "ana@example.com", At: "2026-03-01T00:00:00Z",
+			},
+		}},
 		RuleSets: []alchemy.RuleSet{{Name: "rs-9f21", Rules: []alchemy.StandingRule{
 			{Name: "authored/violation/type=Flag", Told: "a switch is not an entity, said ana@example.com"},
 		}}},

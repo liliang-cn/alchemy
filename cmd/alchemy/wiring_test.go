@@ -87,10 +87,18 @@ func TestTheBuiltServerRefusesAnUnauthenticatedStream(t *testing.T) {
 	c := serveForTest(t, testSettings(t))
 	st, err := c.UploadSource(context.Background())
 	if err == nil {
-		err = st.Send(&alchemyv1.SourceChunk{Name: "x.sql"})
-		if err == nil {
-			_, err = st.CloseAndRecv()
-		}
+		// Send's error is deliberately dropped, and CloseAndRecv is called
+		// whatever it was. gRPC's contract is that a send onto a stream the
+		// server has already ended returns io.EOF and "the status is obtained
+		// by calling RecvMsg" — so a test that returned Send's error would
+		// report a bare EOF instead of the refusal, and would do it only when
+		// the server was fast enough to reject before the client finished
+		// sending. That is how this test passed for weeks and then failed
+		// five times out of five without the code under it changing.
+		// pkg/service/auth_test.go's rpcs() states the same rule and was
+		// already obeying it; this one was not.
+		_ = st.Send(&alchemyv1.SourceChunk{Name: "x.sql"})
+		_, err = st.CloseAndRecv()
 	}
 	if status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("UploadSource with no credentials: code = %v (err %v), want Unauthenticated", status.Code(err), err)

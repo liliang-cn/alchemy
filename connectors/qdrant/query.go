@@ -25,6 +25,12 @@ type Records struct {
 	Chunks     []alchemy.Chunk
 	Violations []alchemy.Violation
 	Duplicates []alchemy.Duplicate
+	// Supersessions is what the loads read here say is over. They are returned
+	// beside the records and never applied to them: this connector stores a
+	// retirement and does not perform one, so a caller holding both a record
+	// and a claim that it is retired has exactly what the store holds, and the
+	// decision is theirs.
+	Supersessions []alchemy.Supersession
 	// Loads is which loads these records came from, so that a caller who did
 	// not restrict the read can tell whether they just mixed two imports.
 	Loads []string
@@ -54,18 +60,7 @@ func (l *Loader) Records(ctx context.Context, f Filter, limit int) (Records, err
 	loads := map[string]bool{}
 	for _, p := range pts {
 		loads[str(p.Payload[keyLoad])] = true
-		switch kind(str(p.Payload[keyKind])) {
-		case kindEntity:
-			out.Entities = append(out.Entities, readEntity(p.Payload))
-		case kindRelation:
-			out.Relations = append(out.Relations, readRelation(p.Payload))
-		case kindChunk:
-			out.Chunks = append(out.Chunks, readChunk(p.Payload))
-		case kindViolation:
-			out.Violations = append(out.Violations, readViolation(p.Payload))
-		case kindDuplicate:
-			out.Duplicates = append(out.Duplicates, readDuplicate(p.Payload))
-		}
+		out.add(p.Payload)
 	}
 	for id := range loads {
 		out.Loads = append(out.Loads, id)
@@ -79,7 +74,43 @@ func (l *Loader) Records(ctx context.Context, f Filter, limit int) (Records, err
 	sort.Slice(out.Chunks, func(i, j int) bool { return out.Chunks[i].Index < out.Chunks[j].Index })
 	sort.Slice(out.Violations, func(i, j int) bool { return out.Violations[i].Subject < out.Violations[j].Subject })
 	sort.Slice(out.Duplicates, func(i, j int) bool { return out.Duplicates[i].Subject < out.Duplicates[j].Subject })
+	sort.Slice(out.Supersessions, func(i, j int) bool { return out.Supersessions[i].Retires < out.Supersessions[j].Retires })
 	return out, nil
+}
+
+// add files one payload under the kind it says it is.
+//
+// It is a method rather than a switch inside Records because a kind with no
+// case here fails in the worst possible way: the point is written, the filter
+// matches it, the scroll returns it, and it is dropped on the floor with no
+// error anywhere -- a store that holds a record and a reader that cannot see
+// it. A Go switch on a closed set is not checked for exhaustiveness, so
+// TestEveryKindThisStoreWritesCanBeReadBack is what checks it.
+func (r *Records) add(p map[string]any) {
+	switch kind(str(p[keyKind])) {
+	case kindEntity:
+		r.Entities = append(r.Entities, readEntity(p))
+	case kindRelation:
+		r.Relations = append(r.Relations, readRelation(p))
+	case kindChunk:
+		r.Chunks = append(r.Chunks, readChunk(p))
+	case kindViolation:
+		r.Violations = append(r.Violations, readViolation(p))
+	case kindDuplicate:
+		r.Duplicates = append(r.Duplicates, readDuplicate(p))
+	case kindSupersession:
+		r.Supersessions = append(r.Supersessions, readSupersession(p))
+	}
+}
+
+// readSupersession is supersessionPoints backwards.
+func readSupersession(p map[string]any) alchemy.Supersession {
+	return alchemy.Supersession{
+		Retires:    str(p[keyRetires]),
+		By:         readRef(p[keyBy]),
+		Reason:     str(p[keyReason]),
+		Provenance: readProvenance(p),
+	}
 }
 
 func relLess(a, b alchemy.Relation) bool {

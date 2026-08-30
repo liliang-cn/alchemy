@@ -41,12 +41,20 @@ import (
 // the service's — a cost record in the buyer's graph is a row nobody will ever
 // join to.
 
-// The two edge types that reach the run node. FOUND_IN is what a finding
+// The three edge types that reach the run node. FOUND_IN is what a finding
 // travels on and IN_RUN what source material does, so that a reader can ask
 // for one without being handed the other.
+//
+// STATED_IN is the third because a supersession is neither. "What did this run
+// find wrong" must not come back with a correction in it -- nothing is wrong
+// with a correction -- and "what material did this run read" must not either,
+// because nobody showed the model a retirement; the run asserts it. A third
+// question deserves a third edge, and the alternative was to make one of the
+// first two answer something it was not asked.
 const (
-	linkFinding = "FOUND_IN"
-	linkChunk   = "IN_RUN"
+	linkFinding   = "FOUND_IN"
+	linkChunk     = "IN_RUN"
+	linkStatement = "STATED_IN"
 )
 
 // findingID gives a finding a content-addressed identity, so that loading the
@@ -102,7 +110,7 @@ func (l *Loader) writeAux(ctx context.Context, kind, linkType string, rows []any
 			page = append(page, rows[i])
 		}
 		if err := l.runBatch(ctx, stmt, page); err != nil {
-			return fmt.Errorf("%s findings: %w", kind, err)
+			return fmt.Errorf("writing %s nodes: %w", kind, err)
 		}
 		rep.Batches++
 	}
@@ -191,6 +199,87 @@ func (l *Loader) writeRuleSets(ctx context.Context, sets []alchemy.RuleSet, rep 
 	// IN_RUN rather than FOUND_IN: a policy is not a finding about the graph,
 	// it is source material the same way a chunk is — what the model was shown.
 	return l.writeAux(ctx, "RuleSet", linkChunk, rows, "", rep)
+}
+
+// refKey renders an alchemy.Ref as the one string a content address can be
+// taken over. It is the four fields Relation.Identity is a function of plus the
+// entity's, in a fixed order, so that two Refs naming one record render alike
+// and two naming different records cannot collide through a shared separator.
+func refKey(r alchemy.Ref) string {
+	return fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s\x00%s",
+		r.Kind, r.ID, r.Type, r.From, r.To, r.Key)
+}
+
+// writeSupersessions loads what this result says is no longer true.
+//
+// It is loaded, and it is not acted on. alchemy states the rule and this is the
+// step at which breaking it would cost a buyer something real: a producer able
+// to delete another producer's fact by naming it is an unreviewed writer with
+// write access to a graph somebody is already querying. So nothing is deleted,
+// nothing is detached, and no property of the retired record changes. What is
+// written is the claim -- what it retires, what replaces it, why, and on whose
+// word -- which is the whole of what alchemy promises survives the pipeline.
+//
+// The two edges reach the records from the supersession node and never run
+// between them, which is the rule a Duplicate is under above and for a sharper
+// version of the same reason. A `SUPERSEDED_BY` relationship from the old node
+// to the new one is traversable, and an agent that walked it would have been
+// handed one producer's decision as though the store had made it. Hanging both
+// off the claim states the same information as a claim.
+//
+// Both are OPTIONAL MATCH, and here that is the ordinary case rather than the
+// careful one. Supersession.Retires "deliberately need not be present in this
+// result": the record being retired is usually in a store from a run that
+// finished last month, and it is never in this graph at all when it names a
+// relation, because a relation here is an edge and an edge is not a node an id
+// resolves to. It matches nothing then, the claim is still written with the id
+// it named, and a reader can go and look. A connector that refused would make
+// the field useless for the only case it exists for.
+//
+// Options.SkipFindings does not reach here. That option is a buyer saying they
+// want the graph without the quality report; a retirement is not part of the
+// quality report, and dropping it under a flag about findings would lose the
+// statement to a setting nobody set for that reason.
+func (l *Loader) writeSupersessions(ctx context.Context, batch []alchemy.Supersession, rep *Report) error {
+	if len(batch) == 0 {
+		return nil
+	}
+	pre := l.opts.ReservedPrefix
+	base, err := quoteIdent(l.opts.BaseLabel)
+	if err != nil {
+		return err
+	}
+	link := func(field, relType, alias string) string {
+		return fmt.Sprintf(" WITH f, row OPTIONAL MATCH (%[4]s:%[1]s {`%[2]s%[3]s`: $run, `%[2]s%[5]s`: row.%[6]s}) "+
+			"FOREACH (x IN CASE WHEN %[4]s IS NULL THEN [] ELSE [%[4]s] END | MERGE (f)-[:%[7]s]->(x))",
+			base, pre, keyRun, alias, keyID, field, relType)
+	}
+
+	rows := make([]any, 0, len(batch))
+	for _, s := range batch {
+		props := map[string]any{
+			pre + "retires": s.Retires, pre + "reason": s.Reason,
+			// The whole Ref and not only its id: which kind of record replaces
+			// this one, and for an edge the four fields its identity is a
+			// function of, so a reader holding the node can work out what it
+			// names without going back to the result.
+			pre + "by_kind": string(s.By.Kind), pre + "by_id": s.By.ID, pre + "by_type": s.By.Type,
+			pre + "by_from": s.By.From, pre + "by_to": s.By.To, pre + "by_key": s.By.Key,
+		}
+		// The supersession's own provenance and not the superseding record's:
+		// a reviewer may retire a record a model proposed, and those are two
+		// claims by two parties.
+		for k, val := range provenanceProps(s.Provenance, pre) {
+			props[k] = val
+		}
+		rows = append(rows, map[string]any{
+			"id": findingID("supersession", s.Retires, refKey(s.By), s.Reason), "props": props,
+			"retires": s.Retires, "by": s.By.ID,
+		})
+	}
+	rep.Supersessions += len(rows)
+	return l.writeAux(ctx, "Supersession", linkStatement, rows,
+		link("retires", "RETIRES", "old")+link("by", "REPLACED_BY", "new"), rep)
 }
 
 // writeFindings loads everything that describes the graph.

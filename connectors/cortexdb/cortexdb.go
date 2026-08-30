@@ -104,6 +104,11 @@ type Report struct {
 	Entities  int
 	Relations int
 	Chunks    int
+	// Supersessions is how many retirements were recorded on the run's
+	// completion document. It counts claims filed and never nodes removed:
+	// this connector writes what a result says is over and deletes nothing.
+	Supersessions int
+
 	// MentionEdges is how many (chunk)-[mentions]->(entity) edges CortexDB
 	// wrote. It is the count that makes §5b's "from which chunk of which file"
 	// answerable in CortexDB's own vocabulary rather than only in ours.
@@ -220,6 +225,13 @@ type runMarker struct {
 	Started  time.Time       `json:"started_at"`
 	Counts   alchemy.Counts  `json:"counts,omitempty"`
 	Findings json.RawMessage `json:"findings,omitempty"`
+	// Supersessions is what the run says is over. It is its own field and not
+	// one more key inside Findings, because a reader consulting the findings is
+	// deciding how far to trust this import and a retirement says nothing about
+	// that: nothing is wrong with the graph, and something outside it is
+	// finished. Filing the two together would put a correction in the quality
+	// report.
+	Supersessions []alchemy.Supersession `json:"supersessions,omitempty"`
 }
 
 func markerID(run string) string     { return runNodeID(run) }
@@ -288,7 +300,7 @@ func (l *Loader) writeMarker(ctx context.Context, digest string, rep *Report) er
 // Its existence is also the answer to "is this run finished?": a marker with no
 // completion beside it is a load that died halfway, which is one Get to find
 // and one re-Load to fix.
-func (l *Loader) completeRun(ctx context.Context, digest string, sum sink.Summary, f sink.Findings, rep *Report) error {
+func (l *Loader) completeRun(ctx context.Context, digest string, sum sink.Summary, f sink.Findings, retired []alchemy.Supersession, rep *Report) error {
 	store := l.cortex.Vector()
 	if doc, err := store.GetDocument(ctx, completionID(l.opts.RunID)); err == nil && doc != nil {
 		return nil
@@ -310,6 +322,11 @@ func (l *Loader) completeRun(ctx context.Context, digest string, sum sink.Summar
 	}
 	body, err := json.Marshal(runMarker{
 		Digest: digest, Started: time.Now().UTC(), Counts: sum.Counts, Findings: findings,
+		// Recorded, never applied. alchemy states a retirement and does not
+		// perform one, and this store could: DeleteDocumentGraph is one call
+		// away, and taking it would let one producer remove another producer's
+		// fact -- in a store that is also somebody's brain -- by naming it.
+		Supersessions: retired,
 	})
 	if err != nil {
 		return fmt.Errorf("cortexdb: render run marker: %w", err)

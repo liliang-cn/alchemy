@@ -51,6 +51,11 @@ type Loaded struct {
 	Vectors    int
 	Violations int
 	Duplicates int
+	// Supersessions is how many retirements were recorded beside the graph. It
+	// counts claims filed and never rows removed: this connector writes what a
+	// result says is over and deletes nothing, so a load reporting 12 holds
+	// exactly as many entities and relations as it would have without them.
+	Supersessions int
 }
 
 // HeldError refuses a result that still carries an unanswered conflict.
@@ -171,13 +176,14 @@ func (l *Loader) Load(ctx context.Context, res alchemy.Result, opts LoadOptions)
 		// Dimension is read back off the result rather than off the report,
 		// because it is what this store bound and a converged load bound
 		// nothing.
-		Dimension:  l.BoundDimension(ctx),
-		Entities:   len(res.Entities),
-		Relations:  len(res.Relations),
-		Chunks:     len(res.Chunks),
-		Vectors:    len(res.Vectors),
-		Violations: len(res.Violations),
-		Duplicates: len(res.Duplicates),
+		Dimension:     l.BoundDimension(ctx),
+		Entities:      len(res.Entities),
+		Relations:     len(res.Relations),
+		Chunks:        len(res.Chunks),
+		Vectors:       len(res.Vectors),
+		Violations:    len(res.Violations),
+		Duplicates:    len(res.Duplicates),
+		Supersessions: len(res.Supersessions),
 	}, nil
 }
 

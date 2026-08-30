@@ -20,9 +20,16 @@ type rules struct {
 	entities   map[string]string
 	relations  map[string]string
 	oneWay     map[string]bool
+	atMostOne  map[string]cardinality
 	endpoints  map[endpointKey]verdict
 	ontologyID string
 }
+
+// cardinality is what one relation type says about how many edges of it may
+// meet at one node, at each end.
+type cardinality struct{ in, out bool }
+
+func (c cardinality) constrains() bool { return c.in || c.out }
 
 type endpointKey struct{ typ, from, to string }
 
@@ -37,6 +44,7 @@ func newRules(v ontology.Vocabulary, ontologyID string) *rules {
 		entities:   map[string]string{},
 		relations:  map[string]string{},
 		oneWay:     map[string]bool{},
+		atMostOne:  map[string]cardinality{},
 		endpoints:  map[endpointKey]verdict{},
 		ontologyID: ontologyID,
 	}
@@ -93,6 +101,40 @@ func (r *rules) runsOneWay(typ string) bool {
 	v := r.vocab.RunsOneWay(typ)
 	r.oneWay[typ] = v
 	return v
+}
+
+// holdsAtMostOne answers what a relation type declared about how many of its
+// edges may meet at one node, at each end.
+//
+// It is asked through canonicalRelation rather than by folding the name here,
+// so that a type is matched exactly once in this package and the cardinality
+// check cannot start recognising a spelling the canonicalisation does not. An
+// undeclared type answers "neither end", which is the same answer runsOneWay
+// gives it and for the same reason one field over.
+//
+// It reads the declaration off the vocabulary rather than asking the ontology
+// package a question, because the ontology package has no question to ask yet:
+// AtMostOneIn and AtMostOneOut are exported fields with no accessor beside
+// RunsOneWay's. That is a gap worth closing there rather than here — a second
+// caller would want the same lookup — and the matching, which is the part that
+// could actually drift, is still done by the ontology.
+func (r *rules) holdsAtMostOne(typ string) cardinality {
+	if c, seen := r.atMostOne[typ]; seen {
+		return c
+	}
+	// Asked of the vocabulary rather than read off Vocabulary.Relations here.
+	// The matching is the part that drifts — a type named in one spelling and
+	// declared in another has to resolve the same way for every caller — and
+	// this file's first version looped over the declarations itself, which is
+	// the second copy of a rule pkg/ontology owns. HoldsAtMostOneIn answers
+	// false for a type the ontology does not declare, which is what makes an
+	// undeclared type a violation and never also a cardinality conflict.
+	c := cardinality{
+		in:  r.vocab.HoldsAtMostOneIn(typ),
+		out: r.vocab.HoldsAtMostOneOut(typ),
+	}
+	r.atMostOne[typ] = c
+	return c
 }
 
 // allowsRelation answers the endpoint question, keeping the vocabulary's own

@@ -174,10 +174,4 @@ func queued(r *jobRun, itemID string) bool {
 // A job with no result yet — still pending, still running — is held by nothing
 // at all, and the state beside this number is what tells that apart from a job
 // whose queue has been worked through.
-func holding(r *jobRun) int32 {
-	res, ok := r.pending()
-	if !ok {
-		return 0
-	}
-	return int32(len(res.Held()))
-}
+func holding(r *jobRun) int32 { return int32(unanswered(r)) }

@@ -86,6 +86,10 @@ type tx struct {
 	ends      *endpoints
 
 	relations int
+	// supersessions is the count so far, which is the position the next batch
+	// starts at: a load is a stream, so a claim's place in it is counted across
+	// batches rather than read off a slice index.
+	supersessions int
 	// rep is this store's own tally. The driver overwrites the record counts
 	// in the Report that Commit returns — it is what handed them over — but
 	// the numbers are still needed here: the marker records how many points
@@ -133,6 +137,14 @@ func (t *tx) Findings(ctx context.Context, f sink.Findings) error {
 	t.rep.Unread += len(f.Unread)
 	t.guesses, t.unread = f.Guesses, f.Unread
 	return nil
+}
+
+// Supersessions writes what the result says is over, as points beside the
+// graph, and applies none of it. See supersessionPoints.
+func (t *tx) Supersessions(ctx context.Context, batch []alchemy.Supersession) error {
+	b := supersessionPoints(t.id, t.digest, t.supersessions, batch)
+	t.supersessions += len(batch)
+	return t.put(ctx, b, &t.rep.Supersessions, len(batch))
 }
 
 // put writes one kind's points and folds the request count into the report.

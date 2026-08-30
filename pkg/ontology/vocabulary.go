@@ -117,6 +117,31 @@ func (v Vocabulary) RunsOneWay(relType string) bool {
 	return ok && !r.BothWays
 }
 
+// HoldsAtMostOneIn and HoldsAtMostOneOut report the cardinality this
+// vocabulary declares for a relation type: whether a node may be on the `to`
+// end, or the `from` end, of more than one edge of it.
+//
+// They are here rather than left to the caller to read off RelationType for
+// RunsOneWay's reason. The matching is the part that drifts — a type named in
+// one spelling and declared in another has to resolve the same way in every
+// caller — and pkg/verify's first version of this read the two bools itself
+// after asking CanonicalRelation, which is the loop this package exists to
+// stop the second caller from writing again.
+//
+// An undeclared type constrains nothing, which is the same answer RunsOneWay
+// gives it and the right one: a type the ontology does not know is already a
+// violation, and making it also a cardinality conflict would report one fault
+// twice and ask a person about the second.
+func (v Vocabulary) HoldsAtMostOneIn(relType string) bool {
+	r, ok := v.relation(relType)
+	return ok && r.AtMostOneIn
+}
+
+func (v Vocabulary) HoldsAtMostOneOut(relType string) bool {
+	r, ok := v.relation(relType)
+	return ok && r.AtMostOneOut
+}
+
 func (v Vocabulary) relation(t string) (RelationType, bool) {
 	for _, r := range v.Relations {
 		if fold(r.Name) == fold(t) {

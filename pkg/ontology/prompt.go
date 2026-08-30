@@ -186,6 +186,21 @@ func (v Vocabulary) writeEntities(b *strings.Builder) {
 	}
 }
 
+// writeRelations names each type, its ends, and whether it may run either way.
+//
+// AtMostOneIn and AtMostOneOut are deliberately NOT written, and the omission
+// is the decision. BothWays is here because it WITHHOLDS a contradiction — it
+// tells the model nothing to do — while a cardinality is a rule the model
+// would act on, and the action it would take is to drop the second claim. That
+// is precisely the record the constraint exists to surface: a profile saying
+// Ada is CTO and a correction saying Bruno is are two sources disagreeing, and
+// §7.3 stops the job on it so a person decides. An extractor told "a company
+// has one CTO" resolves it silently, in one chunk, with no provenance and no
+// question — the confident wrong answer with a citation that §2.1 is about.
+//
+// So cardinality is a checker's rule and never an extractor's. The same list
+// on both sides of the model (§5) is about which types exist, not about how
+// many of each the model should emit.
 func (v Vocabulary) writeRelations(b *strings.Builder) {
 	for _, r := range v.Relations {
 		fmt.Fprintf(b, "  %s: %s -> %s", r.Name, promptEnd(r.From), promptEnd(r.To))

@@ -158,6 +158,19 @@ func stream(ctx context.Context, tx Tx, res alchemy.Result, batch int) (Report, 
 		}
 		rep.Violations, rep.Duplicates = len(f.Violations), len(f.Duplicates)
 		rep.Guesses, rep.Unread = len(f.Guesses), len(f.Unread)
+		// Last, and after the records for the same reason the findings are: a
+		// store that links a retirement to the record it names finds the record
+		// already written on the occasions this result contains it. Batched
+		// because a correction pass retires as much as it restates, and because
+		// a load that dies halfway through one owes an operator the number of
+		// retirements that landed — which only the party handing them over
+		// knows.
+		for b := range batches(len(res.Supersessions), batch) {
+			if err := tx.Supersessions(ctx, res.Supersessions[b.from:b.to]); err != nil {
+				return rep, fmt.Errorf("sink: supersessions %d..%d: %w", b.from, b.to, err)
+			}
+			rep.Supersessions += b.to - b.from
+		}
 	}
 	done, err := tx.Commit(ctx, summaryOf(res))
 	if err != nil {
