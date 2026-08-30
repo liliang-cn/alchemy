@@ -25,8 +25,6 @@
   "paths": {
     "/v1/assertions": {
       "post": {
-        "summary": "Assert records a fact somebody knows and no document states.",
-        "description": "It is not a hole in §4. Nothing is stored that a job does not already\nstore, the graph comes back as JSON, and where it goes afterwards is the\ncaller's business exactly as it is for every other result. What it removes\nis a detour: until now the only way in was to write the fact into a file,\nupload it, create a job, poll it and fetch the result — five steps and an\ninvented document for one triple — and it arrived stamped\nPRODUCER_GRAPH_IMPORT, \"an existing graph already asserted it\", which is\nnot what happened and cost the record the one thing that made it worth\nadmitting: a person who can be asked.\n\nIt is synchronous, and that is not an optimisation. An assertion has no\nchunking, no model call and no embedding; it is a parse and a check\nagainst the ontology. There is nothing to poll, and returning a job id for\na caller to poll would be inventing asynchrony an operation does not have.\nThe Result carries the job id in its `job` field, so the record is still\ntraceable through GetJob like any other.\n\nThe ontology is optional and checked when given, which is the rule graph\nsources already follow. An assertion under an ontology that does not\ndeclare its types comes back with violations naming them, rather than a\nrefusal: §5 makes the graph never more permissive than the vocabulary, and\na person asserting a type nobody declared is exactly the case that has to\nbe visible instead of quietly accepted.",
         "operationId": "Alchemy_Assert",
         "responses": {
           "200": {
@@ -397,6 +395,45 @@
             "required": false,
             "type": "integer",
             "format": "int32"
+          }
+        ],
+        "tags": [
+          "Alchemy"
+        ]
+      }
+    },
+    "/v1/ontologies:extend": {
+      "post": {
+        "summary": "Assert records a fact somebody knows and no document states.",
+        "description": "It is not a hole in §4. Nothing is stored that a job does not already\nstore, the graph comes back as JSON, and where it goes afterwards is the\ncaller's business exactly as it is for every other result. What it removes\nis a detour: until now the only way in was to write the fact into a file,\nupload it, create a job, poll it and fetch the result — five steps and an\ninvented document for one triple — and it arrived stamped\nPRODUCER_GRAPH_IMPORT, \"an existing graph already asserted it\", which is\nnot what happened and cost the record the one thing that made it worth\nadmitting: a person who can be asked.\n\nIt is synchronous, and that is not an optimisation. An assertion has no\nchunking, no model call and no embedding; it is a parse and a check\nagainst the ontology. There is nothing to poll, and returning a job id for\na caller to poll would be inventing asynchrony an operation does not have.\nThe Result carries the job id in its `job` field, so the record is still\ntraceable through GetJob like any other.\n\nThe ontology is optional and checked when given, which is the rule graph\nsources already follow. An assertion under an ontology that does not\ndeclare its types comes back with violations naming them, rather than a\nrefusal: §5 makes the graph never more permissive than the vocabulary, and\na person asserting a type nobody declared is exactly the case that has to\nbe visible instead of quietly accepted.\nExtendOntology declares accepted proposals in a vocabulary and hands back\nthe next document.\n\nIt takes a document and returns one, holding nothing between calls,\nbecause §4 means the service keeps no ontology: the caller supplies one\nper job and keeps whatever comes back. That is not a database this design\nis missing — it is what lets a vocabulary be a file somebody reviews,\nversions, diffs and can roll back, rather than a row somebody changed.\n\nThe id always changes. An ontology that gained a type is a different\nvocabulary and Provenance.ontology names it on every record; two different\nvocabularies under one id leave a reader unable to say what a graph was\nchecked against, which is the whole of what that field is for.\n\nA relation proposal whose ends were never observed is refused rather than\ndeclared open, because an undeclared end reads as \"any\" — a rule widened\nsilently at the moment somebody pressed Accept. The route past it is an\norder and not a flag: accept the entity types, run again, and the ends are\nthere.",
+        "operationId": "Alchemy_ExtendOntology",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ExtendOntologyResponse"
+            }
+          },
+          "401": {
+            "description": "No bearer token, or one the service does not accept.",
+            "schema": {}
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "ExtendOntologyRequest is a vocabulary and the proposals a person accepted\ninto it.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1ExtendOntologyRequest"
+            }
           }
         ],
         "tags": [
@@ -855,6 +892,55 @@
         },
         "provenance": {
           "$ref": "#/definitions/v1Provenance"
+        }
+      }
+    },
+    "v1ExtendOntologyRequest": {
+      "type": "object",
+      "properties": {
+        "ontology": {
+          "type": "string",
+          "description": "The document to extend, as supplied to the job that produced the\nproposals."
+        },
+        "part": {
+          "type": "string",
+          "description": "Which part the accepted types are declared in. Empty means prose."
+        },
+        "accept": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Proposal"
+          },
+          "description": "The proposals being accepted, as they came back on a Result. Accepting one\nis a judgement about what a type means, so they are named rather than\ntaken wholesale: \"accept everything\" is a button that makes a vocabulary\nout of whatever a model happened to emit."
+        },
+        "by": {
+          "type": "string",
+          "description": "Who accepted them. Required: extending a vocabulary is the judgement §2.1\nexists to keep attributable."
+        },
+        "new_id": {
+          "type": "string",
+          "description": "The id for the extended document. Empty increments a numeric version; a\nversion that is not a number has to say, because a versioning scheme is\nthe document's own and not this service's to guess at."
+        }
+      },
+      "description": "ExtendOntologyRequest is a vocabulary and the proposals a person accepted\ninto it."
+    },
+    "v1ExtendOntologyResponse": {
+      "type": "object",
+      "properties": {
+        "ontology": {
+          "type": "string",
+          "description": "The new document, to keep and supply to the next job."
+        },
+        "id": {
+          "type": "string"
+        },
+        "added": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The type names that were declared, sorted. A proposal for a type the\nvocabulary already had is skipped rather than refused, so this is what\nactually changed."
         }
       }
     },

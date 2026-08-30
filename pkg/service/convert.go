@@ -48,6 +48,8 @@ var producers = map[alchemy.Producer]alchemyv1.Producer{
 
 var wireProducers = invert(producers)
 
+var wireProposalKinds = invert(proposalKinds)
+
 var proposalKinds = map[alchemy.ProposalKind]alchemyv1.ProposalKind{
 	alchemy.ProposalEntity:   alchemyv1.ProposalKind_PROPOSAL_KIND_ENTITY,
 	alchemy.ProposalRelation: alchemyv1.ProposalKind_PROPOSAL_KIND_RELATION,

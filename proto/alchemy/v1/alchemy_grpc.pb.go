@@ -40,17 +40,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Alchemy_CreateJob_FullMethodName    = "/alchemy.v1.Alchemy/CreateJob"
-	Alchemy_GetJob_FullMethodName       = "/alchemy.v1.Alchemy/GetJob"
-	Alchemy_GetResult_FullMethodName    = "/alchemy.v1.Alchemy/GetResult"
-	Alchemy_StreamResult_FullMethodName = "/alchemy.v1.Alchemy/StreamResult"
-	Alchemy_DeleteJob_FullMethodName    = "/alchemy.v1.Alchemy/DeleteJob"
-	Alchemy_UploadSource_FullMethodName = "/alchemy.v1.Alchemy/UploadSource"
-	Alchemy_WatchJob_FullMethodName     = "/alchemy.v1.Alchemy/WatchJob"
-	Alchemy_Review_FullMethodName       = "/alchemy.v1.Alchemy/Review"
-	Alchemy_ListFindings_FullMethodName = "/alchemy.v1.Alchemy/ListFindings"
-	Alchemy_Decide_FullMethodName       = "/alchemy.v1.Alchemy/Decide"
-	Alchemy_Assert_FullMethodName       = "/alchemy.v1.Alchemy/Assert"
+	Alchemy_CreateJob_FullMethodName      = "/alchemy.v1.Alchemy/CreateJob"
+	Alchemy_GetJob_FullMethodName         = "/alchemy.v1.Alchemy/GetJob"
+	Alchemy_GetResult_FullMethodName      = "/alchemy.v1.Alchemy/GetResult"
+	Alchemy_StreamResult_FullMethodName   = "/alchemy.v1.Alchemy/StreamResult"
+	Alchemy_DeleteJob_FullMethodName      = "/alchemy.v1.Alchemy/DeleteJob"
+	Alchemy_UploadSource_FullMethodName   = "/alchemy.v1.Alchemy/UploadSource"
+	Alchemy_WatchJob_FullMethodName       = "/alchemy.v1.Alchemy/WatchJob"
+	Alchemy_Review_FullMethodName         = "/alchemy.v1.Alchemy/Review"
+	Alchemy_ListFindings_FullMethodName   = "/alchemy.v1.Alchemy/ListFindings"
+	Alchemy_Decide_FullMethodName         = "/alchemy.v1.Alchemy/Decide"
+	Alchemy_ExtendOntology_FullMethodName = "/alchemy.v1.Alchemy/ExtendOntology"
+	Alchemy_Assert_FullMethodName         = "/alchemy.v1.Alchemy/Assert"
 )
 
 // AlchemyClient is the client API for Alchemy service.
@@ -160,6 +161,26 @@ type AlchemyClient interface {
 	// refusal: §5 makes the graph never more permissive than the vocabulary, and
 	// a person asserting a type nobody declared is exactly the case that has to
 	// be visible instead of quietly accepted.
+	// ExtendOntology declares accepted proposals in a vocabulary and hands back
+	// the next document.
+	//
+	// It takes a document and returns one, holding nothing between calls,
+	// because §4 means the service keeps no ontology: the caller supplies one
+	// per job and keeps whatever comes back. That is not a database this design
+	// is missing — it is what lets a vocabulary be a file somebody reviews,
+	// versions, diffs and can roll back, rather than a row somebody changed.
+	//
+	// The id always changes. An ontology that gained a type is a different
+	// vocabulary and Provenance.ontology names it on every record; two different
+	// vocabularies under one id leave a reader unable to say what a graph was
+	// checked against, which is the whole of what that field is for.
+	//
+	// A relation proposal whose ends were never observed is refused rather than
+	// declared open, because an undeclared end reads as "any" — a rule widened
+	// silently at the moment somebody pressed Accept. The route past it is an
+	// order and not a flag: accept the entity types, run again, and the ends are
+	// there.
+	ExtendOntology(ctx context.Context, in *ExtendOntologyRequest, opts ...grpc.CallOption) (*ExtendOntologyResponse, error)
 	Assert(ctx context.Context, in *AssertRequest, opts ...grpc.CallOption) (*Result, error)
 }
 
@@ -295,6 +316,16 @@ func (c *alchemyClient) Decide(ctx context.Context, in *DecideRequest, opts ...g
 	return out, nil
 }
 
+func (c *alchemyClient) ExtendOntology(ctx context.Context, in *ExtendOntologyRequest, opts ...grpc.CallOption) (*ExtendOntologyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExtendOntologyResponse)
+	err := c.cc.Invoke(ctx, Alchemy_ExtendOntology_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *alchemyClient) Assert(ctx context.Context, in *AssertRequest, opts ...grpc.CallOption) (*Result, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Result)
@@ -412,6 +443,26 @@ type AlchemyServer interface {
 	// refusal: §5 makes the graph never more permissive than the vocabulary, and
 	// a person asserting a type nobody declared is exactly the case that has to
 	// be visible instead of quietly accepted.
+	// ExtendOntology declares accepted proposals in a vocabulary and hands back
+	// the next document.
+	//
+	// It takes a document and returns one, holding nothing between calls,
+	// because §4 means the service keeps no ontology: the caller supplies one
+	// per job and keeps whatever comes back. That is not a database this design
+	// is missing — it is what lets a vocabulary be a file somebody reviews,
+	// versions, diffs and can roll back, rather than a row somebody changed.
+	//
+	// The id always changes. An ontology that gained a type is a different
+	// vocabulary and Provenance.ontology names it on every record; two different
+	// vocabularies under one id leave a reader unable to say what a graph was
+	// checked against, which is the whole of what that field is for.
+	//
+	// A relation proposal whose ends were never observed is refused rather than
+	// declared open, because an undeclared end reads as "any" — a rule widened
+	// silently at the moment somebody pressed Accept. The route past it is an
+	// order and not a flag: accept the entity types, run again, and the ends are
+	// there.
+	ExtendOntology(context.Context, *ExtendOntologyRequest) (*ExtendOntologyResponse, error)
 	Assert(context.Context, *AssertRequest) (*Result, error)
 	mustEmbedUnimplementedAlchemyServer()
 }
@@ -452,6 +503,9 @@ func (UnimplementedAlchemyServer) ListFindings(context.Context, *ListFindingsReq
 }
 func (UnimplementedAlchemyServer) Decide(context.Context, *DecideRequest) (*DecideResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Decide not implemented")
+}
+func (UnimplementedAlchemyServer) ExtendOntology(context.Context, *ExtendOntologyRequest) (*ExtendOntologyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExtendOntology not implemented")
 }
 func (UnimplementedAlchemyServer) Assert(context.Context, *AssertRequest) (*Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Assert not implemented")
@@ -621,6 +675,24 @@ func _Alchemy_Decide_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Alchemy_ExtendOntology_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExtendOntologyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AlchemyServer).ExtendOntology(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Alchemy_ExtendOntology_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AlchemyServer).ExtendOntology(ctx, req.(*ExtendOntologyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Alchemy_Assert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AssertRequest)
 	if err := dec(in); err != nil {
@@ -669,6 +741,10 @@ var Alchemy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Decide",
 			Handler:    _Alchemy_Decide_Handler,
+		},
+		{
+			MethodName: "ExtendOntology",
+			Handler:    _Alchemy_ExtendOntology_Handler,
 		},
 		{
 			MethodName: "Assert",

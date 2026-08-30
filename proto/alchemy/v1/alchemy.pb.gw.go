@@ -384,6 +384,33 @@ func local_request_Alchemy_Decide_0(ctx context.Context, marshaler runtime.Marsh
 	return msg, metadata, err
 }
 
+func request_Alchemy_ExtendOntology_0(ctx context.Context, marshaler runtime.Marshaler, client AlchemyClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ExtendOntologyRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.ExtendOntology(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_Alchemy_ExtendOntology_0(ctx context.Context, marshaler runtime.Marshaler, server AlchemyServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ExtendOntologyRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.ExtendOntology(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 func request_Alchemy_Assert_0(ctx context.Context, marshaler runtime.Marshaler, client AlchemyClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
 		protoReq AssertRequest
@@ -557,6 +584,26 @@ func RegisterAlchemyHandlerServer(ctx context.Context, mux *runtime.ServeMux, se
 			return
 		}
 		forward_Alchemy_Decide_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_Alchemy_ExtendOntology_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/alchemy.v1.Alchemy/ExtendOntology", runtime.WithHTTPPathPattern("/v1/ontologies:extend"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_Alchemy_ExtendOntology_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_Alchemy_ExtendOntology_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
 	mux.Handle(http.MethodPost, pattern_Alchemy_Assert_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
@@ -771,6 +818,23 @@ func RegisterAlchemyHandlerClient(ctx context.Context, mux *runtime.ServeMux, cl
 		}
 		forward_Alchemy_Decide_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPost, pattern_Alchemy_ExtendOntology_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/alchemy.v1.Alchemy/ExtendOntology", runtime.WithHTTPPathPattern("/v1/ontologies:extend"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_Alchemy_ExtendOntology_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_Alchemy_ExtendOntology_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodPost, pattern_Alchemy_Assert_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -792,27 +856,29 @@ func RegisterAlchemyHandlerClient(ctx context.Context, mux *runtime.ServeMux, cl
 }
 
 var (
-	pattern_Alchemy_CreateJob_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "jobs"}, ""))
-	pattern_Alchemy_GetJob_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "jobs", "job_id"}, ""))
-	pattern_Alchemy_GetResult_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "result"}, ""))
-	pattern_Alchemy_StreamResult_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "result"}, "stream"))
-	pattern_Alchemy_DeleteJob_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "jobs", "job_id"}, ""))
-	pattern_Alchemy_UploadSource_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "sources"}, ""))
-	pattern_Alchemy_WatchJob_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "events"}, ""))
-	pattern_Alchemy_ListFindings_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "findings"}, ""))
-	pattern_Alchemy_Decide_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "decisions"}, ""))
-	pattern_Alchemy_Assert_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "assertions"}, ""))
+	pattern_Alchemy_CreateJob_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "jobs"}, ""))
+	pattern_Alchemy_GetJob_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "jobs", "job_id"}, ""))
+	pattern_Alchemy_GetResult_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "result"}, ""))
+	pattern_Alchemy_StreamResult_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "result"}, "stream"))
+	pattern_Alchemy_DeleteJob_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "jobs", "job_id"}, ""))
+	pattern_Alchemy_UploadSource_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "sources"}, ""))
+	pattern_Alchemy_WatchJob_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "events"}, ""))
+	pattern_Alchemy_ListFindings_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "findings"}, ""))
+	pattern_Alchemy_Decide_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2, 2, 3}, []string{"v1", "jobs", "job_id", "decisions"}, ""))
+	pattern_Alchemy_ExtendOntology_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "ontologies"}, "extend"))
+	pattern_Alchemy_Assert_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "assertions"}, ""))
 )
 
 var (
-	forward_Alchemy_CreateJob_0    = runtime.ForwardResponseMessage
-	forward_Alchemy_GetJob_0       = runtime.ForwardResponseMessage
-	forward_Alchemy_GetResult_0    = runtime.ForwardResponseMessage
-	forward_Alchemy_StreamResult_0 = runtime.ForwardResponseStream
-	forward_Alchemy_DeleteJob_0    = runtime.ForwardResponseMessage
-	forward_Alchemy_UploadSource_0 = runtime.ForwardResponseMessage
-	forward_Alchemy_WatchJob_0     = runtime.ForwardResponseStream
-	forward_Alchemy_ListFindings_0 = runtime.ForwardResponseMessage
-	forward_Alchemy_Decide_0       = runtime.ForwardResponseMessage
-	forward_Alchemy_Assert_0       = runtime.ForwardResponseMessage
+	forward_Alchemy_CreateJob_0      = runtime.ForwardResponseMessage
+	forward_Alchemy_GetJob_0         = runtime.ForwardResponseMessage
+	forward_Alchemy_GetResult_0      = runtime.ForwardResponseMessage
+	forward_Alchemy_StreamResult_0   = runtime.ForwardResponseStream
+	forward_Alchemy_DeleteJob_0      = runtime.ForwardResponseMessage
+	forward_Alchemy_UploadSource_0   = runtime.ForwardResponseMessage
+	forward_Alchemy_WatchJob_0       = runtime.ForwardResponseStream
+	forward_Alchemy_ListFindings_0   = runtime.ForwardResponseMessage
+	forward_Alchemy_Decide_0         = runtime.ForwardResponseMessage
+	forward_Alchemy_ExtendOntology_0 = runtime.ForwardResponseMessage
+	forward_Alchemy_Assert_0         = runtime.ForwardResponseMessage
 )

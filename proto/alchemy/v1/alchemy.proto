@@ -167,6 +167,32 @@ service Alchemy {
   // refusal: §5 makes the graph never more permissive than the vocabulary, and
   // a person asserting a type nobody declared is exactly the case that has to
   // be visible instead of quietly accepted.
+  // ExtendOntology declares accepted proposals in a vocabulary and hands back
+  // the next document.
+  //
+  // It takes a document and returns one, holding nothing between calls,
+  // because §4 means the service keeps no ontology: the caller supplies one
+  // per job and keeps whatever comes back. That is not a database this design
+  // is missing — it is what lets a vocabulary be a file somebody reviews,
+  // versions, diffs and can roll back, rather than a row somebody changed.
+  //
+  // The id always changes. An ontology that gained a type is a different
+  // vocabulary and Provenance.ontology names it on every record; two different
+  // vocabularies under one id leave a reader unable to say what a graph was
+  // checked against, which is the whole of what that field is for.
+  //
+  // A relation proposal whose ends were never observed is refused rather than
+  // declared open, because an undeclared end reads as "any" — a rule widened
+  // silently at the moment somebody pressed Accept. The route past it is an
+  // order and not a flag: accept the entity types, run again, and the ends are
+  // there.
+  rpc ExtendOntology(ExtendOntologyRequest) returns (ExtendOntologyResponse) {
+    option (google.api.http) = {
+      post: "/v1/ontologies:extend"
+      body: "*"
+    };
+  }
+
   rpc Assert(AssertRequest) returns (Result) {
     option (google.api.http) = {
       post: "/v1/assertions"
@@ -1002,6 +1028,38 @@ message AssertRequest {
   // graph reported itself clean. The claim is carried, never executed; see
   // Supersession.
   repeated Supersedes supersedes = 7;
+}
+
+// ExtendOntologyRequest is a vocabulary and the proposals a person accepted
+// into it.
+message ExtendOntologyRequest {
+  // The document to extend, as supplied to the job that produced the
+  // proposals.
+  string ontology = 1;
+  // Which part the accepted types are declared in. Empty means prose.
+  string part = 2;
+  // The proposals being accepted, as they came back on a Result. Accepting one
+  // is a judgement about what a type means, so they are named rather than
+  // taken wholesale: "accept everything" is a button that makes a vocabulary
+  // out of whatever a model happened to emit.
+  repeated Proposal accept = 3;
+  // Who accepted them. Required: extending a vocabulary is the judgement §2.1
+  // exists to keep attributable.
+  string by = 4;
+  // The id for the extended document. Empty increments a numeric version; a
+  // version that is not a number has to say, because a versioning scheme is
+  // the document's own and not this service's to guess at.
+  string new_id = 5;
+}
+
+message ExtendOntologyResponse {
+  // The new document, to keep and supply to the next job.
+  string ontology = 1;
+  string id = 2;
+  // The type names that were declared, sorted. A proposal for a type the
+  // vocabulary already had is skipped rather than refused, so this is what
+  // actually changed.
+  repeated string added = 3;
 }
 
 message Supersedes {
