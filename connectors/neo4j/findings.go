@@ -57,6 +57,31 @@ const (
 	linkStatement = "STATED_IN"
 )
 
+// The edges that reach from a finding or a statement to the records it names.
+//
+// They were string literals at their call sites, which was survivable while
+// nothing read them back. A read path makes it a defect: a traversal from an
+// entity has to exclude every edge this connector wrote for its own
+// bookkeeping, and a name that lives in a writer and again in a query is a
+// name with two homes -- where the query is the copy that fails by silently
+// matching one edge too many, and returns a duplicate report to an agent as
+// though it were a claim about the world.
+const (
+	linkAbout      = "ABOUT"
+	linkCandidate  = "CANDIDATE"
+	linkRetires    = "RETIRES"
+	linkReplacedBy = "REPLACED_BY"
+)
+
+// bookkeeping is every relationship type this connector writes that is not an
+// extracted claim. It is the exclusion list a walk of the graph runs under,
+// and it is a function over the constants rather than a literal list in a
+// query so that adding an edge type and forgetting the walk is one edit rather
+// than two.
+func bookkeeping() []any {
+	return toAny([]string{linkChunk, linkFinding, linkStatement, linkAbout, linkCandidate, linkRetires, linkReplacedBy})
+}
+
 // findingID gives a finding a content-addressed identity, so that loading the
 // same result twice merges each finding onto itself instead of accumulating a
 // second copy. An index would have been simpler and wrong: a re-run whose
@@ -142,11 +167,11 @@ func (l *Loader) writeChunks(ctx context.Context, batch []sink.Chunk, rep *Repor
 	rows := make([]any, 0, len(batch))
 	for _, c := range batch {
 		props := map[string]any{
-			pre + "index": int64(c.Index), pre + "text": c.Text, pre + keySource: c.Source,
-			pre + "strategy": c.Strategy, pre + "start": int64(c.Start), pre + "end": int64(c.End),
+			pre + keyIndex: int64(c.Index), pre + keyText: c.Text, pre + keySource: c.Source,
+			pre + keyStrategy: c.Strategy, pre + keyStart: int64(c.Start), pre + keyEnd: int64(c.End),
 		}
 		if c.Heading != "" {
-			props[pre+"heading"] = c.Heading
+			props[pre+keyHeading] = c.Heading
 		}
 		rows = append(rows, map[string]any{
 			"id":    fmt.Sprintf("chunk-%d", c.Index),
@@ -191,7 +216,7 @@ func (l *Loader) writeRuleSets(ctx context.Context, sets []alchemy.RuleSet, rep 
 		rows = append(rows, map[string]any{
 			"id": s.Name,
 			"props": map[string]any{
-				pre + "name": s.Name, pre + "rule_names": names, pre + "rule_told": told,
+				pre + keyName: s.Name, pre + "rule_names": names, pre + "rule_told": told,
 			},
 		})
 	}
@@ -279,7 +304,7 @@ func (l *Loader) writeSupersessions(ctx context.Context, batch []alchemy.Superse
 	}
 	rep.Supersessions += len(rows)
 	return l.writeAux(ctx, "Supersession", linkStatement, rows,
-		link("retires", "RETIRES", "old")+link("by", "REPLACED_BY", "new"), rep)
+		link("retires", linkRetires, "old")+link("by", linkReplacedBy, "new"), rep)
 }
 
 // writeFindings loads everything that describes the graph.
@@ -305,7 +330,7 @@ func (l *Loader) writeFindings(ctx context.Context, f sink.Findings, rep *Report
 
 	rows := make([]any, 0, len(f.Violations))
 	for _, v := range f.Violations {
-		props := map[string]any{pre + "kind": string(v.Kind), pre + "detail": v.Detail, pre + "subject": v.Subject}
+		props := map[string]any{pre + keyKind: string(v.Kind), pre + keyDetail: v.Detail, pre + keySubject: v.Subject}
 		for k, val := range provenanceProps(v.Provenance, pre) {
 			props[k] = val
 		}
@@ -314,15 +339,15 @@ func (l *Loader) writeFindings(ctx context.Context, f sink.Findings, rep *Report
 		})
 	}
 	rep.Violations = len(rows)
-	if err := l.writeAux(ctx, "Violation", linkFinding, rows, link("subject", "ABOUT", "e"), rep); err != nil {
+	if err := l.writeAux(ctx, "Violation", linkFinding, rows, link("subject", linkAbout, "e"), rep); err != nil {
 		return err
 	}
 
 	rows = rows[:0]
 	for _, d := range f.Duplicates {
 		props := map[string]any{
-			pre + "signal": string(d.Signal), pre + "subject": d.Subject, pre + "detail": d.Detail,
-			pre + "left_name": d.Left.Name, pre + "right_name": d.Right.Name,
+			pre + keySignal: string(d.Signal), pre + keySubject: d.Subject, pre + keyDetail: d.Detail,
+			pre + keyLeftName: d.Left.Name, pre + keyRightName: d.Right.Name,
 			pre + "left_type": d.Left.Type, pre + "right_type": d.Right.Type,
 		}
 		// Neither side's provenance is copied onto the finding: the CANDIDATE
@@ -334,7 +359,7 @@ func (l *Loader) writeFindings(ctx context.Context, f sink.Findings, rep *Report
 		})
 	}
 	rep.Duplicates = len(rows)
-	if err := l.writeAux(ctx, "Duplicate", linkFinding, rows, link("left", "CANDIDATE", "a")+link("right", "CANDIDATE", "b"), rep); err != nil {
+	if err := l.writeAux(ctx, "Duplicate", linkFinding, rows, link("left", linkCandidate, "a")+link("right", linkCandidate, "b"), rep); err != nil {
 		return err
 	}
 

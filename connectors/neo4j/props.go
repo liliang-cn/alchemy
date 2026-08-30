@@ -33,7 +33,40 @@ const (
 	keyAt            = "at"
 	keyJSONAttrs     = "json_attrs"
 	keyAliases       = "aliases"
+
+	// The run marker's own two, read back by claimRun to decide what a second
+	// load of the same name means, and by the read path to refuse a run that
+	// is still arriving.
+	keyComplete = "complete"
+	keyDigest   = "digest"
+
+	// A chunk's, which are what a citation resolves to: the span of the file
+	// and the text in it.
+	keyIndex    = "index"
+	keyText     = "text"
+	keyStart    = "start"
+	keyEnd      = "end"
+	keyHeading  = "heading"
+	keyStrategy = "strategy"
+
+	// A finding's. They are read back by the read path, which is why they are
+	// named here rather than written at their one write site: a property name
+	// spelled in a writer and again in a query is a name with two homes, and
+	// the query is the one that fails silently by matching nothing.
+	keyKind      = "kind"
+	keyDetail    = "detail"
+	keySubject   = "subject"
+	keySignal    = "signal"
+	keyLeftName  = "left_name"
+	keyRightName = "right_name"
 )
+
+// keyName is the one alchemy field that is deliberately *not* under the
+// reserved prefix. An Entity.Name is what the source called the thing, so it
+// belongs with the source's own attributes at the top level, where a buyer
+// writes `n.name` rather than a name they would have to be told; validate.go
+// is what keeps a "name" attribute from disagreeing with it.
+const keyName = "name"
 
 // provenanceProps flattens a Provenance onto whatever it is describing.
 //

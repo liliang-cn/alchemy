@@ -236,8 +236,8 @@ func (l *Loader) claimRun(ctx context.Context, digest string, replace bool) (rep
 		return false, false, err
 	}
 	pre := l.opts.ReservedPrefix
-	recs, err := l.read(ctx, fmt.Sprintf("MATCH (r:%s:%s {`%s%s`: $run}) RETURN r.`%s%s` AS digest, r.`%scomplete` AS complete",
-		base, runLabel, pre, keyID, pre, "digest", pre), map[string]any{"run": l.opts.RunID})
+	recs, err := l.read(ctx, fmt.Sprintf("MATCH (r:%s:%s {`%s%s`: $run}) RETURN r.`%s%s` AS digest, r.`%s%s` AS complete",
+		base, runLabel, pre, keyID, pre, keyDigest, pre, keyComplete), map[string]any{"run": l.opts.RunID})
 	if err != nil {
 		return false, false, err
 	}
@@ -268,8 +268,8 @@ func (l *Loader) claimRun(ctx context.Context, digest string, replace bool) (rep
 
 	// Written incomplete and only later completed, so that the window in which
 	// the graph is partial is a window in which the graph says so.
-	stmt := fmt.Sprintf("MERGE (r:%s:%s {`%s%s`: $run}) SET r.`%s%s` = $run, r.`%scomplete` = false, r.`%sstarted_at` = $now, r.`%sdigest` = $digest",
-		base, runLabel, pre, keyID, pre, keyRun, pre, pre, pre)
+	stmt := fmt.Sprintf("MERGE (r:%[1]s:%[2]s {`%[3]s%[4]s`: $run}) SET r.`%[3]s%[5]s` = $run, r.`%[3]s%[6]s` = false, r.`%[3]sstarted_at` = $now, r.`%[3]s%[7]s` = $digest",
+		base, runLabel, pre, keyID, keyRun, keyComplete, keyDigest)
 	// A complete run is left alone. Rewriting the marker would set
 	// complete=false on a graph that is finished, which is the one moment a
 	// reader could see a whole run claiming to be partial.
@@ -292,9 +292,9 @@ func (l *Loader) completeRun(ctx context.Context, digest string, counts alchemy.
 	runLabel, _ := quoteIdent(l.internalLabel("Run"))
 	pre := l.opts.ReservedPrefix
 	props := map[string]any{
-		pre + "complete":    true,
+		pre + keyComplete:   true,
 		pre + "finished_at": time.Now().UTC(),
-		pre + "digest":      digest,
+		pre + keyDigest:     digest,
 		// The loader's own numbers, beside the pipeline's: they differ when a
 		// relation was skipped, and the difference is the thing a buyer would
 		// otherwise have to find by counting.

@@ -104,7 +104,7 @@ func (l *Loader) writeEntities(ctx context.Context, batch []alchemy.Entity, rep 
 				// Alchemy's own fields go on last, so a name attribute that
 				// agreed with Entity.Name (preflight allows exactly that case)
 				// cannot disagree by the time it is written.
-				props["name"] = e.Name
+				props[keyName] = e.Name
 				// A list property, which Neo4j holds natively, so a buyer can
 				// ask WHERE $n IN n.aliases without unpacking a string. It is
 				// written only when there are any: an empty list and an absent
