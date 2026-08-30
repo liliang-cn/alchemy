@@ -691,9 +691,24 @@ measured yet.
 **Built, 2026-08-29/30.** §1–§7 are implemented and §6's gateway with them; §8
 is implemented for a single node and designed for more.
 
-Twenty-one packages, 600+ tests, `go test ./... -race` green, three
-dependencies (a PDF reader, gRPC, protobuf). The pipeline runs end to end
+Twenty-one packages, 600+ tests, `go test ./... -race` green, six direct
+dependencies: a PDF reader, gRPC, protobuf, grpc-gateway with the generated
+API annotations it needs, and a Postgres driver. The pipeline runs end to end
 against real model endpoints, over gRPC and over HTTP.
+
+The last of those six is in tension with §4 and this sentence is where that
+stays visible. §8.3's clustered stores put pgx in the *core* module, so a
+buyer who wants neither Postgres nor the REST gateway compiles both anyway —
+which is the thing §4 refuses to do to them with a graph store, done to them
+with a job store instead. The four graph consumers are a separate module for
+exactly this reason; these are not, and that is a debt rather than an
+argument.
+
+This paragraph said "three dependencies (a PDF reader, gRPC, protobuf)" for
+as long as it took somebody to hash go.sum for an unrelated reason. It was
+true when it was written. Every measurable sentence in this section is now a
+check in `internal/claims` that `go test ./...` runs, so the next one fails
+instead of ageing.
 
 What is real rather than claimed:
 

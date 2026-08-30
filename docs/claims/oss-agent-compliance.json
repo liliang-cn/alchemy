@@ -1,0 +1,12 @@
+{
+  "claim": "DESIGN.md §2.1: the mechanism that took one real graph's compliance from 74% to 94%",
+  "where": "DESIGN.md §2.1, quoted again in §5 and §5c",
+  "provenance": "inherited",
+  "source": "oss-agent, on the SDS corpus, 2026-08-27 (v0.28.0 and v0.28.1)",
+  "measured_at": "2026-08-27",
+  "how": "Not reproducible in this repository and not a claim about alchemy. It is the measurement that motivated the vocabulary-partitioned extractor, made in another codebase against another corpus, and it is written down here so that citing it stays a citation. The last step of it was 92% to 94%, closing twenty non-compliant configured_by edges after the model was found treating command-line flags as entities.",
+  "values": {
+    "before": 0.74,
+    "after": 0.94
+  }
+}
