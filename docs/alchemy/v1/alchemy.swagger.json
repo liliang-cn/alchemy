@@ -501,6 +501,11 @@
           "type": "integer",
           "format": "int32",
           "description": "Records a standing rule (§5c's `always`) removed without anybody being\nasked about them. Everything else a graph is missing is reported\nsomewhere; a record a written policy dropped before any queue was shown\nwould otherwise leave the result one record shorter and say nothing."
+        },
+        "duplicates": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Pairs of nodes that may be one node. It is in this block because it is a\nnumber no reader can derive from the entities beside it — both nodes are\nwell-formed, correctly typed and separately attributable — and because\n\"one node in six may be a duplicate\" is exactly a number needed to\ndistrust a graph. It counts the findings, not the pairs still unjoined, so\nit does not fall when a merge is applied: which of them were answered is\nin each finding's provenance."
         }
       },
       "description": "Counts is what makes the difference between a graph you can act on and one\nyou merely have (§5)."
@@ -538,6 +543,56 @@
         }
       }
     },
+    "v1Duplicate": {
+      "type": "object",
+      "properties": {
+        "signal": {
+          "$ref": "#/definitions/v1DuplicateSignal"
+        },
+        "subject": {
+          "type": "string",
+          "description": "The pair, rendered \"left ~ right\"."
+        },
+        "detail": {
+          "type": "string"
+        },
+        "left": {
+          "$ref": "#/definitions/v1DuplicateSide",
+          "description": "Left is the node whose name is contained in the other's, which is a\nproperty of the pair rather than of the order they were extracted in.\nNeither side is the wrong one."
+        },
+        "right": {
+          "$ref": "#/definitions/v1DuplicateSide"
+        }
+      },
+      "description": "Duplicate is two nodes that may be one node, and are not joined.\n\nIt is a third kind of finding beside Violation and Conflict because it is\nneither. A violation is one source saying something the ontology does not\nallow — a declared rule was broken, and the graph minus the record is still\nusable. Neither is true here: no vocabulary forbids two names for one thing,\nand removing either node takes its edges with it. A conflict is two sources\nboth claiming to be right with nothing to decide between them, and these two\nrecords do not disagree; they agree and are merely not joined. So nothing is\nwrong, the graph is delivered, and what is owed is the pair and the number."
+    },
+    "v1DuplicateSide": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/definitions/v1Provenance"
+        }
+      },
+      "description": "DuplicateSide is one node of a candidate pair, with what a reviewer needs to\nanswer without a lookup: which node, what it is called, and where it came\nfrom."
+    },
+    "v1DuplicateSignal": {
+      "type": "string",
+      "enum": [
+        "DUPLICATE_SIGNAL_UNSPECIFIED",
+        "DUPLICATE_SIGNAL_NAME_AFFIX"
+      ],
+      "default": "DUPLICATE_SIGNAL_UNSPECIFIED",
+      "description": "DuplicateSignal names the deterministic evidence that two nodes may be one\nthing. It is on the finding because a reviewer answering \"are these the\nsame?\" is entitled to know what asked them.\n\n - DUPLICATE_SIGNAL_NAME_AFFIX: Under one type, one node's name is the other's with whole words added at\nthe front or the back: \"document\" and \"document package\". It is the shape\na per-chunk extractor produces, since each chunk is a separate call that\ncannot see how the others named the thing."
+    },
     "v1Edit": {
       "type": "object",
       "properties": {
@@ -553,6 +608,10 @@
         },
         "to": {
           "type": "string"
+        },
+        "into": {
+          "type": "string",
+          "description": "The entity id this record is the same record as: the answer to a duplicate\nitem, and the only correction that changes which node a record is rather\nthan what it says. It is a field on Edit rather than a fifth verb because\n§5c's four are a closed set, and a merge is an edit that corrects which\nnode a record belongs to, exactly as from and to correct which nodes an\nedge runs between. It could not be spelled with `name`: an id is derived\nonce, by the producer that made the record, so renaming the absorbed node\nto the survivor's spelling leaves two nodes with one name and every edge\nwhere it was."
         }
       }
     },
@@ -923,6 +982,14 @@
           },
           "description": "The `always` rules this job's review produced. They are returned rather\nthan kept because §4 means the service holds no policy between jobs: the\ncaller keeps them and supplies them on the next job, which is how a\npipeline that started attended becomes one that runs itself without ever\nhaving guessed (§7.3)."
         },
+        "duplicates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Duplicate"
+          },
+          "description": "Two nodes that may be one node, returned whether or not review is on for\nthe same reason violations are: a caller running unattended is owed the\nnumbers needed to distrust what it got."
+        },
         "rule_sets": {
           "type": "array",
           "items": {
@@ -991,6 +1058,13 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1Guess"
+          }
+        },
+        "duplicates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Duplicate"
           }
         },
         "counts": {
@@ -1112,10 +1186,11 @@
         "REVIEW_KIND_CONFLICT",
         "REVIEW_KIND_VIOLATION",
         "REVIEW_KIND_GUESS",
-        "REVIEW_KIND_LOW_CONFIDENCE"
+        "REVIEW_KIND_LOW_CONFIDENCE",
+        "REVIEW_KIND_DUPLICATE"
       ],
       "default": "REVIEW_KIND_UNSPECIFIED",
-      "description": "ReviewKind is §5c's ranking table as a set. The order of the values is the\norder of that table, and it is why a conflict is never below a guess."
+      "description": "ReviewKind is §5c's ranking table as a set.\n\nThe numbers are wire identity and cannot be reordered, so DUPLICATE is 5\nwhile it ranks fourth — below a guess, because nothing about a duplicate is\nwrong and an unanswered one leaves the graph exactly as the extractor\nproduced it, and above low confidence, because the answer decides what every\nedge on both nodes points at. The rank a client should sort by is on the\nitem; this enum says which question it is, not which is more urgent."
     },
     "v1ReviewOptions": {
       "type": "object",

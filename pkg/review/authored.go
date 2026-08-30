@@ -145,7 +145,16 @@ func (a Authorship) check() (Kind, error) {
 	if a.Verb == VerbAlways && a.Edit != nil && a.Edit.empty() {
 		return "", fmt.Errorf("review: the authored rule %q carries an edit that changes nothing; a record marked settled and left alone is an accept wearing the wrong label", a.Shape)
 	}
-	return authoredShape(a.Shape)
+	kind, err := authoredShape(a.Shape)
+	if err != nil {
+		return "", err
+	}
+	if kind == KindDuplicate {
+		if err := authoredMerge(a); err != nil {
+			return "", err
+		}
+	}
+	return kind, nil
 }
 
 // authoredShape is the floor on how wide a hand-written rule may be.
@@ -190,14 +199,24 @@ func authoredShape(shape string) (Kind, error) {
 	if err != nil {
 		return "", fmt.Errorf("review: the authored rule %q: %w", shape, err)
 	}
-	producer, err := producerOf(fields["producer"])
-	if err != nil {
-		return "", fmt.Errorf("review: the authored rule %q: %w", shape, err)
+	// A duplicate names two sides and so names two producers, the way a
+	// conflict does; the single-producer segment below is not its shape.
+	var prov alchemy.Provenance
+	if kind != KindDuplicate {
+		producer, err := producerOf(fields["producer"])
+		if err != nil {
+			return "", fmt.Errorf("review: the authored rule %q: %w", shape, err)
+		}
+		prov = alchemy.Provenance{Producer: producer, Model: fields["model"]}
 	}
-	prov := alchemy.Provenance{Producer: producer, Model: fields["model"]}
 
 	var rebuilt string
 	switch kind {
+	case KindDuplicate:
+		rebuilt, err = duplicateAuthored(shape, fields, positional)
+		if err != nil {
+			return "", err
+		}
 	case KindViolation:
 		if len(positional) != 1 {
 			return "", fmt.Errorf("review: the authored rule %q does not say which violation it is about; write one of the kinds the verifier raises, as in %q", shape, "violation/unknown_entity_type/type=Widget/producer=llm-extract")
@@ -285,7 +304,7 @@ func segments(parts []string) (map[string]string, []string, error) {
 			continue
 		}
 		switch key {
-		case "type", "producer", "model", "field", "chosen":
+		case "type", "producer", "model", "field", "chosen", "left", "right", "between":
 		default:
 			return nil, nil, fmt.Errorf("names %q, which is not part of any shape this service builds", key)
 		}
@@ -299,11 +318,105 @@ func segments(parts []string) (map[string]string, []string, error) {
 
 func kindOf(word string) (Kind, error) {
 	switch k := Kind(word); k {
-	case KindConflict, KindViolation, KindGuess, KindLowConfidence:
+	case KindConflict, KindViolation, KindGuess, KindDuplicate, KindLowConfidence:
 		return k, nil
 	default:
-		return "", fmt.Errorf("review: %q is not a kind of question this service asks; a shape begins with one of %q, %q, %q or %q", word, KindConflict, KindViolation, KindGuess, KindLowConfidence)
+		return "", fmt.Errorf("review: %q is not a kind of question this service asks; a shape begins with one of %q, %q, %q, %q or %q", word, KindConflict, KindViolation, KindGuess, KindDuplicate, KindLowConfidence)
 	}
+}
+
+// duplicateAuthored is the one two-sided finding a person may write a rule
+// about in advance, and the difference from a conflict is worth stating beside
+// the refusal it is not.
+//
+// conflictAuthored's objection is that the shape is unbounded: "whenever the
+// schema and the model disagree about any entity's type, in any corpus,
+// forever, the schema wins" is one line, written by somebody who has seen no
+// instance, and it decides questions nobody has read. A merge rule cannot be
+// written that way. It names both spellings in full, so the widest thing an
+// author can say is "these two names are one thing" — a claim about two strings
+// they typed, which either matches a pair in tonight's corpus or matches
+// nothing. §5c's operator who knows their corpus is exactly the person this
+// serves: they already know their model writes the type word into the name, and
+// making them wait for a hold per pair to say so is the ceremony §5c's opening
+// argument refuses.
+//
+// The floor is that both names and the type must be there. A rule naming one
+// side would be "merge anything affix-matching this name into whatever I said",
+// which is the unbounded rule again in a smaller font.
+func duplicateAuthored(shape string, fields map[string]string, positional []string) (string, error) {
+	if len(positional) != 1 {
+		return "", fmt.Errorf("review: the authored rule %q does not say which signal it is about; write the one the verifier raises, as in %q",
+			shape, "duplicate/name_affix/type=Package/left=document/right=document package/between=llm-extract|llm-extract")
+	}
+	signal, err := duplicateSignalOf(positional[0])
+	if err != nil {
+		return "", fmt.Errorf("review: the authored rule %q: %w", shape, err)
+	}
+	if fields["type"] == "" || fields["left"] == "" || fields["right"] == "" {
+		return "", tooWide(shape, "the type and both names",
+			"every pair this signal ever matches, including pairs nobody has seen")
+	}
+	left, right, err := producerPair(fields["between"])
+	if err != nil {
+		return "", fmt.Errorf("review: the authored rule %q: %w", shape, err)
+	}
+	return duplicateShape(alchemy.Duplicate{
+		Signal: signal,
+		Left: alchemy.DuplicateSide{
+			Type: fields["type"], Name: fields["left"],
+			Provenance: alchemy.Provenance{Producer: left},
+		},
+		Right: alchemy.DuplicateSide{
+			Type: fields["type"], Name: fields["right"],
+			Provenance: alchemy.Provenance{Producer: right, Model: fields["model"]},
+		},
+	}), nil
+}
+
+// producerPair reads the "between=a|b" segment both two-sided findings write.
+func producerPair(between string) (alchemy.Producer, alchemy.Producer, error) {
+	l, r, ok := strings.Cut(between, "|")
+	if !ok {
+		return "", "", fmt.Errorf("does not name the two producers it is between, as in %q", "between=ddl|llm-extract")
+	}
+	left, err := producerOf(l)
+	if err != nil {
+		return "", "", err
+	}
+	right, err := producerOf(r)
+	if err != nil {
+		return "", "", err
+	}
+	return left, right, nil
+}
+
+func duplicateSignalOf(name string) (alchemy.DuplicateSignal, error) {
+	switch s := alchemy.DuplicateSignal(name); s {
+	case alchemy.DuplicateNameAffix:
+		return s, nil
+	default:
+		return "", fmt.Errorf("is about the signal %q, which nothing in this service raises", name)
+	}
+}
+
+// authoredMerge is what a written merge rule may say beyond its shape.
+//
+// `reject` is refused here rather than only at the point it is applied,
+// because the two refusals are about different people. Apply's is about a
+// reviewer pressing the wrong button on an item in front of them; this is about
+// a policy file, where a rule that can only ever fail is one that fails on a
+// night nobody is watching, against a corpus nobody has read.
+func authoredMerge(a Authorship) error {
+	if a.Verb != VerbAlways {
+		return fmt.Errorf("review: the authored rule %q answers a duplicate with %q; a duplicate asks whether two nodes are one node, which only \"always\" answers — with an `into` to merge them, or without one to say they are two and stop asking",
+			a.Shape, a.Verb)
+	}
+	if a.Edit != nil && a.Edit.Into == "" {
+		return fmt.Errorf("review: the authored rule %q corrects a duplicate with %+v; a merge says which of the two nodes they both are, with `into`, and nothing else",
+			a.Shape, *a.Edit)
+	}
+	return nil
 }
 
 func producerOf(name string) (alchemy.Producer, error) {

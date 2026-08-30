@@ -153,6 +153,9 @@ func check(item Item, d Decision) error {
 	if d.Verb == VerbEdit && (d.Edit == nil || d.Edit.empty()) {
 		return fmt.Errorf("review: item %q was edited with no change; a record marked reviewed and left alone is an accept wearing the wrong label", d.ItemID)
 	}
+	if err := checkMerge(item, d); err != nil {
+		return err
+	}
 	if item.Kind == KindGuess && (d.Verb == VerbReject || d.Verb == VerbEdit) {
 		// A guess is a mapping, not a record. The rows it produced carry no
 		// back-reference to it, so there is nothing here to delete or retype;
@@ -183,12 +186,18 @@ type plan struct {
 	// is answered by a person, and crediting the rule they overrode would put
 	// a policy's name on a judgement a person made.
 	ruled map[Ref]string
+	// absorb is the id every merged-away node now lives under, chains already
+	// followed. It is keyed by id rather than by Ref because absorbing a node
+	// absorbs every record that claims to be it: an id half of whose records
+	// moved would leave the graph holding two nodes where a person said there
+	// was one.
+	absorb map[string]string
 	// dropped is how many records the walk removed on a rule's word alone.
 	dropped int
 }
 
 func newPlan(decided []answered) (*plan, error) {
-	p := &plan{remove: map[Ref]bool{}, edit: map[Ref]Edit{}, stamp: map[Ref]string{}, asked: map[Ref]bool{}, ruled: map[Ref]string{}}
+	p := &plan{remove: map[Ref]bool{}, edit: map[Ref]Edit{}, stamp: map[Ref]string{}, asked: map[Ref]bool{}, ruled: map[Ref]string{}, absorb: map[string]string{}}
 	for _, a := range decided {
 		for _, ref := range a.item.Targets {
 			p.stamp[ref] = a.decision.By
@@ -202,7 +211,7 @@ func newPlan(decided []answered) (*plan, error) {
 			case VerbReject:
 				p.remove[ref] = true
 			case VerbEdit, VerbAlways:
-				if a.decision.Edit == nil {
+				if a.decision.Edit == nil || silentHalf(ref, *a.decision.Edit) {
 					continue
 				}
 				if prior, dup := p.edit[ref]; dup && prior != *a.decision.Edit {
@@ -219,6 +228,11 @@ func newPlan(decided []answered) (*plan, error) {
 	for ref := range p.remove {
 		delete(p.edit, ref)
 	}
+	// Merges are resolved from what survived that, so a node somebody removed
+	// is never also a node somebody merged into.
+	if err := p.resolveMerges(); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
@@ -234,6 +248,12 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 	out := res
 	gone := map[string]bool{}
 
+	// What the absorbed nodes stated, collected before the walk: the node a
+	// merge folds into may come later in the graph than the node folded into
+	// it, and an answer that depended on which order they happened to be in
+	// would not be an answer.
+	carried := p.absorbedAttributes(res.Entities)
+
 	out.Entities = make([]alchemy.Entity, 0, len(res.Entities))
 	for _, e := range res.Entities {
 		ref := entityRef(e)
@@ -242,9 +262,18 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 			p.count(ref)
 			continue
 		}
+		if _, absorbed := p.absorb[e.ID]; absorbed {
+			// Merged away rather than removed, so it is not counted as
+			// dropped: nothing about it is lost. Its attributes are on the
+			// survivor, its edges are redirected below, and the finding that
+			// asked the question stays in the result carrying its provenance
+			// and the name of whoever answered.
+			continue
+		}
 		if ed, ok := p.edit[ref]; ok {
 			e = editEntity(e, ed)
 		}
+		e = carry(e, carried[e.ID])
 		if by, ok := p.stamp[ref]; ok {
 			e.Provenance.ReviewedBy = reviewedBy(e.Provenance.ReviewedBy, by)
 		}
@@ -252,6 +281,15 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 			e.Provenance.RuledBy = appendName(e.Provenance.RuledBy, name)
 		}
 		out.Entities = append(out.Entities, e)
+	}
+
+	// edges is nil unless something was merged. Collapsing identical edges is
+	// only ever right when two of them became identical, and a run that
+	// deduplicated a graph nobody merged would be quietly repairing input this
+	// stage was not asked to touch.
+	var edges map[string]bool
+	if len(p.absorb) > 0 {
+		edges = make(map[string]bool, len(res.Relations))
 	}
 
 	out.Relations = make([]alchemy.Relation, 0, len(res.Relations))
@@ -278,6 +316,25 @@ func (p *plan) run(res alchemy.Result, decided []answered) (alchemy.Result, erro
 		}
 		if name, ok := p.ruled[ref]; ok {
 			r.Provenance.RuledBy = appendName(r.Provenance.RuledBy, name)
+		}
+		// Redirected last, so that every lookup above is made with the edge as
+		// the reviewer saw it. An edge redirected before the maps were
+		// consulted would be an edge a decision no longer names.
+		r, keep := p.redirect(r)
+		if !keep {
+			continue
+		}
+		if edges != nil {
+			// Two edges that have become the same edge are one edge, which is
+			// the rule the merger applies one package over and for the same
+			// reason: what the second assertion said is already said. The
+			// earliest is kept whole rather than blended, so the citation
+			// points at a reply some model actually gave.
+			key := r.From + "\x00" + r.Type + "\x00" + r.To
+			if edges[key] {
+				continue
+			}
+			edges[key] = true
 		}
 		out.Relations = append(out.Relations, r)
 	}

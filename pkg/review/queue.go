@@ -18,6 +18,7 @@ const (
 	rankConflict = iota
 	rankViolation
 	rankGuess
+	rankDuplicate
 	rankLowConfidence
 )
 
@@ -27,7 +28,10 @@ const (
 // or not the caller asked for review, because a conflict holds the job either
 // way and the queue is how it gets unblocked; everything else is queued only
 // in review mode, because a caller who did not ask for review asked for the
-// service §5b describes and gets it.
+// service §5b describes and gets it. The one addition to that table is a
+// duplicate somebody has already answered — see the loop below for why an
+// answer, unlike a question, has to be carried on the nights nobody is
+// watching.
 //
 // Nothing here is computed. Every item points at a finding the verifier or a
 // mapper already produced, which is §5c's "what is worth reviewing is already
@@ -48,6 +52,30 @@ func Queue(rep verify.Report, res alchemy.Result, opts Options) []Item {
 		for i, g := range res.Guesses {
 			out = append(out, guessItem(i, g))
 		}
+	}
+
+	// Duplicates are the one kind that is queued outside review mode without
+	// being a conflict, and only the ones somebody has already answered.
+	//
+	// Everywhere else a rule reaches an unattended run through the extractor,
+	// which settles each chunk's proposal as it arrives (see extract.Settled).
+	// A duplicate cannot go that way: it is a fact about two chunks, and no
+	// chunk can see it. So the answer has to be carried here or nowhere, and
+	// "nowhere" would mean an operator's written merge policy applies on the
+	// nights a person is watching and not on the nights they are not — which
+	// is the opposite of what a policy is for.
+	//
+	// An unanswered one stays out. It is a question, and §5c's default is that
+	// a caller who did not ask for review is not asked anything; unattended,
+	// what they get is the finding and the count, exactly as for a violation.
+	for i, d := range rep.Duplicates {
+		it := duplicateItem(i, d, idx)
+		if opts.Reviewing || ruleFor(it, opts.Rules) != nil {
+			out = append(out, it)
+		}
+	}
+
+	if opts.Reviewing {
 		out = append(out, lowConfidence(rep, opts.MinConfidence, covered(out))...)
 	}
 
@@ -136,6 +164,33 @@ func guessItem(i int, g alchemy.Guess) Item {
 			over(g.Alternatives), because(g.Reason)),
 		Shape:      guessShape(g),
 		Provenance: g.Provenance,
+	}
+}
+
+// duplicateItem asks the one question a duplicate raises: are these two nodes
+// one node?
+//
+// Both nodes are targets, and neither is the offender. A conflict has an
+// incumbent and a dissenter, so its item acts on the newcomer; here nobody
+// arrived second at anything, which is the defect itself — the two proposals
+// never met. Which of the two moves is what the reviewer says with Edit.Into,
+// and Apply refuses an Into that is not one of these two.
+//
+// The Provenance shown is the right side's, matching every other two-sided
+// item: it is the side whose spelling is the longer one, which is the record a
+// reader is usually being asked about.
+func duplicateItem(i int, d alchemy.Duplicate, idx *records) Item {
+	left, _ := idx.find(d.Left.ID, d.Left.Provenance)
+	right, _ := idx.find(d.Right.ID, d.Right.Provenance)
+	return Item{
+		ID:         fmt.Sprintf("duplicate/%s/%s", d.Signal, d.Subject),
+		Kind:       KindDuplicate,
+		Index:      i,
+		Subject:    d.Subject,
+		Summary:    d.Detail,
+		Shape:      duplicateShape(d),
+		Provenance: d.Right.Provenance,
+		Targets:    append(left, right...),
 	}
 }
 

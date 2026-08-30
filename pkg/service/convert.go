@@ -70,7 +70,12 @@ var reviewKinds = map[review.Kind]alchemyv1.ReviewKind{
 	review.KindConflict:      alchemyv1.ReviewKind_REVIEW_KIND_CONFLICT,
 	review.KindViolation:     alchemyv1.ReviewKind_REVIEW_KIND_VIOLATION,
 	review.KindGuess:         alchemyv1.ReviewKind_REVIEW_KIND_GUESS,
+	review.KindDuplicate:     alchemyv1.ReviewKind_REVIEW_KIND_DUPLICATE,
 	review.KindLowConfidence: alchemyv1.ReviewKind_REVIEW_KIND_LOW_CONFIDENCE,
+}
+
+var duplicateSignals = map[alchemy.DuplicateSignal]alchemyv1.DuplicateSignal{
+	alchemy.DuplicateNameAffix: alchemyv1.DuplicateSignal_DUPLICATE_SIGNAL_NAME_AFFIX,
 }
 
 var wireReviewKinds = invert(reviewKinds)
@@ -241,6 +246,19 @@ func conflictToProto(c alchemy.Conflict) *alchemyv1.Conflict {
 	}
 }
 
+func duplicateToProto(d alchemy.Duplicate) *alchemyv1.Duplicate {
+	return &alchemyv1.Duplicate{
+		Signal: duplicateSignals[d.Signal], Subject: d.Subject, Detail: d.Detail,
+		Left: duplicateSideToProto(d.Left), Right: duplicateSideToProto(d.Right),
+	}
+}
+
+func duplicateSideToProto(s alchemy.DuplicateSide) *alchemyv1.DuplicateSide {
+	return &alchemyv1.DuplicateSide{
+		Id: s.ID, Type: s.Type, Name: s.Name, Provenance: provenanceToProto(s.Provenance),
+	}
+}
+
 func countsToProto(c alchemy.Counts) *alchemyv1.Counts {
 	return &alchemyv1.Counts{
 		Entities: int32(c.Entities), Relations: int32(c.Relations),
@@ -248,6 +266,7 @@ func countsToProto(c alchemy.Counts) *alchemyv1.Counts {
 		Violations: int32(c.Violations), Conflicts: int32(c.Conflicts),
 		Guesses: int32(c.Guesses), ChunksEmpty: int32(c.ChunksEmpty),
 		ChunksUnread: int32(c.ChunksUnread), Dropped: int32(c.Dropped),
+		Duplicates: int32(c.Duplicates),
 	}
 }
 
@@ -279,6 +298,7 @@ func resultToProto(r alchemy.Result) *alchemyv1.Result {
 		Conflicts:  each(r.Conflicts, conflictToProto),
 		Violations: each(r.Violations, violationToProto),
 		Guesses:    each(r.Guesses, guessToProto),
+		Duplicates: each(r.Duplicates, duplicateToProto),
 		Counts:     countsToProto(r.Counts),
 		ModelCalls: each(r.ModelCalls, modelCallToProto),
 		Unread:     each(r.Unread, unreadToProto),
@@ -318,14 +338,14 @@ func editToProto(e *review.Edit) *alchemyv1.Edit {
 	if e == nil {
 		return nil
 	}
-	return &alchemyv1.Edit{Type: e.Type, Name: e.Name, From: e.From, To: e.To}
+	return &alchemyv1.Edit{Type: e.Type, Name: e.Name, From: e.From, To: e.To, Into: e.Into}
 }
 
 func editFromProto(e *alchemyv1.Edit) *review.Edit {
 	if e == nil {
 		return nil
 	}
-	return &review.Edit{Type: e.GetType(), Name: e.GetName(), From: e.GetFrom(), To: e.GetTo()}
+	return &review.Edit{Type: e.GetType(), Name: e.GetName(), From: e.GetFrom(), To: e.GetTo(), Into: e.GetInto()}
 }
 
 func decisionToProto(jobID string, d review.Decision) *alchemyv1.ReviewDecision {

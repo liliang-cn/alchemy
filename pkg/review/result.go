@@ -43,6 +43,25 @@ func stampFindings(res *alchemy.Result, decided []answered) error {
 			}
 			v.Provenance.ReviewedBy = reviewedBy(v.Provenance.ReviewedBy, by)
 			res.Violations = replace(res.Violations, a.item.Index, v)
+		case KindDuplicate:
+			if a.item.Index >= len(res.Duplicates) {
+				return outOfRange(a.item, "duplicates")
+			}
+			d := res.Duplicates[a.item.Index]
+			if err := sameFinding(a.item, "duplicates", d.Subject); err != nil {
+				return err
+			}
+			// Both sides, as for a conflict, and here it is load-bearing
+			// rather than symmetric. If the answer was a merge, one of these
+			// two nodes is no longer in the graph, and this finding is the
+			// only place its provenance survives: the chunk that proposed the
+			// other spelling, and the name of whoever decided the two were one
+			// thing. §5b's promise is that a record is attributable, and a
+			// merge that erased the absorbed node's origin would spend that
+			// promise to buy a tidier graph.
+			d.Left.Provenance.ReviewedBy = reviewedBy(d.Left.Provenance.ReviewedBy, by)
+			d.Right.Provenance.ReviewedBy = reviewedBy(d.Right.Provenance.ReviewedBy, by)
+			res.Duplicates = replace(res.Duplicates, a.item.Index, d)
 		case KindGuess:
 			if a.item.Index >= len(res.Guesses) {
 				return outOfRange(a.item, "guesses")
@@ -110,11 +129,19 @@ func replace[T any](in []T, i int, v T) []T {
 // something, and a person threw it away afterwards.
 func recount(res alchemy.Result, prior alchemy.Counts, dropped int) alchemy.Counts {
 	c := alchemy.Counts{
-		Entities:     len(res.Entities),
-		Relations:    len(res.Relations),
-		Violations:   len(res.Violations),
-		Conflicts:    len(res.Conflicts),
-		Guesses:      len(res.Guesses),
+		Entities:   len(res.Entities),
+		Relations:  len(res.Relations),
+		Violations: len(res.Violations),
+		Conflicts:  len(res.Conflicts),
+		Guesses:    len(res.Guesses),
+		// Duplicates counts the findings and not the pairs still unjoined, so
+		// it does not fall when a merge is applied. That is the honest number:
+		// a graph in which somebody merged three pairs is a graph three
+		// questions were asked and answered about, and a count that erased
+		// them would make it indistinguishable from one where the extractor
+		// never stuttered. Which of them were answered is on each finding, in
+		// the reviewer's name.
+		Duplicates:   len(res.Duplicates),
 		ChunksEmpty:  prior.ChunksEmpty,
 		ChunksUnread: prior.ChunksUnread,
 		// Dropped accumulates rather than being recomputed, for the same

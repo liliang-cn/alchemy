@@ -65,6 +65,17 @@ func systemPrompt(v ontology.Vocabulary, told []string) string {
 	// still resolve to the right node; omitted rather than invented confidence
 	// keeps Provenance.Confidence meaningful; and the permission to answer
 	// nothing is what keeps ChunksEmpty a fact about the documents.
+	//
+	// The first of them is a nudge and not a guarantee, for the same reason
+	// standingAnswers is: a chunk is a separate call that cannot see what the
+	// others were told, so "use that same spelling every time" is advice about
+	// a decision the model is making without the information the advice needs.
+	// It is worth asking for and it is not worth believing — one real run put
+	// roughly one node in six on the wrong side of it. What catches what this
+	// line misses is verify's duplicate scan, which reports the pairs rather
+	// than joining them (see pkg/verify/duplicates.go and alchemy.Duplicate):
+	// the two names are evidence, and no rule that turns one into the other
+	// can tell "document package" from "language model".
 	b.WriteString("- Write every name exactly as the chunk writes it, and use that same spelling\n" +
 		"  every time the same thing appears, so that one thing does not become two.\n" +
 		"- Give from_type and to_type on every relation, including when that entity is\n" +

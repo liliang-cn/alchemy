@@ -216,6 +216,7 @@ type run struct {
 	unread     []alchemy.Unread
 	violations []alchemy.Violation
 	conflicts  []alchemy.Conflict
+	duplicates []alchemy.Duplicate
 	guesses    []alchemy.Guess
 	modelCalls []alchemy.ModelCall
 	// chunksEmpty is the running total of chunks that produced nothing, summed
@@ -298,6 +299,7 @@ func (r *run) result() alchemy.Result {
 		Chunks:     r.chunks,
 		Conflicts:  r.conflicts,
 		Violations: r.violations,
+		Duplicates: r.duplicates,
 		Guesses:    r.guesses,
 		Unread:     r.unread,
 		ModelCalls: aggregate(r.modelCalls),

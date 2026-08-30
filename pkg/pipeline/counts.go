@@ -26,6 +26,7 @@ func (r *run) counts(res alchemy.Result) alchemy.Counts {
 		Relations:  len(res.Relations),
 		Violations: len(res.Violations),
 		Conflicts:  len(res.Conflicts),
+		Duplicates: len(res.Duplicates),
 		Guesses:    len(res.Guesses),
 		// ChunksUnread is the length of Unread rather than a count of unread
 		// pages, so the number and the list a reader checks it against are the

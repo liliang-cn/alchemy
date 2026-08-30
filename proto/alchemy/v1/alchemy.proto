@@ -171,14 +171,33 @@ enum ConflictKind {
   CONFLICT_KIND_RELATION_ATTRIBUTES = 5;
 }
 
-// ReviewKind is §5c's ranking table as a set. The order of the values is the
-// order of that table, and it is why a conflict is never below a guess.
+// DuplicateSignal names the deterministic evidence that two nodes may be one
+// thing. It is on the finding because a reviewer answering "are these the
+// same?" is entitled to know what asked them.
+enum DuplicateSignal {
+  DUPLICATE_SIGNAL_UNSPECIFIED = 0;
+  // Under one type, one node's name is the other's with whole words added at
+  // the front or the back: "document" and "document package". It is the shape
+  // a per-chunk extractor produces, since each chunk is a separate call that
+  // cannot see how the others named the thing.
+  DUPLICATE_SIGNAL_NAME_AFFIX = 1;
+}
+
+// ReviewKind is §5c's ranking table as a set.
+//
+// The numbers are wire identity and cannot be reordered, so DUPLICATE is 5
+// while it ranks fourth — below a guess, because nothing about a duplicate is
+// wrong and an unanswered one leaves the graph exactly as the extractor
+// produced it, and above low confidence, because the answer decides what every
+// edge on both nodes points at. The rank a client should sort by is on the
+// item; this enum says which question it is, not which is more urgent.
 enum ReviewKind {
   REVIEW_KIND_UNSPECIFIED = 0;
   REVIEW_KIND_CONFLICT = 1;
   REVIEW_KIND_VIOLATION = 2;
   REVIEW_KIND_GUESS = 3;
   REVIEW_KIND_LOW_CONFIDENCE = 4;
+  REVIEW_KIND_DUPLICATE = 5;
 }
 
 // ReviewVerb is what a reviewer did. §5c lists exactly four and the set is
@@ -479,6 +498,38 @@ message Conflict {
   Claim right = 5;
 }
 
+// Duplicate is two nodes that may be one node, and are not joined.
+//
+// It is a third kind of finding beside Violation and Conflict because it is
+// neither. A violation is one source saying something the ontology does not
+// allow — a declared rule was broken, and the graph minus the record is still
+// usable. Neither is true here: no vocabulary forbids two names for one thing,
+// and removing either node takes its edges with it. A conflict is two sources
+// both claiming to be right with nothing to decide between them, and these two
+// records do not disagree; they agree and are merely not joined. So nothing is
+// wrong, the graph is delivered, and what is owed is the pair and the number.
+message Duplicate {
+  DuplicateSignal signal = 1;
+  // The pair, rendered "left ~ right".
+  string subject = 2;
+  string detail = 3;
+  // Left is the node whose name is contained in the other's, which is a
+  // property of the pair rather than of the order they were extracted in.
+  // Neither side is the wrong one.
+  DuplicateSide left = 4;
+  DuplicateSide right = 5;
+}
+
+// DuplicateSide is one node of a candidate pair, with what a reviewer needs to
+// answer without a lookup: which node, what it is called, and where it came
+// from.
+message DuplicateSide {
+  string id = 1;
+  string type = 2;
+  string name = 3;
+  Provenance provenance = 4;
+}
+
 // Counts is what makes the difference between a graph you can act on and one
 // you merely have (§5).
 message Counts {
@@ -500,6 +551,14 @@ message Counts {
   // somewhere; a record a written policy dropped before any queue was shown
   // would otherwise leave the result one record shorter and say nothing.
   int32 dropped = 10;
+  // Pairs of nodes that may be one node. It is in this block because it is a
+  // number no reader can derive from the entities beside it — both nodes are
+  // well-formed, correctly typed and separately attributable — and because
+  // "one node in six may be a duplicate" is exactly a number needed to
+  // distrust a graph. It counts the findings, not the pairs still unjoined, so
+  // it does not fall when a merge is applied: which of them were answered is
+  // in each finding's provenance.
+  int32 duplicates = 11;
 }
 
 // ModelCall records what a job spent. §7.2: cost is not optimised for, but it
@@ -538,6 +597,10 @@ message Result {
   // pipeline that started attended becomes one that runs itself without ever
   // having guessed (§7.3).
   repeated ReviewRule rules = 11;
+  // Two nodes that may be one node, returned whether or not review is on for
+  // the same reason violations are: a caller running unattended is owed the
+  // numbers needed to distrust what it got.
+  repeated Duplicate duplicates = 13;
   // Every standing policy this job's records were extracted under, each named
   // once. Provenance.rule_set is a name into this list.
   //
@@ -602,6 +665,7 @@ message ResultPage {
   repeated Conflict conflicts = 7;
   repeated Violation violations = 8;
   repeated Guess guesses = 9;
+  repeated Duplicate duplicates = 15;
 
   // Set on the first page only.
   Counts counts = 10;
@@ -686,6 +750,16 @@ message Edit {
   string name = 2;
   string from = 3;
   string to = 4;
+  // The entity id this record is the same record as: the answer to a duplicate
+  // item, and the only correction that changes which node a record is rather
+  // than what it says. It is a field on Edit rather than a fifth verb because
+  // §5c's four are a closed set, and a merge is an edit that corrects which
+  // node a record belongs to, exactly as from and to correct which nodes an
+  // edge runs between. It could not be spelled with `name`: an id is derived
+  // once, by the producer that made the record, so renaming the absorbed node
+  // to the survivor's spelling leaves two nodes with one name and every edge
+  // where it was.
+  string into = 5;
 }
 
 message ReviewDecision {

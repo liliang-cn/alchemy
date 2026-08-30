@@ -352,8 +352,67 @@ func (ConflictKind) EnumDescriptor() ([]byte, []int) {
 	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{4}
 }
 
-// ReviewKind is §5c's ranking table as a set. The order of the values is the
-// order of that table, and it is why a conflict is never below a guess.
+// DuplicateSignal names the deterministic evidence that two nodes may be one
+// thing. It is on the finding because a reviewer answering "are these the
+// same?" is entitled to know what asked them.
+type DuplicateSignal int32
+
+const (
+	DuplicateSignal_DUPLICATE_SIGNAL_UNSPECIFIED DuplicateSignal = 0
+	// Under one type, one node's name is the other's with whole words added at
+	// the front or the back: "document" and "document package". It is the shape
+	// a per-chunk extractor produces, since each chunk is a separate call that
+	// cannot see how the others named the thing.
+	DuplicateSignal_DUPLICATE_SIGNAL_NAME_AFFIX DuplicateSignal = 1
+)
+
+// Enum value maps for DuplicateSignal.
+var (
+	DuplicateSignal_name = map[int32]string{
+		0: "DUPLICATE_SIGNAL_UNSPECIFIED",
+		1: "DUPLICATE_SIGNAL_NAME_AFFIX",
+	}
+	DuplicateSignal_value = map[string]int32{
+		"DUPLICATE_SIGNAL_UNSPECIFIED": 0,
+		"DUPLICATE_SIGNAL_NAME_AFFIX":  1,
+	}
+)
+
+func (x DuplicateSignal) Enum() *DuplicateSignal {
+	p := new(DuplicateSignal)
+	*p = x
+	return p
+}
+
+func (x DuplicateSignal) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DuplicateSignal) Descriptor() protoreflect.EnumDescriptor {
+	return file_alchemy_v1_alchemy_proto_enumTypes[5].Descriptor()
+}
+
+func (DuplicateSignal) Type() protoreflect.EnumType {
+	return &file_alchemy_v1_alchemy_proto_enumTypes[5]
+}
+
+func (x DuplicateSignal) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DuplicateSignal.Descriptor instead.
+func (DuplicateSignal) EnumDescriptor() ([]byte, []int) {
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{5}
+}
+
+// ReviewKind is §5c's ranking table as a set.
+//
+// The numbers are wire identity and cannot be reordered, so DUPLICATE is 5
+// while it ranks fourth — below a guess, because nothing about a duplicate is
+// wrong and an unanswered one leaves the graph exactly as the extractor
+// produced it, and above low confidence, because the answer decides what every
+// edge on both nodes points at. The rank a client should sort by is on the
+// item; this enum says which question it is, not which is more urgent.
 type ReviewKind int32
 
 const (
@@ -362,6 +421,7 @@ const (
 	ReviewKind_REVIEW_KIND_VIOLATION      ReviewKind = 2
 	ReviewKind_REVIEW_KIND_GUESS          ReviewKind = 3
 	ReviewKind_REVIEW_KIND_LOW_CONFIDENCE ReviewKind = 4
+	ReviewKind_REVIEW_KIND_DUPLICATE      ReviewKind = 5
 )
 
 // Enum value maps for ReviewKind.
@@ -372,6 +432,7 @@ var (
 		2: "REVIEW_KIND_VIOLATION",
 		3: "REVIEW_KIND_GUESS",
 		4: "REVIEW_KIND_LOW_CONFIDENCE",
+		5: "REVIEW_KIND_DUPLICATE",
 	}
 	ReviewKind_value = map[string]int32{
 		"REVIEW_KIND_UNSPECIFIED":    0,
@@ -379,6 +440,7 @@ var (
 		"REVIEW_KIND_VIOLATION":      2,
 		"REVIEW_KIND_GUESS":          3,
 		"REVIEW_KIND_LOW_CONFIDENCE": 4,
+		"REVIEW_KIND_DUPLICATE":      5,
 	}
 )
 
@@ -393,11 +455,11 @@ func (x ReviewKind) String() string {
 }
 
 func (ReviewKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_alchemy_v1_alchemy_proto_enumTypes[5].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[6].Descriptor()
 }
 
 func (ReviewKind) Type() protoreflect.EnumType {
-	return &file_alchemy_v1_alchemy_proto_enumTypes[5]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[6]
 }
 
 func (x ReviewKind) Number() protoreflect.EnumNumber {
@@ -406,7 +468,7 @@ func (x ReviewKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReviewKind.Descriptor instead.
 func (ReviewKind) EnumDescriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{5}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{6}
 }
 
 // ReviewVerb is what a reviewer did. §5c lists exactly four and the set is
@@ -452,11 +514,11 @@ func (x ReviewVerb) String() string {
 }
 
 func (ReviewVerb) Descriptor() protoreflect.EnumDescriptor {
-	return file_alchemy_v1_alchemy_proto_enumTypes[6].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[7].Descriptor()
 }
 
 func (ReviewVerb) Type() protoreflect.EnumType {
-	return &file_alchemy_v1_alchemy_proto_enumTypes[6]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[7]
 }
 
 func (x ReviewVerb) Number() protoreflect.EnumNumber {
@@ -465,7 +527,7 @@ func (x ReviewVerb) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReviewVerb.Descriptor instead.
 func (ReviewVerb) EnumDescriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{6}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{7}
 }
 
 type RefKind int32
@@ -501,11 +563,11 @@ func (x RefKind) String() string {
 }
 
 func (RefKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_alchemy_v1_alchemy_proto_enumTypes[7].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[8].Descriptor()
 }
 
 func (RefKind) Type() protoreflect.EnumType {
-	return &file_alchemy_v1_alchemy_proto_enumTypes[7]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[8]
 }
 
 func (x RefKind) Number() protoreflect.EnumNumber {
@@ -514,7 +576,7 @@ func (x RefKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RefKind.Descriptor instead.
 func (RefKind) EnumDescriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{7}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{8}
 }
 
 // RuleOrigin is which warrant a rule has. They are different claims about the
@@ -560,11 +622,11 @@ func (x RuleOrigin) String() string {
 }
 
 func (RuleOrigin) Descriptor() protoreflect.EnumDescriptor {
-	return file_alchemy_v1_alchemy_proto_enumTypes[8].Descriptor()
+	return file_alchemy_v1_alchemy_proto_enumTypes[9].Descriptor()
 }
 
 func (RuleOrigin) Type() protoreflect.EnumType {
-	return &file_alchemy_v1_alchemy_proto_enumTypes[8]
+	return &file_alchemy_v1_alchemy_proto_enumTypes[9]
 }
 
 func (x RuleOrigin) Number() protoreflect.EnumNumber {
@@ -573,7 +635,7 @@ func (x RuleOrigin) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RuleOrigin.Descriptor instead.
 func (RuleOrigin) EnumDescriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{8}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{9}
 }
 
 // ModelEndpoint is one of the caller's models. The name is not decoration: it
@@ -2197,6 +2259,167 @@ func (x *Conflict) GetRight() *Claim {
 	return nil
 }
 
+// Duplicate is two nodes that may be one node, and are not joined.
+//
+// It is a third kind of finding beside Violation and Conflict because it is
+// neither. A violation is one source saying something the ontology does not
+// allow — a declared rule was broken, and the graph minus the record is still
+// usable. Neither is true here: no vocabulary forbids two names for one thing,
+// and removing either node takes its edges with it. A conflict is two sources
+// both claiming to be right with nothing to decide between them, and these two
+// records do not disagree; they agree and are merely not joined. So nothing is
+// wrong, the graph is delivered, and what is owed is the pair and the number.
+type Duplicate struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Signal DuplicateSignal        `protobuf:"varint,1,opt,name=signal,proto3,enum=alchemy.v1.DuplicateSignal" json:"signal,omitempty"`
+	// The pair, rendered "left ~ right".
+	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	Detail  string `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	// Left is the node whose name is contained in the other's, which is a
+	// property of the pair rather than of the order they were extracted in.
+	// Neither side is the wrong one.
+	Left          *DuplicateSide `protobuf:"bytes,4,opt,name=left,proto3" json:"left,omitempty"`
+	Right         *DuplicateSide `protobuf:"bytes,5,opt,name=right,proto3" json:"right,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Duplicate) Reset() {
+	*x = Duplicate{}
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Duplicate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Duplicate) ProtoMessage() {}
+
+func (x *Duplicate) ProtoReflect() protoreflect.Message {
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Duplicate.ProtoReflect.Descriptor instead.
+func (*Duplicate) Descriptor() ([]byte, []int) {
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *Duplicate) GetSignal() DuplicateSignal {
+	if x != nil {
+		return x.Signal
+	}
+	return DuplicateSignal_DUPLICATE_SIGNAL_UNSPECIFIED
+}
+
+func (x *Duplicate) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *Duplicate) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *Duplicate) GetLeft() *DuplicateSide {
+	if x != nil {
+		return x.Left
+	}
+	return nil
+}
+
+func (x *Duplicate) GetRight() *DuplicateSide {
+	if x != nil {
+		return x.Right
+	}
+	return nil
+}
+
+// DuplicateSide is one node of a candidate pair, with what a reviewer needs to
+// answer without a lookup: which node, what it is called, and where it came
+// from.
+type DuplicateSide struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Provenance    *Provenance            `protobuf:"bytes,4,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DuplicateSide) Reset() {
+	*x = DuplicateSide{}
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DuplicateSide) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DuplicateSide) ProtoMessage() {}
+
+func (x *DuplicateSide) ProtoReflect() protoreflect.Message {
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DuplicateSide.ProtoReflect.Descriptor instead.
+func (*DuplicateSide) Descriptor() ([]byte, []int) {
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *DuplicateSide) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *DuplicateSide) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *DuplicateSide) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DuplicateSide) GetProvenance() *Provenance {
+	if x != nil {
+		return x.Provenance
+	}
+	return nil
+}
+
 // Counts is what makes the difference between a graph you can act on and one
 // you merely have (§5).
 type Counts struct {
@@ -2218,14 +2441,22 @@ type Counts struct {
 	// asked about them. Everything else a graph is missing is reported
 	// somewhere; a record a written policy dropped before any queue was shown
 	// would otherwise leave the result one record shorter and say nothing.
-	Dropped       int32 `protobuf:"varint,10,opt,name=dropped,proto3" json:"dropped,omitempty"`
+	Dropped int32 `protobuf:"varint,10,opt,name=dropped,proto3" json:"dropped,omitempty"`
+	// Pairs of nodes that may be one node. It is in this block because it is a
+	// number no reader can derive from the entities beside it — both nodes are
+	// well-formed, correctly typed and separately attributable — and because
+	// "one node in six may be a duplicate" is exactly a number needed to
+	// distrust a graph. It counts the findings, not the pairs still unjoined, so
+	// it does not fall when a merge is applied: which of them were answered is
+	// in each finding's provenance.
+	Duplicates    int32 `protobuf:"varint,11,opt,name=duplicates,proto3" json:"duplicates,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Counts) Reset() {
 	*x = Counts{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[22]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2237,7 +2468,7 @@ func (x *Counts) String() string {
 func (*Counts) ProtoMessage() {}
 
 func (x *Counts) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[22]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2250,7 +2481,7 @@ func (x *Counts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Counts.ProtoReflect.Descriptor instead.
 func (*Counts) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{22}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Counts) GetEntities() int32 {
@@ -2323,6 +2554,13 @@ func (x *Counts) GetDropped() int32 {
 	return 0
 }
 
+func (x *Counts) GetDuplicates() int32 {
+	if x != nil {
+		return x.Duplicates
+	}
+	return 0
+}
+
 // ModelCall records what a job spent. §7.2: cost is not optimised for, but it
 // is never hidden.
 type ModelCall struct {
@@ -2337,7 +2575,7 @@ type ModelCall struct {
 
 func (x *ModelCall) Reset() {
 	*x = ModelCall{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[23]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2349,7 +2587,7 @@ func (x *ModelCall) String() string {
 func (*ModelCall) ProtoMessage() {}
 
 func (x *ModelCall) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[23]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2362,7 +2600,7 @@ func (x *ModelCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelCall.ProtoReflect.Descriptor instead.
 func (*ModelCall) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{23}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ModelCall) GetModel() string {
@@ -2406,7 +2644,7 @@ type Unread struct {
 
 func (x *Unread) Reset() {
 	*x = Unread{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[24]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2418,7 +2656,7 @@ func (x *Unread) String() string {
 func (*Unread) ProtoMessage() {}
 
 func (x *Unread) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[24]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2431,7 +2669,7 @@ func (x *Unread) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Unread.ProtoReflect.Descriptor instead.
 func (*Unread) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{24}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Unread) GetSource() string {
@@ -2473,6 +2711,10 @@ type Result struct {
 	// pipeline that started attended becomes one that runs itself without ever
 	// having guessed (§7.3).
 	Rules []*ReviewRule `protobuf:"bytes,11,rep,name=rules,proto3" json:"rules,omitempty"`
+	// Two nodes that may be one node, returned whether or not review is on for
+	// the same reason violations are: a caller running unattended is owed the
+	// numbers needed to distrust what it got.
+	Duplicates []*Duplicate `protobuf:"bytes,13,rep,name=duplicates,proto3" json:"duplicates,omitempty"`
 	// Every standing policy this job's records were extracted under, each named
 	// once. Provenance.rule_set is a name into this list.
 	//
@@ -2493,7 +2735,7 @@ type Result struct {
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[25]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2505,7 +2747,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[25]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2518,7 +2760,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{25}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Result) GetEntities() []*Entity {
@@ -2598,6 +2840,13 @@ func (x *Result) GetRules() []*ReviewRule {
 	return nil
 }
 
+func (x *Result) GetDuplicates() []*Duplicate {
+	if x != nil {
+		return x.Duplicates
+	}
+	return nil
+}
+
 func (x *Result) GetRuleSets() []*RuleSet {
 	if x != nil {
 		return x.RuleSets
@@ -2626,7 +2875,7 @@ type StandingRule struct {
 
 func (x *StandingRule) Reset() {
 	*x = StandingRule{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[26]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2638,7 +2887,7 @@ func (x *StandingRule) String() string {
 func (*StandingRule) ProtoMessage() {}
 
 func (x *StandingRule) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[26]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2651,7 +2900,7 @@ func (x *StandingRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StandingRule.ProtoReflect.Descriptor instead.
 func (*StandingRule) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{26}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *StandingRule) GetName() string {
@@ -2689,7 +2938,7 @@ type RuleSet struct {
 
 func (x *RuleSet) Reset() {
 	*x = RuleSet{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[27]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2701,7 +2950,7 @@ func (x *RuleSet) String() string {
 func (*RuleSet) ProtoMessage() {}
 
 func (x *RuleSet) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[27]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2714,7 +2963,7 @@ func (x *RuleSet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleSet.ProtoReflect.Descriptor instead.
 func (*RuleSet) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{27}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RuleSet) GetName() string {
@@ -2747,6 +2996,7 @@ type ResultPage struct {
 	Conflicts  []*Conflict  `protobuf:"bytes,7,rep,name=conflicts,proto3" json:"conflicts,omitempty"`
 	Violations []*Violation `protobuf:"bytes,8,rep,name=violations,proto3" json:"violations,omitempty"`
 	Guesses    []*Guess     `protobuf:"bytes,9,rep,name=guesses,proto3" json:"guesses,omitempty"`
+	Duplicates []*Duplicate `protobuf:"bytes,15,rep,name=duplicates,proto3" json:"duplicates,omitempty"`
 	// Set on the first page only.
 	Counts     *Counts       `protobuf:"bytes,10,opt,name=counts,proto3" json:"counts,omitempty"`
 	ModelCalls []*ModelCall  `protobuf:"bytes,11,rep,name=model_calls,json=modelCalls,proto3" json:"model_calls,omitempty"`
@@ -2764,7 +3014,7 @@ type ResultPage struct {
 
 func (x *ResultPage) Reset() {
 	*x = ResultPage{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[28]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2776,7 +3026,7 @@ func (x *ResultPage) String() string {
 func (*ResultPage) ProtoMessage() {}
 
 func (x *ResultPage) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[28]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2789,7 +3039,7 @@ func (x *ResultPage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultPage.ProtoReflect.Descriptor instead.
 func (*ResultPage) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{28}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ResultPage) GetPage() int32 {
@@ -2855,6 +3105,13 @@ func (x *ResultPage) GetGuesses() []*Guess {
 	return nil
 }
 
+func (x *ResultPage) GetDuplicates() []*Duplicate {
+	if x != nil {
+		return x.Duplicates
+	}
+	return nil
+}
+
 func (x *ResultPage) GetCounts() *Counts {
 	if x != nil {
 		return x.Counts
@@ -2914,7 +3171,7 @@ type JobEvent struct {
 
 func (x *JobEvent) Reset() {
 	*x = JobEvent{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[29]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2926,7 +3183,7 @@ func (x *JobEvent) String() string {
 func (*JobEvent) ProtoMessage() {}
 
 func (x *JobEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[29]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2939,7 +3196,7 @@ func (x *JobEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobEvent.ProtoReflect.Descriptor instead.
 func (*JobEvent) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{29}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *JobEvent) GetAt() *timestamppb.Timestamp {
@@ -3017,7 +3274,7 @@ type Ref struct {
 
 func (x *Ref) Reset() {
 	*x = Ref{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[30]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3029,7 +3286,7 @@ func (x *Ref) String() string {
 func (*Ref) ProtoMessage() {}
 
 func (x *Ref) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[30]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3042,7 +3299,7 @@ func (x *Ref) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ref.ProtoReflect.Descriptor instead.
 func (*Ref) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{30}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *Ref) GetKind() RefKind {
@@ -3113,7 +3370,7 @@ type ReviewItem struct {
 
 func (x *ReviewItem) Reset() {
 	*x = ReviewItem{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[31]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3125,7 +3382,7 @@ func (x *ReviewItem) String() string {
 func (*ReviewItem) ProtoMessage() {}
 
 func (x *ReviewItem) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[31]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3138,7 +3395,7 @@ func (x *ReviewItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewItem.ProtoReflect.Descriptor instead.
 func (*ReviewItem) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{31}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ReviewItem) GetJobId() string {
@@ -3223,17 +3480,27 @@ type Edit struct {
 	// An empty field is one the reviewer did not touch. A reviewer who retyped
 	// an entity said nothing about its name, and a message that carried both
 	// would silently blank the half they left alone.
-	Type          string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	From          string `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
-	To            string `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	From string `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	To   string `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	// The entity id this record is the same record as: the answer to a duplicate
+	// item, and the only correction that changes which node a record is rather
+	// than what it says. It is a field on Edit rather than a fifth verb because
+	// §5c's four are a closed set, and a merge is an edit that corrects which
+	// node a record belongs to, exactly as from and to correct which nodes an
+	// edge runs between. It could not be spelled with `name`: an id is derived
+	// once, by the producer that made the record, so renaming the absorbed node
+	// to the survivor's spelling leaves two nodes with one name and every edge
+	// where it was.
+	Into          string `protobuf:"bytes,5,opt,name=into,proto3" json:"into,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Edit) Reset() {
 	*x = Edit{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[32]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3245,7 +3512,7 @@ func (x *Edit) String() string {
 func (*Edit) ProtoMessage() {}
 
 func (x *Edit) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[32]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3258,7 +3525,7 @@ func (x *Edit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Edit.ProtoReflect.Descriptor instead.
 func (*Edit) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{32}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Edit) GetType() string {
@@ -3289,6 +3556,13 @@ func (x *Edit) GetTo() string {
 	return ""
 }
 
+func (x *Edit) GetInto() string {
+	if x != nil {
+		return x.Into
+	}
+	return ""
+}
+
 type ReviewDecision struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The first message on the stream must name the job; later ones may repeat
@@ -3310,7 +3584,7 @@ type ReviewDecision struct {
 
 func (x *ReviewDecision) Reset() {
 	*x = ReviewDecision{}
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[33]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3322,7 +3596,7 @@ func (x *ReviewDecision) String() string {
 func (*ReviewDecision) ProtoMessage() {}
 
 func (x *ReviewDecision) ProtoReflect() protoreflect.Message {
-	mi := &file_alchemy_v1_alchemy_proto_msgTypes[33]
+	mi := &file_alchemy_v1_alchemy_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3335,7 +3609,7 @@ func (x *ReviewDecision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewDecision.ProtoReflect.Descriptor instead.
 func (*ReviewDecision) Descriptor() ([]byte, []int) {
-	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{33}
+	return file_alchemy_v1_alchemy_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ReviewDecision) GetJobId() string {
@@ -3533,7 +3807,20 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12%\n" +
 	"\x04left\x18\x04 \x01(\v2\x11.alchemy.v1.ClaimR\x04left\x12'\n" +
-	"\x05right\x18\x05 \x01(\v2\x11.alchemy.v1.ClaimR\x05right\"\xbe\x02\n" +
+	"\x05right\x18\x05 \x01(\v2\x11.alchemy.v1.ClaimR\x05right\"\xd2\x01\n" +
+	"\tDuplicate\x123\n" +
+	"\x06signal\x18\x01 \x01(\x0e2\x1b.alchemy.v1.DuplicateSignalR\x06signal\x12\x18\n" +
+	"\asubject\x18\x02 \x01(\tR\asubject\x12\x16\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\x12-\n" +
+	"\x04left\x18\x04 \x01(\v2\x19.alchemy.v1.DuplicateSideR\x04left\x12/\n" +
+	"\x05right\x18\x05 \x01(\v2\x19.alchemy.v1.DuplicateSideR\x05right\"\x7f\n" +
+	"\rDuplicateSide\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x126\n" +
+	"\n" +
+	"provenance\x18\x04 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
+	"provenance\"\xde\x02\n" +
 	"\x06Counts\x12\x1a\n" +
 	"\bentities\x18\x01 \x01(\x05R\bentities\x12\x1c\n" +
 	"\trelations\x18\x02 \x01(\x05R\trelations\x12$\n" +
@@ -3547,7 +3834,10 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\fchunks_empty\x18\b \x01(\x05R\vchunksEmpty\x12#\n" +
 	"\rchunks_unread\x18\t \x01(\x05R\fchunksUnread\x12\x18\n" +
 	"\adropped\x18\n" +
-	" \x01(\x05R\adropped\"e\n" +
+	" \x01(\x05R\adropped\x12\x1e\n" +
+	"\n" +
+	"duplicates\x18\v \x01(\x05R\n" +
+	"duplicates\"e\n" +
 	"\tModelCall\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12\x14\n" +
 	"\x05stage\x18\x02 \x01(\tR\x05stage\x12\x14\n" +
@@ -3556,7 +3846,7 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x06Unread\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x18\n" +
 	"\alocator\x18\x02 \x01(\tR\alocator\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xcd\x04\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x84\x05\n" +
 	"\x06Result\x12.\n" +
 	"\bentities\x18\x01 \x03(\v2\x12.alchemy.v1.EntityR\bentities\x122\n" +
 	"\trelations\x18\x02 \x03(\v2\x14.alchemy.v1.RelationR\trelations\x12)\n" +
@@ -3572,14 +3862,17 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"modelCalls\x12*\n" +
 	"\x06unread\x18\n" +
 	" \x03(\v2\x12.alchemy.v1.UnreadR\x06unread\x12,\n" +
-	"\x05rules\x18\v \x03(\v2\x16.alchemy.v1.ReviewRuleR\x05rules\x120\n" +
+	"\x05rules\x18\v \x03(\v2\x16.alchemy.v1.ReviewRuleR\x05rules\x125\n" +
+	"\n" +
+	"duplicates\x18\r \x03(\v2\x15.alchemy.v1.DuplicateR\n" +
+	"duplicates\x120\n" +
 	"\trule_sets\x18\f \x03(\v2\x13.alchemy.v1.RuleSetR\bruleSets\"6\n" +
 	"\fStandingRule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04told\x18\x02 \x01(\tR\x04told\"M\n" +
 	"\aRuleSet\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12.\n" +
-	"\x05rules\x18\x02 \x03(\v2\x18.alchemy.v1.StandingRuleR\x05rules\"\xf9\x04\n" +
+	"\x05rules\x18\x02 \x03(\v2\x18.alchemy.v1.StandingRuleR\x05rules\"\xb0\x05\n" +
 	"\n" +
 	"ResultPage\x12\x12\n" +
 	"\x04page\x18\x01 \x01(\x05R\x04page\x12\x12\n" +
@@ -3592,7 +3885,10 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\n" +
 	"violations\x18\b \x03(\v2\x15.alchemy.v1.ViolationR\n" +
 	"violations\x12+\n" +
-	"\aguesses\x18\t \x03(\v2\x11.alchemy.v1.GuessR\aguesses\x12*\n" +
+	"\aguesses\x18\t \x03(\v2\x11.alchemy.v1.GuessR\aguesses\x125\n" +
+	"\n" +
+	"duplicates\x18\x0f \x03(\v2\x15.alchemy.v1.DuplicateR\n" +
+	"duplicates\x12*\n" +
 	"\x06counts\x18\n" +
 	" \x01(\v2\x12.alchemy.v1.CountsR\x06counts\x126\n" +
 	"\vmodel_calls\x18\v \x03(\v2\x15.alchemy.v1.ModelCallR\n" +
@@ -3634,12 +3930,13 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	" \x01(\v2\x16.alchemy.v1.ReviewRuleR\fsuppressedBy\x126\n" +
 	"\n" +
 	"provenance\x18\v \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
-	"provenance\"R\n" +
+	"provenance\"f\n" +
 	"\x04Edit\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04from\x18\x03 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x04 \x01(\tR\x02to\"\xe2\x01\n" +
+	"\x02to\x18\x04 \x01(\tR\x02to\x12\x12\n" +
+	"\x04into\x18\x05 \x01(\tR\x04into\"\xe2\x01\n" +
 	"\x0eReviewDecision\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x17\n" +
 	"\aitem_id\x18\x02 \x01(\tR\x06itemId\x12*\n" +
@@ -3686,14 +3983,18 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x19CONFLICT_KIND_ENTITY_TYPE\x10\x02\x12$\n" +
 	" CONFLICT_KIND_RELATION_DIRECTION\x10\x03\x12\x1f\n" +
 	"\x1bCONFLICT_KIND_CONTRADICTION\x10\x04\x12%\n" +
-	"!CONFLICT_KIND_RELATION_ATTRIBUTES\x10\x05*\x95\x01\n" +
+	"!CONFLICT_KIND_RELATION_ATTRIBUTES\x10\x05*T\n" +
+	"\x0fDuplicateSignal\x12 \n" +
+	"\x1cDUPLICATE_SIGNAL_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bDUPLICATE_SIGNAL_NAME_AFFIX\x10\x01*\xb0\x01\n" +
 	"\n" +
 	"ReviewKind\x12\x1b\n" +
 	"\x17REVIEW_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14REVIEW_KIND_CONFLICT\x10\x01\x12\x19\n" +
 	"\x15REVIEW_KIND_VIOLATION\x10\x02\x12\x15\n" +
 	"\x11REVIEW_KIND_GUESS\x10\x03\x12\x1e\n" +
-	"\x1aREVIEW_KIND_LOW_CONFIDENCE\x10\x04*\x87\x01\n" +
+	"\x1aREVIEW_KIND_LOW_CONFIDENCE\x10\x04\x12\x19\n" +
+	"\x15REVIEW_KIND_DUPLICATE\x10\x05*\x87\x01\n" +
 	"\n" +
 	"ReviewVerb\x12\x1b\n" +
 	"\x17REVIEW_VERB_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -3732,146 +4033,155 @@ func file_alchemy_v1_alchemy_proto_rawDescGZIP() []byte {
 	return file_alchemy_v1_alchemy_proto_rawDescData
 }
 
-var file_alchemy_v1_alchemy_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_alchemy_v1_alchemy_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_alchemy_v1_alchemy_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_alchemy_v1_alchemy_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_alchemy_v1_alchemy_proto_goTypes = []any{
 	(JobState)(0),                 // 0: alchemy.v1.JobState
 	(SourceKind)(0),               // 1: alchemy.v1.SourceKind
 	(Producer)(0),                 // 2: alchemy.v1.Producer
 	(ViolationKind)(0),            // 3: alchemy.v1.ViolationKind
 	(ConflictKind)(0),             // 4: alchemy.v1.ConflictKind
-	(ReviewKind)(0),               // 5: alchemy.v1.ReviewKind
-	(ReviewVerb)(0),               // 6: alchemy.v1.ReviewVerb
-	(RefKind)(0),                  // 7: alchemy.v1.RefKind
-	(RuleOrigin)(0),               // 8: alchemy.v1.RuleOrigin
-	(*ModelEndpoint)(nil),         // 9: alchemy.v1.ModelEndpoint
-	(*Models)(nil),                // 10: alchemy.v1.Models
-	(*Chunking)(nil),              // 11: alchemy.v1.Chunking
-	(*ReviewOptions)(nil),         // 12: alchemy.v1.ReviewOptions
-	(*ReviewRule)(nil),            // 13: alchemy.v1.ReviewRule
-	(*CreateJobRequest)(nil),      // 14: alchemy.v1.CreateJobRequest
-	(*Job)(nil),                   // 15: alchemy.v1.Job
-	(*GetJobRequest)(nil),         // 16: alchemy.v1.GetJobRequest
-	(*DeleteJobRequest)(nil),      // 17: alchemy.v1.DeleteJobRequest
-	(*WatchJobRequest)(nil),       // 18: alchemy.v1.WatchJobRequest
-	(*GetResultRequest)(nil),      // 19: alchemy.v1.GetResultRequest
-	(*SourceChunk)(nil),           // 20: alchemy.v1.SourceChunk
-	(*Source)(nil),                // 21: alchemy.v1.Source
-	(*Provenance)(nil),            // 22: alchemy.v1.Provenance
-	(*Entity)(nil),                // 23: alchemy.v1.Entity
-	(*Relation)(nil),              // 24: alchemy.v1.Relation
-	(*Chunk)(nil),                 // 25: alchemy.v1.Chunk
-	(*Vector)(nil),                // 26: alchemy.v1.Vector
-	(*Violation)(nil),             // 27: alchemy.v1.Violation
-	(*Guess)(nil),                 // 28: alchemy.v1.Guess
-	(*Claim)(nil),                 // 29: alchemy.v1.Claim
-	(*Conflict)(nil),              // 30: alchemy.v1.Conflict
-	(*Counts)(nil),                // 31: alchemy.v1.Counts
-	(*ModelCall)(nil),             // 32: alchemy.v1.ModelCall
-	(*Unread)(nil),                // 33: alchemy.v1.Unread
-	(*Result)(nil),                // 34: alchemy.v1.Result
-	(*StandingRule)(nil),          // 35: alchemy.v1.StandingRule
-	(*RuleSet)(nil),               // 36: alchemy.v1.RuleSet
-	(*ResultPage)(nil),            // 37: alchemy.v1.ResultPage
-	(*JobEvent)(nil),              // 38: alchemy.v1.JobEvent
-	(*Ref)(nil),                   // 39: alchemy.v1.Ref
-	(*ReviewItem)(nil),            // 40: alchemy.v1.ReviewItem
-	(*Edit)(nil),                  // 41: alchemy.v1.Edit
-	(*ReviewDecision)(nil),        // 42: alchemy.v1.ReviewDecision
-	nil,                           // 43: alchemy.v1.ModelEndpoint.OptionsEntry
-	(*timestamppb.Timestamp)(nil), // 44: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 45: google.protobuf.Struct
-	(*emptypb.Empty)(nil),         // 46: google.protobuf.Empty
+	(DuplicateSignal)(0),          // 5: alchemy.v1.DuplicateSignal
+	(ReviewKind)(0),               // 6: alchemy.v1.ReviewKind
+	(ReviewVerb)(0),               // 7: alchemy.v1.ReviewVerb
+	(RefKind)(0),                  // 8: alchemy.v1.RefKind
+	(RuleOrigin)(0),               // 9: alchemy.v1.RuleOrigin
+	(*ModelEndpoint)(nil),         // 10: alchemy.v1.ModelEndpoint
+	(*Models)(nil),                // 11: alchemy.v1.Models
+	(*Chunking)(nil),              // 12: alchemy.v1.Chunking
+	(*ReviewOptions)(nil),         // 13: alchemy.v1.ReviewOptions
+	(*ReviewRule)(nil),            // 14: alchemy.v1.ReviewRule
+	(*CreateJobRequest)(nil),      // 15: alchemy.v1.CreateJobRequest
+	(*Job)(nil),                   // 16: alchemy.v1.Job
+	(*GetJobRequest)(nil),         // 17: alchemy.v1.GetJobRequest
+	(*DeleteJobRequest)(nil),      // 18: alchemy.v1.DeleteJobRequest
+	(*WatchJobRequest)(nil),       // 19: alchemy.v1.WatchJobRequest
+	(*GetResultRequest)(nil),      // 20: alchemy.v1.GetResultRequest
+	(*SourceChunk)(nil),           // 21: alchemy.v1.SourceChunk
+	(*Source)(nil),                // 22: alchemy.v1.Source
+	(*Provenance)(nil),            // 23: alchemy.v1.Provenance
+	(*Entity)(nil),                // 24: alchemy.v1.Entity
+	(*Relation)(nil),              // 25: alchemy.v1.Relation
+	(*Chunk)(nil),                 // 26: alchemy.v1.Chunk
+	(*Vector)(nil),                // 27: alchemy.v1.Vector
+	(*Violation)(nil),             // 28: alchemy.v1.Violation
+	(*Guess)(nil),                 // 29: alchemy.v1.Guess
+	(*Claim)(nil),                 // 30: alchemy.v1.Claim
+	(*Conflict)(nil),              // 31: alchemy.v1.Conflict
+	(*Duplicate)(nil),             // 32: alchemy.v1.Duplicate
+	(*DuplicateSide)(nil),         // 33: alchemy.v1.DuplicateSide
+	(*Counts)(nil),                // 34: alchemy.v1.Counts
+	(*ModelCall)(nil),             // 35: alchemy.v1.ModelCall
+	(*Unread)(nil),                // 36: alchemy.v1.Unread
+	(*Result)(nil),                // 37: alchemy.v1.Result
+	(*StandingRule)(nil),          // 38: alchemy.v1.StandingRule
+	(*RuleSet)(nil),               // 39: alchemy.v1.RuleSet
+	(*ResultPage)(nil),            // 40: alchemy.v1.ResultPage
+	(*JobEvent)(nil),              // 41: alchemy.v1.JobEvent
+	(*Ref)(nil),                   // 42: alchemy.v1.Ref
+	(*ReviewItem)(nil),            // 43: alchemy.v1.ReviewItem
+	(*Edit)(nil),                  // 44: alchemy.v1.Edit
+	(*ReviewDecision)(nil),        // 45: alchemy.v1.ReviewDecision
+	nil,                           // 46: alchemy.v1.ModelEndpoint.OptionsEntry
+	(*timestamppb.Timestamp)(nil), // 47: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 48: google.protobuf.Struct
+	(*emptypb.Empty)(nil),         // 49: google.protobuf.Empty
 }
 var file_alchemy_v1_alchemy_proto_depIdxs = []int32{
-	43, // 0: alchemy.v1.ModelEndpoint.options:type_name -> alchemy.v1.ModelEndpoint.OptionsEntry
-	9,  // 1: alchemy.v1.Models.llm:type_name -> alchemy.v1.ModelEndpoint
-	9,  // 2: alchemy.v1.Models.embedder:type_name -> alchemy.v1.ModelEndpoint
-	9,  // 3: alchemy.v1.Models.ocr:type_name -> alchemy.v1.ModelEndpoint
-	13, // 4: alchemy.v1.ReviewOptions.rules:type_name -> alchemy.v1.ReviewRule
-	5,  // 5: alchemy.v1.ReviewRule.kind:type_name -> alchemy.v1.ReviewKind
-	42, // 6: alchemy.v1.ReviewRule.from:type_name -> alchemy.v1.ReviewDecision
-	8,  // 7: alchemy.v1.ReviewRule.origin:type_name -> alchemy.v1.RuleOrigin
-	10, // 8: alchemy.v1.CreateJobRequest.models:type_name -> alchemy.v1.Models
-	11, // 9: alchemy.v1.CreateJobRequest.chunking:type_name -> alchemy.v1.Chunking
-	12, // 10: alchemy.v1.CreateJobRequest.review:type_name -> alchemy.v1.ReviewOptions
+	46, // 0: alchemy.v1.ModelEndpoint.options:type_name -> alchemy.v1.ModelEndpoint.OptionsEntry
+	10, // 1: alchemy.v1.Models.llm:type_name -> alchemy.v1.ModelEndpoint
+	10, // 2: alchemy.v1.Models.embedder:type_name -> alchemy.v1.ModelEndpoint
+	10, // 3: alchemy.v1.Models.ocr:type_name -> alchemy.v1.ModelEndpoint
+	14, // 4: alchemy.v1.ReviewOptions.rules:type_name -> alchemy.v1.ReviewRule
+	6,  // 5: alchemy.v1.ReviewRule.kind:type_name -> alchemy.v1.ReviewKind
+	45, // 6: alchemy.v1.ReviewRule.from:type_name -> alchemy.v1.ReviewDecision
+	9,  // 7: alchemy.v1.ReviewRule.origin:type_name -> alchemy.v1.RuleOrigin
+	11, // 8: alchemy.v1.CreateJobRequest.models:type_name -> alchemy.v1.Models
+	12, // 9: alchemy.v1.CreateJobRequest.chunking:type_name -> alchemy.v1.Chunking
+	13, // 10: alchemy.v1.CreateJobRequest.review:type_name -> alchemy.v1.ReviewOptions
 	0,  // 11: alchemy.v1.Job.state:type_name -> alchemy.v1.JobState
-	44, // 12: alchemy.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	44, // 13: alchemy.v1.Job.expires_at:type_name -> google.protobuf.Timestamp
+	47, // 12: alchemy.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	47, // 13: alchemy.v1.Job.expires_at:type_name -> google.protobuf.Timestamp
 	1,  // 14: alchemy.v1.SourceChunk.kind:type_name -> alchemy.v1.SourceKind
 	1,  // 15: alchemy.v1.Source.kind:type_name -> alchemy.v1.SourceKind
 	2,  // 16: alchemy.v1.Provenance.producer:type_name -> alchemy.v1.Producer
-	45, // 17: alchemy.v1.Entity.attributes:type_name -> google.protobuf.Struct
-	22, // 18: alchemy.v1.Entity.provenance:type_name -> alchemy.v1.Provenance
-	45, // 19: alchemy.v1.Relation.attributes:type_name -> google.protobuf.Struct
-	22, // 20: alchemy.v1.Relation.provenance:type_name -> alchemy.v1.Provenance
+	48, // 17: alchemy.v1.Entity.attributes:type_name -> google.protobuf.Struct
+	23, // 18: alchemy.v1.Entity.provenance:type_name -> alchemy.v1.Provenance
+	48, // 19: alchemy.v1.Relation.attributes:type_name -> google.protobuf.Struct
+	23, // 20: alchemy.v1.Relation.provenance:type_name -> alchemy.v1.Provenance
 	3,  // 21: alchemy.v1.Violation.kind:type_name -> alchemy.v1.ViolationKind
-	22, // 22: alchemy.v1.Violation.provenance:type_name -> alchemy.v1.Provenance
-	22, // 23: alchemy.v1.Guess.provenance:type_name -> alchemy.v1.Provenance
-	22, // 24: alchemy.v1.Claim.provenance:type_name -> alchemy.v1.Provenance
+	23, // 22: alchemy.v1.Violation.provenance:type_name -> alchemy.v1.Provenance
+	23, // 23: alchemy.v1.Guess.provenance:type_name -> alchemy.v1.Provenance
+	23, // 24: alchemy.v1.Claim.provenance:type_name -> alchemy.v1.Provenance
 	4,  // 25: alchemy.v1.Conflict.kind:type_name -> alchemy.v1.ConflictKind
-	29, // 26: alchemy.v1.Conflict.left:type_name -> alchemy.v1.Claim
-	29, // 27: alchemy.v1.Conflict.right:type_name -> alchemy.v1.Claim
-	23, // 28: alchemy.v1.Result.entities:type_name -> alchemy.v1.Entity
-	24, // 29: alchemy.v1.Result.relations:type_name -> alchemy.v1.Relation
-	25, // 30: alchemy.v1.Result.chunks:type_name -> alchemy.v1.Chunk
-	26, // 31: alchemy.v1.Result.vectors:type_name -> alchemy.v1.Vector
-	30, // 32: alchemy.v1.Result.conflicts:type_name -> alchemy.v1.Conflict
-	27, // 33: alchemy.v1.Result.violations:type_name -> alchemy.v1.Violation
-	28, // 34: alchemy.v1.Result.guesses:type_name -> alchemy.v1.Guess
-	31, // 35: alchemy.v1.Result.counts:type_name -> alchemy.v1.Counts
-	32, // 36: alchemy.v1.Result.model_calls:type_name -> alchemy.v1.ModelCall
-	33, // 37: alchemy.v1.Result.unread:type_name -> alchemy.v1.Unread
-	13, // 38: alchemy.v1.Result.rules:type_name -> alchemy.v1.ReviewRule
-	36, // 39: alchemy.v1.Result.rule_sets:type_name -> alchemy.v1.RuleSet
-	35, // 40: alchemy.v1.RuleSet.rules:type_name -> alchemy.v1.StandingRule
-	23, // 41: alchemy.v1.ResultPage.entities:type_name -> alchemy.v1.Entity
-	24, // 42: alchemy.v1.ResultPage.relations:type_name -> alchemy.v1.Relation
-	25, // 43: alchemy.v1.ResultPage.chunks:type_name -> alchemy.v1.Chunk
-	26, // 44: alchemy.v1.ResultPage.vectors:type_name -> alchemy.v1.Vector
-	30, // 45: alchemy.v1.ResultPage.conflicts:type_name -> alchemy.v1.Conflict
-	27, // 46: alchemy.v1.ResultPage.violations:type_name -> alchemy.v1.Violation
-	28, // 47: alchemy.v1.ResultPage.guesses:type_name -> alchemy.v1.Guess
-	31, // 48: alchemy.v1.ResultPage.counts:type_name -> alchemy.v1.Counts
-	32, // 49: alchemy.v1.ResultPage.model_calls:type_name -> alchemy.v1.ModelCall
-	33, // 50: alchemy.v1.ResultPage.unread:type_name -> alchemy.v1.Unread
-	13, // 51: alchemy.v1.ResultPage.rules:type_name -> alchemy.v1.ReviewRule
-	36, // 52: alchemy.v1.ResultPage.rule_sets:type_name -> alchemy.v1.RuleSet
-	44, // 53: alchemy.v1.JobEvent.at:type_name -> google.protobuf.Timestamp
-	0,  // 54: alchemy.v1.JobEvent.state:type_name -> alchemy.v1.JobState
-	31, // 55: alchemy.v1.JobEvent.counts:type_name -> alchemy.v1.Counts
-	30, // 56: alchemy.v1.JobEvent.conflict:type_name -> alchemy.v1.Conflict
-	32, // 57: alchemy.v1.JobEvent.model_calls_by_stage:type_name -> alchemy.v1.ModelCall
-	7,  // 58: alchemy.v1.Ref.kind:type_name -> alchemy.v1.RefKind
-	22, // 59: alchemy.v1.Ref.provenance:type_name -> alchemy.v1.Provenance
-	5,  // 60: alchemy.v1.ReviewItem.kind:type_name -> alchemy.v1.ReviewKind
-	39, // 61: alchemy.v1.ReviewItem.targets:type_name -> alchemy.v1.Ref
-	13, // 62: alchemy.v1.ReviewItem.suppressed_by:type_name -> alchemy.v1.ReviewRule
-	22, // 63: alchemy.v1.ReviewItem.provenance:type_name -> alchemy.v1.Provenance
-	6,  // 64: alchemy.v1.ReviewDecision.verb:type_name -> alchemy.v1.ReviewVerb
-	41, // 65: alchemy.v1.ReviewDecision.edit:type_name -> alchemy.v1.Edit
-	44, // 66: alchemy.v1.ReviewDecision.at:type_name -> google.protobuf.Timestamp
-	14, // 67: alchemy.v1.Alchemy.CreateJob:input_type -> alchemy.v1.CreateJobRequest
-	16, // 68: alchemy.v1.Alchemy.GetJob:input_type -> alchemy.v1.GetJobRequest
-	19, // 69: alchemy.v1.Alchemy.GetResult:input_type -> alchemy.v1.GetResultRequest
-	19, // 70: alchemy.v1.Alchemy.StreamResult:input_type -> alchemy.v1.GetResultRequest
-	17, // 71: alchemy.v1.Alchemy.DeleteJob:input_type -> alchemy.v1.DeleteJobRequest
-	20, // 72: alchemy.v1.Alchemy.UploadSource:input_type -> alchemy.v1.SourceChunk
-	18, // 73: alchemy.v1.Alchemy.WatchJob:input_type -> alchemy.v1.WatchJobRequest
-	42, // 74: alchemy.v1.Alchemy.Review:input_type -> alchemy.v1.ReviewDecision
-	15, // 75: alchemy.v1.Alchemy.CreateJob:output_type -> alchemy.v1.Job
-	15, // 76: alchemy.v1.Alchemy.GetJob:output_type -> alchemy.v1.Job
-	34, // 77: alchemy.v1.Alchemy.GetResult:output_type -> alchemy.v1.Result
-	37, // 78: alchemy.v1.Alchemy.StreamResult:output_type -> alchemy.v1.ResultPage
-	46, // 79: alchemy.v1.Alchemy.DeleteJob:output_type -> google.protobuf.Empty
-	21, // 80: alchemy.v1.Alchemy.UploadSource:output_type -> alchemy.v1.Source
-	38, // 81: alchemy.v1.Alchemy.WatchJob:output_type -> alchemy.v1.JobEvent
-	40, // 82: alchemy.v1.Alchemy.Review:output_type -> alchemy.v1.ReviewItem
-	75, // [75:83] is the sub-list for method output_type
-	67, // [67:75] is the sub-list for method input_type
-	67, // [67:67] is the sub-list for extension type_name
-	67, // [67:67] is the sub-list for extension extendee
-	0,  // [0:67] is the sub-list for field type_name
+	30, // 26: alchemy.v1.Conflict.left:type_name -> alchemy.v1.Claim
+	30, // 27: alchemy.v1.Conflict.right:type_name -> alchemy.v1.Claim
+	5,  // 28: alchemy.v1.Duplicate.signal:type_name -> alchemy.v1.DuplicateSignal
+	33, // 29: alchemy.v1.Duplicate.left:type_name -> alchemy.v1.DuplicateSide
+	33, // 30: alchemy.v1.Duplicate.right:type_name -> alchemy.v1.DuplicateSide
+	23, // 31: alchemy.v1.DuplicateSide.provenance:type_name -> alchemy.v1.Provenance
+	24, // 32: alchemy.v1.Result.entities:type_name -> alchemy.v1.Entity
+	25, // 33: alchemy.v1.Result.relations:type_name -> alchemy.v1.Relation
+	26, // 34: alchemy.v1.Result.chunks:type_name -> alchemy.v1.Chunk
+	27, // 35: alchemy.v1.Result.vectors:type_name -> alchemy.v1.Vector
+	31, // 36: alchemy.v1.Result.conflicts:type_name -> alchemy.v1.Conflict
+	28, // 37: alchemy.v1.Result.violations:type_name -> alchemy.v1.Violation
+	29, // 38: alchemy.v1.Result.guesses:type_name -> alchemy.v1.Guess
+	34, // 39: alchemy.v1.Result.counts:type_name -> alchemy.v1.Counts
+	35, // 40: alchemy.v1.Result.model_calls:type_name -> alchemy.v1.ModelCall
+	36, // 41: alchemy.v1.Result.unread:type_name -> alchemy.v1.Unread
+	14, // 42: alchemy.v1.Result.rules:type_name -> alchemy.v1.ReviewRule
+	32, // 43: alchemy.v1.Result.duplicates:type_name -> alchemy.v1.Duplicate
+	39, // 44: alchemy.v1.Result.rule_sets:type_name -> alchemy.v1.RuleSet
+	38, // 45: alchemy.v1.RuleSet.rules:type_name -> alchemy.v1.StandingRule
+	24, // 46: alchemy.v1.ResultPage.entities:type_name -> alchemy.v1.Entity
+	25, // 47: alchemy.v1.ResultPage.relations:type_name -> alchemy.v1.Relation
+	26, // 48: alchemy.v1.ResultPage.chunks:type_name -> alchemy.v1.Chunk
+	27, // 49: alchemy.v1.ResultPage.vectors:type_name -> alchemy.v1.Vector
+	31, // 50: alchemy.v1.ResultPage.conflicts:type_name -> alchemy.v1.Conflict
+	28, // 51: alchemy.v1.ResultPage.violations:type_name -> alchemy.v1.Violation
+	29, // 52: alchemy.v1.ResultPage.guesses:type_name -> alchemy.v1.Guess
+	32, // 53: alchemy.v1.ResultPage.duplicates:type_name -> alchemy.v1.Duplicate
+	34, // 54: alchemy.v1.ResultPage.counts:type_name -> alchemy.v1.Counts
+	35, // 55: alchemy.v1.ResultPage.model_calls:type_name -> alchemy.v1.ModelCall
+	36, // 56: alchemy.v1.ResultPage.unread:type_name -> alchemy.v1.Unread
+	14, // 57: alchemy.v1.ResultPage.rules:type_name -> alchemy.v1.ReviewRule
+	39, // 58: alchemy.v1.ResultPage.rule_sets:type_name -> alchemy.v1.RuleSet
+	47, // 59: alchemy.v1.JobEvent.at:type_name -> google.protobuf.Timestamp
+	0,  // 60: alchemy.v1.JobEvent.state:type_name -> alchemy.v1.JobState
+	34, // 61: alchemy.v1.JobEvent.counts:type_name -> alchemy.v1.Counts
+	31, // 62: alchemy.v1.JobEvent.conflict:type_name -> alchemy.v1.Conflict
+	35, // 63: alchemy.v1.JobEvent.model_calls_by_stage:type_name -> alchemy.v1.ModelCall
+	8,  // 64: alchemy.v1.Ref.kind:type_name -> alchemy.v1.RefKind
+	23, // 65: alchemy.v1.Ref.provenance:type_name -> alchemy.v1.Provenance
+	6,  // 66: alchemy.v1.ReviewItem.kind:type_name -> alchemy.v1.ReviewKind
+	42, // 67: alchemy.v1.ReviewItem.targets:type_name -> alchemy.v1.Ref
+	14, // 68: alchemy.v1.ReviewItem.suppressed_by:type_name -> alchemy.v1.ReviewRule
+	23, // 69: alchemy.v1.ReviewItem.provenance:type_name -> alchemy.v1.Provenance
+	7,  // 70: alchemy.v1.ReviewDecision.verb:type_name -> alchemy.v1.ReviewVerb
+	44, // 71: alchemy.v1.ReviewDecision.edit:type_name -> alchemy.v1.Edit
+	47, // 72: alchemy.v1.ReviewDecision.at:type_name -> google.protobuf.Timestamp
+	15, // 73: alchemy.v1.Alchemy.CreateJob:input_type -> alchemy.v1.CreateJobRequest
+	17, // 74: alchemy.v1.Alchemy.GetJob:input_type -> alchemy.v1.GetJobRequest
+	20, // 75: alchemy.v1.Alchemy.GetResult:input_type -> alchemy.v1.GetResultRequest
+	20, // 76: alchemy.v1.Alchemy.StreamResult:input_type -> alchemy.v1.GetResultRequest
+	18, // 77: alchemy.v1.Alchemy.DeleteJob:input_type -> alchemy.v1.DeleteJobRequest
+	21, // 78: alchemy.v1.Alchemy.UploadSource:input_type -> alchemy.v1.SourceChunk
+	19, // 79: alchemy.v1.Alchemy.WatchJob:input_type -> alchemy.v1.WatchJobRequest
+	45, // 80: alchemy.v1.Alchemy.Review:input_type -> alchemy.v1.ReviewDecision
+	16, // 81: alchemy.v1.Alchemy.CreateJob:output_type -> alchemy.v1.Job
+	16, // 82: alchemy.v1.Alchemy.GetJob:output_type -> alchemy.v1.Job
+	37, // 83: alchemy.v1.Alchemy.GetResult:output_type -> alchemy.v1.Result
+	40, // 84: alchemy.v1.Alchemy.StreamResult:output_type -> alchemy.v1.ResultPage
+	49, // 85: alchemy.v1.Alchemy.DeleteJob:output_type -> google.protobuf.Empty
+	22, // 86: alchemy.v1.Alchemy.UploadSource:output_type -> alchemy.v1.Source
+	41, // 87: alchemy.v1.Alchemy.WatchJob:output_type -> alchemy.v1.JobEvent
+	43, // 88: alchemy.v1.Alchemy.Review:output_type -> alchemy.v1.ReviewItem
+	81, // [81:89] is the sub-list for method output_type
+	73, // [73:81] is the sub-list for method input_type
+	73, // [73:73] is the sub-list for extension type_name
+	73, // [73:73] is the sub-list for extension extendee
+	0,  // [0:73] is the sub-list for field type_name
 }
 
 func init() { file_alchemy_v1_alchemy_proto_init() }
@@ -3884,8 +4194,8 @@ func file_alchemy_v1_alchemy_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_alchemy_v1_alchemy_proto_rawDesc), len(file_alchemy_v1_alchemy_proto_rawDesc)),
-			NumEnums:      9,
-			NumMessages:   35,
+			NumEnums:      10,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

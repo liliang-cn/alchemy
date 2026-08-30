@@ -18,6 +18,7 @@ func count(r Report) alchemy.Counts {
 		Relations:  len(r.Relations),
 		Violations: len(r.Violations),
 		Conflicts:  len(r.Conflicts),
+		Duplicates: len(r.Duplicates),
 		// Guesses, ChunksEmpty and ChunksUnread are owned by the mapping and
 		// chunking stages. This one cannot see them, and a verifier that wrote a
 		// zero it had not computed would make the whole block untrustworthy.

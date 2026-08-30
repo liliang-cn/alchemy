@@ -21,6 +21,11 @@ func messy() verify.Input {
 			alchemy.Entity{ID: id, Type: "StoragePool", Name: "production", Attributes: map[string]any{"region": "us-east", "version": "3.1", "zone": "b"}, Provenance: fromPDF},
 			alchemy.Entity{ID: "n" + id, Type: "Node", Provenance: fromSchema},
 			alchemy.Entity{ID: "x" + id, Type: "Wormhole", Provenance: fromPDF},
+			// Two affix pairs per iteration, so the duplicate scan is walking
+			// a map big enough for its order to show. A pair per node id keeps
+			// them distinct rather than collapsing into one crowded key.
+			alchemy.Entity{ID: "p" + id, Type: "Cluster", Name: "pool " + id, Provenance: fromPDF},
+			alchemy.Entity{ID: "q" + id, Type: "Cluster", Name: "pool " + id + " cluster", Provenance: fromOtherPDF},
 		)
 		in.Relations = append(in.Relations,
 			alchemy.Relation{From: id, To: "n" + id, Type: "CONTAINS", Attributes: map[string]any{"on_delete": "cascade", "card": "1:n"}, Provenance: fromSchema},
@@ -68,10 +73,13 @@ func TestCountsDescribeTheReportTheyAreReturnedWith(t *testing.T) {
 	if c.Violations != len(got.Violations) || c.Conflicts != len(got.Conflicts) {
 		t.Fatalf("counts %+v do not describe %d violations and %d conflicts", c, len(got.Violations), len(got.Conflicts))
 	}
+	if c.Duplicates != len(got.Duplicates) {
+		t.Fatalf("counts %+v do not describe %d duplicates", c, len(got.Duplicates))
+	}
 	if c.Deterministic+c.Inferred != c.Relations {
 		t.Fatalf("deterministic %d + inferred %d != relations %d", c.Deterministic, c.Inferred, c.Relations)
 	}
-	if c.Conflicts == 0 || c.Violations == 0 {
-		t.Fatalf("fixture is not exercising both jobs: %+v", c)
+	if c.Conflicts == 0 || c.Violations == 0 || c.Duplicates == 0 {
+		t.Fatalf("fixture is not exercising all three jobs: %+v", c)
 	}
 }

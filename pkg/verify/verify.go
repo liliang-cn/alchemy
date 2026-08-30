@@ -1,13 +1,17 @@
 // Package verify is the stage DESIGN.md §3 refuses to make a flag: "an
 // extraction nobody checked is an extraction nobody should act on".
 //
-// It does two jobs, and the boundary between them is the whole point. A
+// It does three jobs, and the boundaries between them are the whole point. A
 // violation is one source saying something the ontology does not allow —
 // attributable, excludable, and the rest of the graph is usable without it, so
 // it never holds a job. A conflict is two claims both asserting they are right
 // with nothing in the data to decide between them — §7.3 makes that a question,
 // and a question has to be asked of someone, so it holds the job whether or not
-// review mode is on.
+// review mode is on. A duplicate is two nodes that may be one node: nothing is
+// wrong and the two records agree, they are merely not joined, so it is
+// reported and counted and never resolved here. See duplicates.go for why it
+// is neither of the other two, and why nothing in this package tries to decide
+// it.
 package verify
 
 import (
@@ -40,6 +44,11 @@ type Report struct {
 
 	Violations []alchemy.Violation
 	Conflicts  []alchemy.Conflict
+	// Duplicates is two nodes that may be one node. It is a third list rather
+	// than a member of either of the two above because it is neither kind of
+	// finding: nothing is wrong, and the two records agree — they are merely
+	// not joined. See alchemy.Duplicate.
+	Duplicates []alchemy.Duplicate
 	Counts     alchemy.Counts
 }
 
@@ -53,6 +62,10 @@ func Check(in Input) Report {
 		Relations:  relations,
 		Violations: violations(entities, relations, types, rs),
 		Conflicts:  conflicts(entities, relations),
+		// Computed whatever vocabulary is in force, and with none. Two
+		// spellings of one thing needs no ontology to be a question, which is
+		// the same sentence the conflict pass is here on.
+		Duplicates: duplicates(entities),
 	}
 	out.Counts = count(out)
 	return out

@@ -144,7 +144,7 @@ func (s *Server) rulesOf(id string) []*alchemyv1.ReviewRule {
 type pager struct {
 	res  alchemy.Result
 	size int
-	at   [7]int
+	at   [8]int
 }
 
 func (p *pager) next() (*alchemyv1.ResultPage, bool) {
@@ -154,6 +154,7 @@ func (p *pager) next() (*alchemyv1.ResultPage, bool) {
 	page.Conflicts, left = takeInto(p.res.Conflicts, &p.at[0], left, conflictToProto)
 	page.Violations, left = takeInto(p.res.Violations, &p.at[1], left, violationToProto)
 	page.Guesses, left = takeInto(p.res.Guesses, &p.at[2], left, guessToProto)
+	page.Duplicates, left = takeInto(p.res.Duplicates, &p.at[7], left, duplicateToProto)
 	page.Entities, left = takeInto(p.res.Entities, &p.at[3], left, entityToProto)
 	page.Relations, left = takeInto(p.res.Relations, &p.at[4], left, relationToProto)
 	page.Chunks, left = takeInto(p.res.Chunks, &p.at[5], left, chunkToProto)
@@ -173,7 +174,8 @@ func (p *pager) more() bool {
 		p.at[3] < len(p.res.Entities) ||
 		p.at[4] < len(p.res.Relations) ||
 		p.at[5] < len(p.res.Chunks) ||
-		p.at[6] < len(p.res.Vectors)
+		p.at[6] < len(p.res.Vectors) ||
+		p.at[7] < len(p.res.Duplicates)
 }
 
 func takeInto[T, R any](in []T, at *int, budget int, f func(T) R) ([]R, int) {

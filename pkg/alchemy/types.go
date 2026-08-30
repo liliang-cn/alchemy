@@ -269,6 +269,81 @@ type Claim struct {
 	Provenance Provenance `json:"provenance"`
 }
 
+// DuplicateSignal names the deterministic evidence that two nodes may be one
+// thing. It is on the finding rather than left implicit because a reviewer
+// answering "are these the same?" is entitled to know what asked them, and
+// because a signal that turns out to be noisy has to be identifiable in a
+// corpus of past decisions before anybody can argue for removing it.
+type DuplicateSignal string
+
+const (
+	// DuplicateNameAffix — under one type, one node's name is the other's with
+	// whole words added at the front or the back: "document" and "document
+	// package", "SQL" and "SQL dumps". It is the shape a per-chunk extractor
+	// produces, because each chunk is a separate call that cannot see how the
+	// others named the thing, and the commonest addition is the type word
+	// itself.
+	//
+	// What it will wrongly join is a name that was qualified because it names
+	// something narrower: "language" and "language model", "Ada" and "Ada
+	// Lovelace". That is why this is a finding and not a merge — the evidence
+	// is real, and it is not enough to act on alone.
+	DuplicateNameAffix DuplicateSignal = "name_affix"
+)
+
+// Duplicate is two nodes that may be one node, and are not joined.
+//
+// It is a third kind of finding beside Violation and Conflict because it is
+// neither of them, and pushing it into either would make that one mean less.
+// A violation is one source saying something the ontology does not allow: the
+// ontology can name the rule that was broken, and the graph minus the offending
+// record is still usable. Neither holds here — no declared rule says a
+// vocabulary may not contain two names for one thing, and there is no record to
+// remove, since removing either node takes its edges with it. A conflict is two
+// sources both claiming to be right with nothing in the data to decide between
+// them (§7.3), and these two records do not disagree about anything; they agree
+// and are merely not joined. Making it a conflict would also hold every prose
+// job, since roughly one node in six was one of these in the run that motivated
+// it — which turns §7.3's refusal to let a caller opt out of a person into a
+// dialog people learn to click through.
+//
+// So: nothing is wrong, and the graph is delivered. What is owed is the number
+// (Counts.Duplicates) and the pair, so that a reader can distrust the graph by
+// exactly as much as it deserves.
+type Duplicate struct {
+	Signal DuplicateSignal `json:"signal"`
+	// Subject is the pair, rendered "left ~ right". It is one string because
+	// every other finding has a single Subject and the queue, the rules and
+	// the stamping all key on it.
+	Subject string `json:"subject"`
+	// Detail states the case in words a person can answer without opening the
+	// source: both names, both chunks, and what joined them.
+	Detail string `json:"detail"`
+	// Left and Right are the two nodes. Left is the one whose name is
+	// contained in the other's, which is a property of the pair rather than of
+	// the order they were extracted in — so the same corpus names the same
+	// side left however its sections were ordered.
+	//
+	// Neither side is the "wrong" one. A Conflict has an incumbent and a
+	// dissenter because one of them arrived second at a key somebody already
+	// held; here nobody is holding anything, which is precisely the defect.
+	Left  DuplicateSide `json:"left"`
+	Right DuplicateSide `json:"right"`
+}
+
+// DuplicateSide is one node of a candidate pair, carrying what a reviewer
+// needs to answer without a lookup: which node, what it is called, and where it
+// came from.
+type DuplicateSide struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+	Name string `json:"name"`
+	// Provenance is this node's, whole. §5b: a wrong edge is attributable, and
+	// the answer to "are these the same thing?" is usually "which chunk said
+	// which, and did the second one know about the first".
+	Provenance Provenance `json:"provenance"`
+}
+
 // Counts is the block that makes the difference between a graph you can act on
 // and one you merely have. §5: every returned graph is accompanied by the
 // numbers needed to distrust it.
@@ -280,6 +355,16 @@ type Counts struct {
 	Violations    int `json:"violations"`
 	Conflicts     int `json:"conflicts"`
 	Guesses       int `json:"guesses"`
+	// Duplicates is how many pairs of nodes may be one node (see Duplicate).
+	//
+	// It is in this block for the reason the block exists: "one node in six may
+	// be a duplicate of another" is exactly a number needed to distrust a
+	// graph, and it is one no reader can derive from the entities beside it —
+	// the two nodes are well-formed, correctly typed and separately
+	// attributable, and nothing about either says the other exists. A graph
+	// returned without it looks like a graph of 17 things when it may be a
+	// graph of 14.
+	Duplicates int `json:"duplicates"`
 	// ChunksEmpty is chunks that produced nothing. A high number means the
 	// extraction is failing quietly.
 	ChunksEmpty int `json:"chunks_empty"`
@@ -326,6 +411,11 @@ type Result struct {
 	Conflicts  []Conflict  `json:"conflicts"`
 	Violations []Violation `json:"violations"`
 	Guesses    []Guess     `json:"guesses"`
+	// Duplicates is returned whether or not review is on, for the same reason
+	// Violations is: a caller running unattended is owed the numbers needed to
+	// distrust what it got, and "these two nodes may be one" is not something
+	// it can work out later from a graph in which both look fine.
+	Duplicates []Duplicate `json:"duplicates"`
 
 	Counts     Counts      `json:"counts"`
 	ModelCalls []ModelCall `json:"model_calls,omitempty"`

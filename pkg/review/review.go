@@ -39,6 +39,27 @@ const (
 	// KindGuess — an inferred mapping. §2.1: one wrong guess misaligns a whole
 	// table, which is why it outranks a single unsure edge.
 	KindGuess Kind = "guess"
+	// KindDuplicate — two nodes that may be one node (alchemy.Duplicate). It
+	// sits between a guess and an unsure record, and the position is argued
+	// from §5c's own table rather than from where it happened to be added.
+	//
+	// Below a violation, because nothing is wrong: both nodes are well-typed,
+	// separately attributable, and the graph carrying both is the graph the
+	// extractor produced. Below a guess, because one wrong guess misaligns a
+	// whole table (§2.1) while an unanswered duplicate leaves the result
+	// exactly as it already reports itself — Counts.Duplicates says how many
+	// there are, so nobody is misled by leaving one. Above low confidence,
+	// because the answer decides what every edge on both nodes points at,
+	// where an unsure record is one record: an agent traversing an unjoined
+	// pair answers from whichever half it landed on, which is §7.3's own
+	// account of the harm, in a milder form.
+	//
+	// And not in §5c's "never" row, which is where a deterministic *record*
+	// goes — a fact a CREATE TABLE stated, so that confirming it teaches a
+	// person to click Approve. This is found deterministically and stated by
+	// nobody: no source says these two are one thing, which is exactly why it
+	// is a question.
+	KindDuplicate Kind = "duplicate"
 	// KindLowConfidence — the model was unsure and said so.
 	KindLowConfidence Kind = "low_confidence"
 )
@@ -177,6 +198,28 @@ type Edit struct {
 	// From and To redirect an edge.
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
+	// Into is the entity id this record is the same record as: the answer to a
+	// KindDuplicate item, and the only correction that changes a node's
+	// identity rather than what it says.
+	//
+	// It is a field on Edit rather than a fifth verb because §5c's four are a
+	// closed set — "a fifth would be a way of disposing of a proposal that the
+	// provenance of the result has no way to describe" — and this is not a new
+	// way of disposing of anything: a merge is an `edit` that corrects which
+	// node a record belongs to, exactly as From and To correct which nodes an
+	// edge runs between.
+	//
+	// It could not be spelled with Name. Renaming the absorbed node to the
+	// survivor's spelling looks like it would make their ids collide, and does
+	// not: an id is derived once, by the producer that made the record, and
+	// Apply deliberately does not recompute one — a rename that silently
+	// re-pointed every edge in the graph would be the largest possible change
+	// wearing the label of the smallest. So a rename would leave two nodes with
+	// one name, one of them still holding all its edges, which is worse than
+	// the duplicate it was meant to fix. Naming the target outright is
+	// checkable (Apply refuses an Into that is not the other side of the pair
+	// the reviewer was shown) and it says what was decided.
+	Into string `json:"into,omitempty"`
 }
 
 // empty reports whether an edit would change nothing. Applying one is an

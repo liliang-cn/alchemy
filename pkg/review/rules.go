@@ -1,6 +1,10 @@
 package review
 
-import "github.com/liliang-cn/alchemy/pkg/alchemy"
+import (
+	"strings"
+
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
+)
 
 // A Rule is a class of question that has already been answered: either by a
 // reviewer who pressed `always` on an item, or by a person who wrote the rule
@@ -82,7 +86,8 @@ func ruleFor(it Item, rules []Rule) *Rule {
 
 // The shape functions below decide what "an item like this one" means, which
 // is the central design decision of this package. The boundary is the same in
-// all four:
+// all of them but one — see duplicateShape, which keeps what the others drop,
+// and says why:
 //
 //	A shape carries everything the reviewer relied on to answer the class of
 //	question, and drops what identifies the individual instance.
@@ -143,6 +148,45 @@ func guessShape(g alchemy.Guess) string {
 	// approval no longer means what it meant.
 	return join("guess", "field="+g.Field, "chosen="+g.ChosenAs,
 		"producer="+string(g.Provenance.Producer), modelOf(g.Provenance))
+}
+
+// duplicateShape is the narrowest shape this package builds, and the one place
+// where the general rule — carry the class, drop the instance — is deliberately
+// not applied to the names.
+//
+// Everywhere else the names and ids are what make a queue a thousand items
+// rather than twelve, and dropping them is how "reviewing the twelve kinds of
+// mistake" becomes possible. Here the two names *are* the class. A reviewer who
+// said "document" and "document package" are one package said nothing whatever
+// about "language" and "language model", and a shape that generalised over the
+// names would take one person's judgement about one pair and merge every
+// affix-matched pair in the corpus — which is the silent merge this whole
+// finding exists to refuse, arriving through the rule system instead of through
+// a normaliser.
+//
+// What it does drop is the chunk each side came from, which is what makes the
+// rule survive the nightly re-import §5c asks about: the same document
+// re-chunked proposes the same two names from different chunks, and that is the
+// same question, already answered.
+//
+// Both producers, in the order the finding wrote them, exactly as
+// conflictShape does it and for the same reason: "a schema's table and a
+// model's node are the same thing" is a different judgement from "two of this
+// model's nodes are the same thing", and one rule must not make itself the
+// other.
+func duplicateShape(d alchemy.Duplicate) string {
+	return join("duplicate", string(d.Signal), "type="+d.Left.Type,
+		"left="+foldName(d.Left.Name), "right="+foldName(d.Right.Name),
+		"between="+string(d.Left.Provenance.Producer)+"|"+string(d.Right.Provenance.Producer),
+		modelOf(d.Right.Provenance))
+}
+
+// foldName is how a name enters a shape: lowercased, with runs of whitespace
+// collapsed. It matches the folding that decides identity in the first place,
+// so a rule about "SQL dumps" still covers the run whose model wrote "SQL
+// Dumps" — two spellings that were always going to be one node.
+func foldName(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
 }
 
 func lowConfidenceShape(refKind, typ string, p alchemy.Provenance) string {

@@ -121,12 +121,18 @@ func rpcs() []rpc {
 			// One request message and then a half close, whichever direction
 			// streams: a server-streaming RPC waits for its single request,
 			// and a client-streaming one needs an end to know it has them all.
-			if err := stream.SendMsg(&emptypb.Empty{}); err != nil {
-				return err
-			}
-			if err := stream.CloseSend(); err != nil {
-				return err
-			}
+			//
+			// SendMsg's error is deliberately dropped rather than returned.
+			// gRPC's contract is that a send onto a stream the server has
+			// already ended returns io.EOF and "the status is obtained by
+			// calling RecvMsg" — so returning it here reports a bare EOF
+			// instead of the refusal, and does so only when the server was
+			// fast enough to reject before the client finished sending. That
+			// is a race on the one table where a flaky signal is least
+			// affordable: a rejection this test failed to see reads the same
+			// as a rejection that never happened.
+			_ = stream.SendMsg(&emptypb.Empty{})
+			_ = stream.CloseSend()
 			// The refusal arrives on the first receive: a stream is opened
 			// optimistically and the interceptor's error is the first thing
 			// the server has to say about it.

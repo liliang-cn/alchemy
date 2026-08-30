@@ -46,9 +46,15 @@ func (r *run) verify() verify.Report {
 		r.violations = append(r.violations, rep.Violations...)
 	}
 	r.found(rep.Conflicts...)
+	// Kept whatever the ontology said, for the same reason the conflicts are:
+	// two spellings of one thing is not a rule anybody declared and not a rule
+	// anybody broke, so a job with no vocabulary is exactly as entitled to the
+	// finding as one with a strict vocabulary.
+	r.duplicates = append(r.duplicates, rep.Duplicates...)
 
 	rep.Violations = r.violations
 	rep.Conflicts = r.conflicts
+	rep.Duplicates = r.duplicates
 	r.progress(stageVerify, "")
 	return rep
 }
