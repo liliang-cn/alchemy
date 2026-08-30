@@ -270,6 +270,12 @@ func (l *Loader) completeRun(ctx context.Context, p *plan, rep *Report) error {
 	findings, err := json.Marshal(map[string]any{
 		"violations": p.res.Violations, "duplicates": p.res.Duplicates,
 		"guesses": p.res.Guesses, "unread": p.res.Unread,
+		// Provenance.RuleSet is a name into Result.RuleSets, so the sets have to
+		// travel with the graph or every record points at nothing. §5c: "a rule
+		// is recorded with the decision that produced it, so a later reader can
+		// see why the rule exists" — and the later reader is holding a store,
+		// not the JSON.
+		"rule_sets":         p.res.RuleSets,
 		"skipped_relations": rep.SkippedRelations, "fused_relations": rep.FusedRelations,
 		"chunks_without_vectors": rep.ChunksWithoutVectors,
 	})

@@ -101,3 +101,29 @@ func TestSkipChunksLeavesTheGraphCitedOnlyToItsDocuments(t *testing.T) {
 		t.Fatalf("report = %+v, want the whole graph", rep)
 	}
 }
+
+// Provenance.RuleSet is "the set's *name* — an identity computed from what was
+// in it — and not the set itself; the contents are on the result once, in
+// Result.RuleSets, and the name is how a record points at them." A store that
+// took the names and left the sets behind gives every record a pointer into
+// nothing, and §5b's "a reader holding the result alone can answer both"
+// becomes false the moment the result is a graph rather than a JSON file.
+func TestTheRuleSetsARecordPointsAtTravelWithTheRun(t *testing.T) {
+	l := openLocal(t, Options{RunID: "run-A7"})
+	res := fixture()
+	res.RuleSets = []alchemy.RuleSet{{Name: "rs-9f21", Rules: []alchemy.StandingRule{{
+		Name: "authored/type:System",
+		Told: "call storage engines Systems, said ada@example.com on 2026-08-30",
+	}}}}
+	if _, err := l.Load(context.Background(), res); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var body string
+	if err := l.db().SQL().QueryRowContext(context.Background(),
+		"SELECT content FROM documents WHERE id = ?", completionID("run-A7")).Scan(&body); err != nil {
+		t.Fatalf("read completion: %v", err)
+	}
+	if !strings.Contains(body, "rs-9f21") || !strings.Contains(body, "call storage engines Systems") {
+		t.Fatalf("the run does not carry the policy its records name: %s", body)
+	}
+}

@@ -326,7 +326,8 @@ func digest(res alchemy.Result) string {
 	// result that came back with a clean bill of health must not replay as one
 	// that did not.
 	lines = append(lines, "F\x00"+canonical(res.Violations)+"\x00"+canonical(res.Duplicates)+
-		"\x00"+canonical(res.Guesses)+"\x00"+canonical(res.Unread)+"\x00"+canonical(res.Counts))
+		"\x00"+canonical(res.Guesses)+"\x00"+canonical(res.Unread)+"\x00"+canonical(res.Counts)+
+		"\x00"+canonical(res.RuleSets))
 	sort.Strings(lines)
 	h := sha256.New()
 	for _, l := range lines {

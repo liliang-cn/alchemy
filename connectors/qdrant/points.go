@@ -8,8 +8,8 @@ import (
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 )
 
-// kind is what a point is. It exists because this connector puts four
-// different sorts of record in one collection, and a store that could not say
+// kind is what a point is. It exists because this connector puts every sort of
+// record a result contains into one collection, and a store that could not say
 // which is which would be a bag of payloads.
 //
 // One collection rather than four is the decision behind it. Qdrant charges

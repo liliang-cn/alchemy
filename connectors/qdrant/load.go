@@ -150,6 +150,9 @@ func (l *Loader) Load(ctx context.Context, res alchemy.Result, opts LoadOptions)
 	if err := checkEntityIDs(res); err != nil {
 		return Loaded{}, err
 	}
+	if err := checkChunkIndexes(res); err != nil {
+		return Loaded{}, err
+	}
 	dim, model, err := dimensionOf(res)
 	if err != nil {
 		return Loaded{}, err
@@ -238,6 +241,32 @@ func checkEntityIDs(res alchemy.Result) error {
 			return &DuplicateEntityError{ID: e.ID}
 		}
 		seen[e.ID] = true
+	}
+	return nil
+}
+
+// checkChunkIndexes is the second pass the type system does not do, and it
+// guards an invariant pkg/alchemy never states.
+//
+// A chunk's identity here is its index, because that is what alchemy.Vector
+// points at and what Provenance.Chunk points at — there is no chunk ID. But
+// alchemy.Chunk carries an Index *and* a Source, which reads as "index within
+// this source", and only pkg/pipeline's adopt() renumbers chunks across
+// sources so that the number is global. A result assembled some other way
+// could hand two files' first chunks the same index, and then two chunks
+// derive one point, the second overwrites the first, and the load reports two
+// chunks where the store holds one. Every connector so far depends on that
+// invariant silently; this one says so.
+func checkChunkIndexes(res alchemy.Result) error {
+	seen := make(map[int]string, len(res.Chunks))
+	for _, c := range res.Chunks {
+		if prev, ok := seen[c.Index]; ok {
+			return fmt.Errorf("qdrant: chunk %d arrives twice, from %q and from %q; nothing was written. "+
+				"A chunk index is what a vector and a provenance point at, so it has to be unique across the whole "+
+				"result — two chunks under one index would be stored as one and the other silently lost",
+				c.Index, prev, c.Source)
+		}
+		seen[c.Index] = c.Source
 	}
 	return nil
 }

@@ -161,16 +161,18 @@ func (l *Loader) writeEntities(ctx context.Context, p *plan, chunks map[int]bool
 			if err != nil {
 				return fmt.Errorf("cortexdb: write entities of %s: %w", doc, err)
 			}
-			// CortexDB decides where a node goes, and with an active enforcing
-			// ontology it decides differently: an entity of a declared type is
-			// re-keyed to entity:<type>:<primary key>, which drops this run's
-			// namespace and fuses two imports. Asked rather than assumed,
-			// because the answer is CortexDB's to give and a connector that
-			// re-derived the rule would go stale silently.
+			// CortexDB decides where a node goes, and with an active schema it
+			// can decide differently: an entity of a declared type whose
+			// primary key is name-shaped is re-keyed to entity:<type>:<name>,
+			// which drops this run's namespace and fuses two imports. It
+			// happens under `vocabulary` enforcement as well as `strict`, so
+			// the guard is on the ids CortexDB actually used rather than on the
+			// mode — asked rather than assumed, because the rule is CortexDB's
+			// to give and a copy of it would go stale in silence.
 			for _, id := range resp.EntityNodeIDs {
 				if !planned[id] {
 					return fmt.Errorf("%w: asked for a node under run %q and it was written as %q; "+
-						"load into a store whose active ontology does not declare these types",
+						"load into a store whose active ontology does not key these types by name",
 						ErrRekeyed, l.opts.RunID, id)
 				}
 			}

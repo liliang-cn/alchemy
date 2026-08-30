@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // DimensionError is the refusal that keeps a vector store honest.
@@ -138,7 +139,46 @@ func (l *Loader) EnsureCollection(ctx context.Context) error {
 // the right shape for a result that carries none (a DDL import has no chunks
 // and therefore no embeddings) and a dead end for one that does — see
 // DimensionError.
+//
+// It retries a lost creation race rather than reporting it. Two processes
+// loading the first two results of a corpus at once is an ordinary event — a
+// deployment starting, a nightly fan-out — and the loser is looking at exactly
+// the collection it wanted. It cannot simply read the collection back on the
+// spot, either: for a moment after the 409 the server can still answer 404 for
+// it, which is how this was found. So the loser waits and asks again, and only
+// a disagreement about the width is an error.
 func (l *Loader) ensure(ctx context.Context, dim int, model string) error {
+	var last error
+	for attempt := range 4 {
+		if attempt > 0 {
+			// Short and growing: the window is the server finishing a create,
+			// which is milliseconds, and a caller blocked here is a caller
+			// whose load has not started.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(attempt) * 100 * time.Millisecond):
+			}
+		}
+		err := l.ensureOnce(ctx, dim, model)
+		if err == nil {
+			return nil
+		}
+		var de *DimensionError
+		if errors.As(err, &de) {
+			return err
+		}
+		var ae *APIError
+		if errors.As(err, &ae) && ae.Status == http.StatusConflict {
+			last = err
+			continue
+		}
+		return err
+	}
+	return last
+}
+
+func (l *Loader) ensureOnce(ctx context.Context, dim int, model string) error {
 	ci, err := l.info(ctx)
 	if err != nil && !errors.Is(err, ErrNoCollection) {
 		return err
@@ -160,16 +200,6 @@ func (l *Loader) ensure(ctx context.Context, dim int, model string) error {
 		}
 	}
 	if err := l.call(ctx, http.MethodPut, l.path(""), body, nil); err != nil {
-		// Two loaders creating the same collection at once is an ordinary
-		// event — a deployment starting — and the loser is looking at exactly
-		// the collection it wanted. Anything else it disagrees about is caught
-		// by the check above on the retry.
-		if ci2, e2 := l.info(ctx); e2 == nil {
-			if have := ci2.Config.Params.Vectors[vectorName].Size; have == dim || dim == 0 {
-				return l.ensureIndexes(ctx)
-			}
-			return &DimensionError{Collection: l.collection, Have: ci2.Config.Params.Vectors[vectorName].Size, Want: dim, Model: model}
-		}
 		return err
 	}
 	return l.ensureIndexes(ctx)

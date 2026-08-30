@@ -128,3 +128,40 @@ func unit(dim, at int) []float32 {
 	v[at%dim] = 1
 	return v
 }
+
+// bigResult is a graph too large for one upsert, so that the batching and what
+// a failure between batches leaves behind are testable rather than argued
+// about.
+func bigResult(n, dim int) alchemy.Result {
+	res := alchemy.Result{Counts: alchemy.Counts{Entities: n, Relations: n - 1}}
+	for i := range n {
+		id := fmt.Sprintf("e%05d", i)
+		res.Entities = append(res.Entities, alchemy.Entity{
+			ID: id, Type: "Service", Name: id, Provenance: prov(i),
+		})
+		res.Chunks = append(res.Chunks, alchemy.Chunk{
+			Index: i, Text: fmt.Sprintf("chunk %d talks about %s", i, id),
+			Source: "big.pdf", Strategy: "fixed", Start: i * 32, End: i*32 + 32,
+		})
+		res.Vectors = append(res.Vectors, alchemy.Vector{Chunk: i, Values: unit(dim, i), Model: "embed-4"})
+		if i > 0 {
+			res.Relations = append(res.Relations, alchemy.Relation{
+				From: fmt.Sprintf("e%05d", i-1), To: id, Type: "CALLS", Provenance: prov(i),
+			})
+		}
+	}
+	return res
+}
+
+// pointsOf counts every point of one load, complete or not. It reads past the
+// visibility rule on purpose: a test about what a broken load leaves behind
+// cannot use the mechanism that hides it.
+func (f *fixture) pointsOf(t *testing.T, l *Loader, id string) int {
+	t.Helper()
+	pts, err := l.scroll(context.Background(),
+		map[string]any{"must": []map[string]any{match(keyLoad, id)}}, 0)
+	if err != nil {
+		t.Fatalf("scroll: %v", err)
+	}
+	return len(pts)
+}
