@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/ontology"
 )
 
 // Guesses answer two different questions, and a reviewer can tell them apart by
@@ -21,12 +22,12 @@ import (
 // found no other plausible outcome — for a column like "qty" there is none, and
 // padding the list would make the guesses that matter harder to find.
 
-func guessesFor(source string, head []string, m *Mapping, p proposal, prov alchemy.Provenance) []alchemy.Guess {
+func guessesFor(source string, head []string, m *Mapping, p proposal, prov alchemy.Provenance, v ontology.Vocabulary) []alchemy.Guess {
 	var out []alchemy.Guess
 	out = append(out, alchemy.Guess{
 		Field:        source,
 		ChosenAs:     m.EntityType,
-		Alternatives: without(typeCandidates(source, p.EntityType), m.EntityType),
+		Alternatives: without(typeCandidates(source, p.EntityType, v), m.EntityType),
 		Reason:       reasonOr(p, "entity_type", fmt.Sprintf("a row of %s was called a %s; the table never says what a row is", source, m.EntityType)),
 		Provenance:   prov,
 	})
@@ -114,10 +115,21 @@ func otherRoles(col string, m *Mapping, chosen string) []string {
 	return dedupeStrings(out)
 }
 
-// typeCandidates are the entity type names the source itself suggests. A model
-// that answers "Order" for line_items.csv has made a decision, and a reviewer
-// should see what the file name would have said.
-func typeCandidates(source, hint string) []string {
+// typeCandidates are the entity type names the row could have been called.
+//
+// Under a vocabulary they are the other types the vocabulary declares, and
+// nothing else. A reviewer asking "should this row have been a StoragePool
+// instead?" is asking about an answer the verifier would accept; offering
+// "Inventory" and "Inventories" from the file name would be offering two
+// answers it is guaranteed to reject, which is worse than offering none.
+//
+// Without one they are what the source itself suggests: a model that answers
+// "Order" for line_items.csv has made a decision, and a reviewer should see
+// what the file name would have said.
+func typeCandidates(source, hint string, v ontology.Vocabulary) []string {
+	if len(v.Entities) > 0 {
+		return entityNames(v)
+	}
 	base := source
 	if i := strings.LastIndexByte(base, '/'); i >= 0 {
 		base = base[i+1:]

@@ -52,8 +52,11 @@ func TestTheIDColumnIsAGuessBecauseItIsASubstringOfOrderIDAndProductID(t *testin
 	if g.Provenance.Model != "test-model" || g.Provenance.Producer != alchemy.ProducerTabular {
 		t.Errorf("guess provenance = %+v", g.Provenance)
 	}
-	if len(res.Entities) != 1 || res.Entities[0].ID != "lineitem:7" {
-		t.Fatalf("entities = %+v, want one identified by the id column", res.Entities)
+	// The row first, then the two things its columns name. Both readings of the
+	// id column still produce the same count, which is why the guess above and
+	// not the graph is what tells them apart.
+	if len(res.Entities) != 3 || res.Entities[0].ID != "lineitem:7" {
+		t.Fatalf("entities = %+v, want the row identified by the id column and the two it names", res.Entities)
 	}
 	if p := res.Entities[0].Provenance; p.Model != "test-model" || p.Confidence != 0.7 {
 		t.Errorf("entity provenance = %+v, want the model and its confidence", p)
@@ -63,6 +66,17 @@ func TestTheIDColumnIsAGuessBecauseItIsASubstringOfOrderIDAndProductID(t *testin
 	}
 	if res.Relations[0].From != "lineitem:7" || res.Relations[0].To != "order:1001" {
 		t.Errorf("relation = %+v, want it to refer to the entity's stable id", res.Relations[0])
+	}
+	// Every edge lands on something this result contains. Before the reader
+	// created the entities its mapping named, both of these were dangling.
+	have := map[string]bool{}
+	for _, e := range res.Entities {
+		have[e.ID] = true
+	}
+	for _, rel := range res.Relations {
+		if !have[rel.To] {
+			t.Errorf("relation %+v points at an entity this result does not contain", rel)
+		}
 	}
 }
 

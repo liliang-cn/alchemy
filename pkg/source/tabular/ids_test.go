@@ -110,8 +110,10 @@ func TestValuesAreKeptVerbatimWhileIdentityIsNormalised(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if len(res.Entities) != 1 {
-		t.Fatalf("entities = %+v", res.Entities)
+	// Two entities: the row, and the seller its column names. The second is
+	// what keeps the edge below from dangling — see referenced in rows.go.
+	if len(res.Entities) != 2 {
+		t.Fatalf("entities = %+v, want the row and the seller it names", res.Entities)
 	}
 	if got := res.Entities[0].Attributes["city"]; got != " Paris " {
 		t.Errorf("city = %q, want the cell as the file has it", got)
@@ -121,5 +123,11 @@ func TestValuesAreKeptVerbatimWhileIdentityIsNormalised(t *testing.T) {
 	}
 	if len(res.Relations) != 1 || res.Relations[0].To != "seller:7" {
 		t.Fatalf("relations = %+v, want the target id normalised the same way", res.Relations)
+	}
+	// The rule is the same on both sides of the edge: "  7" identifies seller 7,
+	// so the entity the edge lands on carries the normalised id too, and the two
+	// are the same string or the edge dangles.
+	if res.Entities[1].ID != "seller:7" {
+		t.Errorf("referenced entity = %+v, want the identity normalised as the edge's is", res.Entities[1])
 	}
 }

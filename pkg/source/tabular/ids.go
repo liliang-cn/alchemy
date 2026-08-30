@@ -39,6 +39,15 @@ func (s *ids) add(id string, line int, sum uint64) (first int, differs, dup bool
 	return 0, false, false
 }
 
+// claimed reports whether a row already produced this entity. It is what keeps
+// a referenced entity from displacing the row that describes it: the stub knows
+// an id and nothing else, and a table that mentions node-a two rows before it
+// describes it must still come back with the description.
+func (s *ids) claimed(id string) bool {
+	_, ok := s.seen[id]
+	return ok
+}
+
 // fingerprint covers what the mapping reads, which is what reaches the graph.
 func fingerprint(values []string) uint64 {
 	h := fnv.New64a()

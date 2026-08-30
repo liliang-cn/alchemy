@@ -38,6 +38,7 @@ import (
 	"io"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/ontology"
 )
 
 // Options configures one read.
@@ -52,9 +53,34 @@ type Options struct {
 	// stage that needs a model it was not given fails loudly (pkg/alchemy
 	// ports.go) rather than inventing a mapping out of column order.
 	LLM alchemy.LLM
-	// EntityHint is what the caller believes a row is ("Order"). It is a hint
-	// to the inference, not a constraint on it, and it is ignored when Mapping
-	// is supplied.
+	// Vocabulary is the closed list of types this table may be mapped onto.
+	//
+	// It is DESIGN.md §5b's third mechanism reaching the one reader that was
+	// missing it: "the extractor is constrained by it, and the verifier checks
+	// the output against it — the same list on both sides of the model". A
+	// table is put in front of a model like a document is, so a governed job
+	// that withheld it would be asking the model to invent a shape and then
+	// judging that shape against a list it was never shown — every record a
+	// violation, and §5's counts reporting a catastrophe that is a wiring gap.
+	//
+	// It constrains what the model is TOLD and nothing else. A type outside it
+	// still comes back exactly as the model wrote it, for the reason
+	// pkg/extract does the same: the verifier reports it with the mapping that
+	// produced it, and silently retyping would erase the evidence a reviewer
+	// needs while leaving the wrong graph in place.
+	//
+	// The zero value is no vocabulary, which is legal: §5 requires an ontology
+	// only for document sources. A table read without one infers freely and
+	// reports every decision as a Guess, exactly as before this field existed,
+	// and the prompt it is asked under is unchanged to the byte.
+	Vocabulary ontology.Vocabulary
+	// EntityHint is what the caller believes a row is ("Order").
+	//
+	// Without a vocabulary it is what it always was: a hint to the inference,
+	// not a constraint on it. With one it must be a type the vocabulary
+	// declares, and a hint that is not is refused before the model is called —
+	// see checkHint. It is ignored when Mapping is supplied, because then
+	// nothing is inferred for it to hint at.
 	EntityHint string
 }
 
@@ -108,6 +134,14 @@ func Read(ctx context.Context, source string, r io.Reader, opts Options) (Result
 		if opts.LLM == nil {
 			return Result{}, sourceErr(source, fmt.Errorf("no mapping supplied and no model to infer one"))
 		}
+		// Before the call, not after: the answer to a prompt that says both
+		// "use ONLY these types" and "the caller believes a row is an
+		// Inventory" is not worth paying for, and §7.2 counts what was paid.
+		hint, err := checkHint(opts.Vocabulary, opts.EntityHint)
+		if err != nil {
+			return Result{}, sourceErr(source, err)
+		}
+		opts.EntityHint = hint
 		samples, err := sample(rd, sampleRows)
 		if err != nil {
 			return Result{}, sourceErr(source, err)
@@ -129,7 +163,7 @@ func Read(ctx context.Context, source string, r io.Reader, opts Options) (Result
 		if err := validate(m, head); err != nil {
 			return res, fmt.Errorf("tabular: %s: the model's mapping cannot be applied to this table: %w", source, err)
 		}
-		res.Guesses = guessesFor(source, named(head), m, p, prov)
+		res.Guesses = guessesFor(source, named(head), m, p, prov, opts.Vocabulary)
 	} else if err := validate(m, head); err != nil {
 		return Result{}, fmt.Errorf("tabular: %s: the supplied mapping cannot be applied to this table: %w", source, err)
 	}

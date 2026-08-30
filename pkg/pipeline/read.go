@@ -108,10 +108,21 @@ func (r *run) readGraph(src Source, body io.Reader) error {
 // 对不上账，然后在三个月后由一个人手工发现" — so every Guess the reader makes is
 // carried into the result, where §5c ranks it above a single unsure edge
 // because one wrong mapping misaligns a whole table.
+//
+// The vocabulary goes with it, and it is the same field the verifier will be
+// handed a few stages later. §5b's third mechanism is "the same list on both
+// sides of the model", and a table whose mapping was inferred has a model on
+// its side too: withholding the list asked the model to invent a shape and then
+// judged that shape against a list it had never seen, which made every row of
+// every governed table a violation by construction. There is one vocabulary per
+// job (Request.Part) rather than one per reader, so passing r.vocabulary is not
+// a choice about which list to show — it is the only list this job will be
+// checked against.
 func (r *run) readTabular(ctx context.Context, src Source, body io.Reader) error {
 	res, err := tabular.Read(ctx, src.Name, body, tabular.Options{
-		Mapping: r.req.Mapping,
-		LLM:     r.req.Models.LLM,
+		Mapping:    r.req.Mapping,
+		LLM:        r.req.Models.LLM,
+		Vocabulary: r.vocabulary,
 	})
 	// The Result comes back on the error path too, carrying the calls already
 	// paid for: §7.2, a failed job that reports no calls makes an expensive

@@ -1,0 +1,7 @@
+id,node_name,storage_pool_id,resource_id,pool_driver,capacity_gib,replicas,site
+1,node-a,pool-a1,res-vol1,LVM_THIN,512,2,vienna
+2,node-a,pool-a2,res-vol2,ZFS,1024,3,vienna
+3,node-b,pool-b1,res-vol1,LVM_THIN,512,2,vienna
+4,node-b,pool-b2,res-vol3,ZFS,2048,3,graz
+5,node-c,pool-c1,res-vol4,LVM_THIN,256,2,graz
+6,node-c,pool-c2,res-vol2,ZFS,4096,3,graz

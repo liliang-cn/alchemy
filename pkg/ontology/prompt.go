@@ -118,3 +118,95 @@ func promptEnd(declared []string) string {
 	}
 	return strings.Join(declared, "|")
 }
+
+const noTypes = "This vocabulary declares no types, so nothing may be extracted under it.\n"
+
+// TablePrompt renders the same vocabulary for the question a table asks.
+//
+// A column mapping is not an extraction. A prose extractor is asked what a
+// passage says; a tabular reader is asked what a *row* is and what each
+// *column* means, and it answers with a mapping rather than with records. The
+// types it may answer with are the same types, checked by the same
+// AllowsEntity/AllowsRelation, so the lists below are rendered by the same code
+// from the same value — only the question they are offered as an answer to
+// differs.
+//
+// It lives here, and not in the tabular reader, for the reason the package
+// exists: a second wording of the vocabulary is a second ontology that nothing
+// checks against the first. A reader that phrased the list in its own words
+// would be constraining the model against something the verifier never sees.
+//
+// The direction sentence is the one that genuinely had to change. In prose the
+// model chooses both ends, so "never the reverse" is advice about its own
+// output. In a table one end is fixed before any column is looked at — it is
+// whatever the row was called — so the declared ends are what decide whether a
+// relation type is available for a column at all, and the sentence has to say
+// which end is which.
+func (v Vocabulary) TablePrompt() string {
+	if len(v.Entities) == 0 {
+		return noTypes
+	}
+	var b strings.Builder
+	b.WriteString("A row of this table becomes one entity, and each column becomes part of it: its\n" +
+		"identity, its name, a plain attribute, or an edge to another thing the table\n" +
+		"names by identifier. Type all of them from these lists and nothing else.\n\n")
+	b.WriteString("Use ONLY these entity types. Any other type is a violation:\n")
+	v.writeEntities(&b)
+
+	if len(v.Relations) > 0 {
+		b.WriteString("\nUse ONLY these relation types. Each line gives the ends the relation runs\n" +
+			"between: a column may become that edge only when the row's own entity type is\n" +
+			"the left end and the column's target type is the right end, never the reverse:\n")
+		v.writeRelations(&b)
+	} else {
+		b.WriteString("\nDo not map any column to a relation: this vocabulary declares no relation types.\n")
+	}
+
+	// "any column" rather than "anything the text describes": a table has
+	// columns and no text, and telling a mapper to leave out what the text
+	// describes leaves it to decide what that means about a column.
+	writeSpelling(&b, "any column this vocabulary\nhas no type for")
+	return b.String()
+}
+
+// writeEntities and writeRelations are the vocabulary itself. Both prompts call
+// them, so the names, descriptions, attributes and ends a model is shown are
+// produced in exactly one place however many questions this package learns to
+// ask.
+func (v Vocabulary) writeEntities(b *strings.Builder) {
+	for _, e := range v.Entities {
+		fmt.Fprintf(b, "  %s", e.Name)
+		if e.Description != "" {
+			fmt.Fprintf(b, " - %s", e.Description)
+		}
+		if len(e.Attributes) > 0 {
+			fmt.Fprintf(b, " (attributes: %s)", strings.Join(e.Attributes, ", "))
+		}
+		b.WriteString("\n")
+	}
+}
+
+func (v Vocabulary) writeRelations(b *strings.Builder) {
+	for _, r := range v.Relations {
+		fmt.Fprintf(b, "  %s: %s -> %s", r.Name, promptEnd(r.From), promptEnd(r.To))
+		if r.BothWays {
+			b.WriteString(" (either direction)")
+		}
+		if r.Description != "" {
+			fmt.Fprintf(b, " - %s", r.Description)
+		}
+		b.WriteString("\n")
+	}
+}
+
+// writeSpelling names the near-misses, which is worth a line: the types a model
+// invents are rarely wild, they are plurals, synonyms and re-spellings of what
+// it was just given, and each one becomes a violation a person has to read.
+//
+// leaveOut is what the caller's kind of source has that the vocabulary cannot
+// express — a sentence for prose, a column for a table — because "leave it out"
+// is only actionable when the thing being left out is named.
+func writeSpelling(b *strings.Builder, leaveOut string) {
+	fmt.Fprintf(b, "\nSpell every type exactly as written above. Do not coin a synonym, a plural or\n"+
+		"a near-miss for a type on these lists, and leave out %s.\n", leaveOut)
+}

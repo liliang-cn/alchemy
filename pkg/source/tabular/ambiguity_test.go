@@ -102,9 +102,13 @@ func TestTheCallersHintStandsInForATypeTheModelDidNotName(t *testing.T) {
 	}
 }
 
-// A relation whose target is in another file is still an edge. A table is a
-// fragment of a graph, unlike a schema, so a reference out of it is expected
-// rather than dangling — the verifier resolves it once the other sources are in.
+// A relation whose target is described in another file is still an edge, and
+// it is no longer an edge to nothing. A table is a fragment of a graph, unlike
+// a schema, so a reference out of it is expected — but the cell IS the target's
+// identifier as this file states it, so the reader creates the entity it named
+// rather than leaving the verifier an edge pointing at something no result
+// contains. When the other source arrives with the same thing described in
+// full, both carry the same derived id and land on the same node.
 func TestARelationMayPointOutsideThisTable(t *testing.T) {
 	res, err := readFixed(t, "id,customer_id\n1,7\n", &Mapping{
 		EntityType: "Order", IDColumn: "id",
@@ -115,6 +119,9 @@ func TestARelationMayPointOutsideThisTable(t *testing.T) {
 	}
 	if len(res.Relations) != 1 || res.Relations[0].To != "customer:7" {
 		t.Fatalf("relations = %+v", res.Relations)
+	}
+	if len(res.Entities) != 2 || res.Entities[1].ID != "customer:7" {
+		t.Fatalf("entities = %+v, want the order and the customer it names", res.Entities)
 	}
 	if len(res.Violations) != 0 {
 		t.Errorf("violations = %+v, want none: the customer is in another file", res.Violations)

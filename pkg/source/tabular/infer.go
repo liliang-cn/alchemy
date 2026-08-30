@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/ontology"
 )
 
 // inferStage is the stage name in the cost report (DESIGN.md §7.2: cost is not
@@ -60,12 +61,82 @@ Rules:
 - reasons must say, for each decision, what else that column could have been.
 - confidence is your confidence in the mapping as a whole, from 0 to 1.`
 
+// vocabularyBridge joins the reply shape above to the closed list below.
+//
+// It is needed because inferSystem's example is written with concrete names —
+// "Order", "PLACED_BY", "Customer" — and a model handed an example in one
+// vocabulary and a constraint in another will use the one that reads as an
+// answer. Saying which of the two is which is the whole of this text; it does
+// not restate a single type, because the types are pkg/ontology's to write.
+const vocabularyBridge = "\n\nThe JSON above shows the shape of a reply and nothing about its content. The\n" +
+	"types you may use are not the ones in that example. They are exactly these:\n\n"
+
+// inferSystemPrompt is what the model is told before it sees the table.
+//
+// With no vocabulary this is inferSystem unchanged, to the byte. §5 requires an
+// ontology only for document sources, so an ungoverned table is a supported
+// mode rather than a degraded one, and a mode that is supported is a mode whose
+// prompt does not drift because another mode was added beside it.
+//
+// With one, the vocabulary goes last: it is the most specific instruction in
+// the prompt, it contradicts nothing above it, and a model reading the shape of
+// a reply and then the list it may fill that shape from is reading them in the
+// order a person would say them. pkg/extract puts its standing answers last for
+// the same reason.
+func inferSystemPrompt(v ontology.Vocabulary) string {
+	if len(v.Entities) == 0 {
+		return inferSystem
+	}
+	return inferSystem + vocabularyBridge + v.TablePrompt()
+}
+
+// checkHint decides what a caller's EntityHint means under a vocabulary.
+//
+// With no vocabulary it means what it always meant and passes through. With
+// one, a hint the vocabulary declares is canonicalised to the ontology's
+// spelling — CanonicalEntity exists because a graph carrying Node and node has
+// two node types where the ontology declares one — and a hint it does not
+// declare is an error.
+//
+// The error is the arguable half. §5b lets the verifier catch what a model does
+// anyway rather than rewriting it, and a caller-supplied Mapping is left alone
+// for exactly that reason. A hint is not that: its only effect is to be pasted
+// into the same prompt as "use ONLY these entity types", and two contradicting
+// instructions in one prompt are not a constraint, they are a coin flip whose
+// outcome is invisible in the output — §2.1's failure exactly. Refusing here is
+// not a second convention about model output; it is a refusal to build a
+// self-contradicting prompt out of two things the caller stated.
+func checkHint(v ontology.Vocabulary, hint string) (string, error) {
+	hint = strings.TrimSpace(hint)
+	if hint == "" || len(v.Entities) == 0 {
+		return hint, nil
+	}
+	canonical, ok := v.CanonicalEntity(hint)
+	if !ok {
+		return "", fmt.Errorf("EntityHint %q is not a type this vocabulary declares (it declares %s), "+
+			"so the model would be told to use only these types and to call a row a %s in the same breath",
+			hint, strings.Join(entityNames(v), ", "), hint)
+	}
+	return canonical, nil
+}
+
+// entityNames is the declared entity types, in the order the ontology lists
+// them. It is used for messages and for a guess's alternatives, never to widen
+// anything: reading a Vocabulary is the only thing this package does with one.
+func entityNames(v ontology.Vocabulary) []string {
+	out := make([]string, len(v.Entities))
+	for i, e := range v.Entities {
+		out[i] = e.Name
+	}
+	return out
+}
+
 // inferMapping asks the model what the columns mean. It returns the model's
 // reply alongside the Mapping because the reply carries the reasons, and a
 // guess without a reason is a line in a queue nobody can act on.
 func inferMapping(ctx context.Context, source string, head []string, samples []record, opts Options) (*Mapping, proposal, alchemy.ModelCall, error) {
 	resp, err := opts.LLM.Complete(ctx, alchemy.LLMRequest{
-		System: inferSystem,
+		System: inferSystemPrompt(opts.Vocabulary),
 		Prompt: inferPrompt(source, head, samples, opts.EntityHint),
 		JSON:   true,
 	})

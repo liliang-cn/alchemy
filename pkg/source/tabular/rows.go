@@ -45,9 +45,11 @@ func (rd *reader) next() (record, error) {
 func rows(source string, rd *reader, head []string, m *Mapping, prov alchemy.Provenance, res *Result) error {
 	index := columnIndex(head)
 	seen := newIDs()
+	named := newReferenced()
 	for {
 		rec, err := rd.next()
 		if err == io.EOF {
+			named.flush(seen, res)
 			return nil
 		}
 		if err != nil {
@@ -64,11 +66,11 @@ func rows(source string, rd *reader, head []string, m *Mapping, prov alchemy.Pro
 				prov))
 			continue
 		}
-		emit(source, rec, index, m, prov, seen, res)
+		emit(source, rec, index, m, prov, seen, named, res)
 	}
 }
 
-func emit(source string, rec record, index map[string]int, m *Mapping, prov alchemy.Provenance, seen *ids, res *Result) {
+func emit(source string, rec record, index map[string]int, m *Mapping, prov alchemy.Provenance, seen *ids, named *referenced, res *Result) {
 	// Values reach the graph as the file has them. A value this reader trimmed
 	// is a value that no longer matches the source, and a consumer checking the
 	// graph against the file would not find it.
@@ -119,12 +121,79 @@ func emit(source string, rec record, index map[string]int, m *Mapping, prov alch
 			// row rather than a defect in it. An edge to nothing would be.
 			continue
 		}
+		to := entityID(r.TargetType, target)
+		named.note(to, r.TargetType, target, prov)
 		res.Relations = append(res.Relations, alchemy.Relation{
 			From:       id,
-			To:         entityID(r.TargetType, target),
+			To:         to,
 			Type:       r.RelationType,
 			Provenance: prov,
 		})
+	}
+}
+
+// referenced collects the entities the mapping's relation columns name but no
+// row of this table describes.
+//
+// They are created, and that is a decision worth stating. The alternative was
+// what the deployed service did: mint the edge and not the node, so
+// "inventory:1 -[HOSTED_ON]-> node:node-a" came back pointing at something the
+// result did not contain, and every edge from every governed table was a
+// dangling violation by construction. The reader has already decided the target
+// exists and what its id is — entityID computes it from the target type and the
+// cell — so withholding the node is the reader asserting an identity it will
+// not stand behind. Unlike a foreign key, whose name is only a table's, the
+// cell IS the thing's identifier as this file states it.
+//
+// It is not gated on a vocabulary. A dangling end is structural rather than
+// ontological (pkg/verify/violations.go says so in as many words), so an
+// ungoverned table is exactly as entitled to a graph whose edges land on
+// something.
+//
+// Collisions are the point rather than a hazard. Twenty rows naming node-a
+// produce one id and therefore one node, and it is the same id on the next
+// re-import and the same id another source computes for the same thing.
+type referenced struct {
+	order []string
+	byID  map[string]alchemy.Entity
+}
+
+func newReferenced() *referenced {
+	return &referenced{byID: map[string]alchemy.Entity{}}
+}
+
+// note records a target the mapping named. First writer wins, so what is kept
+// is the first row's provenance — the line a reviewer should read first.
+//
+// Name is the identifier as the file wrote it, because that is all the table
+// says about a thing it only names. Inventing anything else would be inventing.
+func (rf *referenced) note(id, entityType, key string, prov alchemy.Provenance) {
+	if _, ok := rf.byID[id]; ok {
+		return
+	}
+	rf.order = append(rf.order, id)
+	rf.byID[id] = alchemy.Entity{ID: id, Type: entityType, Name: key, Provenance: prov}
+}
+
+// flush appends the referenced entities after every row, skipping any id a row
+// already claimed.
+//
+// After, not inline, and this is the whole reason the map exists. A stub
+// emitted the moment a column named it would reach the graph before the row
+// that describes the same thing, and that row would then be dropped as a
+// duplicate id with different values — the description lost and a violation
+// raised in its place. The order within is first-seen, so the output is a
+// property of the file rather than of a map.
+//
+// It holds one entry per distinct target, which is the same order of memory the
+// duplicate check beside it already holds per emitted id (§8.4), and it is the
+// only way to do this at all over an io.Reader that cannot be read twice.
+func (rf *referenced) flush(seen *ids, res *Result) {
+	for _, id := range rf.order {
+		if seen.claimed(id) {
+			continue
+		}
+		res.Entities = append(res.Entities, rf.byID[id])
 	}
 }
 
