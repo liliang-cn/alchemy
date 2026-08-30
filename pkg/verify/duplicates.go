@@ -2,6 +2,7 @@ package verify
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
@@ -150,6 +151,23 @@ func duplicates(entities []alchemy.Entity) []alchemy.Duplicate {
 				}
 			}
 		}
+		// The alias pass runs before the affix one, and its answers suppress
+		// theirs for the same pair: a question a source already answered in
+		// words must not also be asked as a resemblance, or a reviewer sees
+		// "these names look alike" beside "somebody said these are the same
+		// thing" and has to work out that they are one question.
+		for _, alias := range aliasKeys(e) {
+			j, ok := first[typ+"\x00"+alias]
+			if !ok {
+				continue
+			}
+			held := entities[j]
+			if held.ID == e.ID || said[held.ID+"\x00"+e.ID] || said[e.ID+"\x00"+held.ID] {
+				continue
+			}
+			said[held.ID+"\x00"+e.ID] = true
+			out = append(out, aliased(held, e, alias))
+		}
 		for _, stem := range affixes(foldKey(e.Name)) {
 			j, ok := first[typ+"\x00"+stem]
 			if !ok {
@@ -159,14 +177,39 @@ func duplicates(entities []alchemy.Entity) []alchemy.Duplicate {
 			// The same id is already one node, whatever two records call it;
 			// two records under one id disagreeing about a name is a conflict
 			// and is reported as one.
-			if short.ID == e.ID || said[short.ID+"\x00"+e.ID] {
+			if short.ID == e.ID || said[short.ID+"\x00"+e.ID] || said[e.ID+"\x00"+short.ID] {
 				continue
 			}
 			said[short.ID+"\x00"+e.ID] = true
 			out = append(out, candidate(short, e, stem))
 		}
 	}
+	// Ordered by what the evidence IS, strongest first, and §5c's ranking is
+	// the whole of the reason. A reviewer works a queue top to bottom, and the
+	// question somebody already answered in words — "also known as" — is worth
+	// their attention before two questions about whether two strings resemble
+	// each other. Stable, so within one signal the scan order survives and two
+	// runs of one corpus produce the same document.
+	sort.SliceStable(out, func(i, j int) bool {
+		return signalRank(out[i].Signal) < signalRank(out[j].Signal)
+	})
 	return out
+}
+
+// signalRank orders the signals by how much of the question the evidence has
+// already settled. An alias is a source's own statement about identity; a name
+// under two producers' ids is two parties naming one thing the same way; an
+// affix is a resemblance. Nothing here decides anything — the order is which
+// question is worth a person's attention first.
+func signalRank(s alchemy.DuplicateSignal) int {
+	switch s {
+	case alchemy.DuplicateAlias:
+		return 0
+	case alchemy.DuplicateNameAcrossProducers:
+		return 1
+	default:
+		return 2
+	}
 }
 
 // affixes lists the proper whole-word prefixes and suffixes of a folded name,
@@ -254,4 +297,51 @@ func addedWords(long, stem string) string {
 
 func side(e alchemy.Entity) alchemy.DuplicateSide {
 	return alchemy.DuplicateSide{ID: e.ID, Type: e.Type, Name: e.Name, Provenance: e.Provenance}
+}
+
+// aliasKeys are the folded names this entity says it is also known by.
+//
+// An alias equal to the entity's own name is dropped: it points the lookup at
+// the node itself and would ask whether a thing is itself. A blank one is
+// dropped for the reason the name pass drops a blank name — two absences are
+// not a match.
+func aliasKeys(e alchemy.Entity) []string {
+	if len(e.Aliases) == 0 {
+		return nil
+	}
+	self := foldKey(e.Name)
+	var out []string
+	seen := map[string]bool{self: true, "": true}
+	for _, a := range e.Aliases {
+		k := foldKey(a)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, k)
+	}
+	return out
+}
+
+// aliased is the finding for a name a source said the other thing goes by.
+//
+// The sentence names the alias and says who declared it, because that is the
+// whole difference from the signals around it: a reviewer answering this is
+// not being asked whether two strings resemble each other, they are being
+// asked whether the person who said "also known as" was talking about this
+// node. What is left to decide is real — two people can both be called Theo —
+// and it is a smaller thing to decide than a resemblance.
+func aliased(held, e alchemy.Entity, alias string) alchemy.Duplicate {
+	return alchemy.Duplicate{
+		Signal:  alchemy.DuplicateAlias,
+		Subject: held.ID + " ~ " + e.ID,
+		Left:    side(held),
+		Right:   side(e),
+		Detail: fmt.Sprintf(
+			"%s %q per %s and %s %q per %s: one of them declares %q as another name it goes by, "+
+				"and that is a name the other answers to. This is a source's own words rather than "+
+				"a resemblance, and it is still a question, because two things can share a name",
+			held.Type, held.Name, where(held.Provenance),
+			e.Type, e.Name, where(e.Provenance), alias),
+	}
 }

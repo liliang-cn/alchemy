@@ -32,6 +32,7 @@ const (
 	keyBy            = "by"
 	keyAt            = "at"
 	keyJSONAttrs     = "json_attrs"
+	keyAliases       = "aliases"
 )
 
 // provenanceProps flattens a Provenance onto whatever it is describing.

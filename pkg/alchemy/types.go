@@ -205,7 +205,30 @@ type Entity struct {
 	// checks it, which is what turns this paragraph into something a run can
 	// fail rather than a claim in a comment.
 	Attributes map[string]any `json:"attributes,omitempty"`
-	Provenance Provenance     `json:"provenance"`
+	// Aliases are other names this thing is known by, as the source stated
+	// them.
+	//
+	// It is a declared field and not a convention inside Attributes, which is
+	// where it lived first and where it does not belong. An attribute key
+	// nobody agreed on is the same defect four stores hit independently over
+	// edge identity and over provenance: every consumer invents its own
+	// spelling, none can read another's, and nothing says any of them is
+	// wrong. A person saying "Theodore, also known as Theo" is stating a fact
+	// about identity, and identity is the one thing here that may not be left
+	// to a convention.
+	//
+	// It is EVIDENCE and not an instruction. Two people can both be called
+	// Theo, so an alias matching another node's name is DuplicateAlias — a
+	// question — and never a merge. What differs from the name signals is what
+	// the evidence IS: those compare two strings and guess, this repeats
+	// something a source said out loud, and §5c ranks it above them for that
+	// reason and no other.
+	//
+	// A producer may put here only what its source stated. A model inventing
+	// an alias would be minting identity, which is §2.1 aimed at the one field
+	// nothing downstream can check.
+	Aliases    []string   `json:"aliases,omitempty"`
+	Provenance Provenance `json:"provenance"`
 }
 
 // Relation is an edge of the returned graph. From and To are Entity IDs.

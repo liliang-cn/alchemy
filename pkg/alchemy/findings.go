@@ -244,6 +244,22 @@ const (
 	// name_affix is for. What fires is exactly the case the old argument did
 	// not cover: an id somebody else chose meeting an id this pipeline made.
 	DuplicateNameAcrossProducers DuplicateSignal = "name_across_producers"
+	// DuplicateAlias — under one type, one node's name is an alias the other
+	// declares, or the two declare an alias in common.
+	//
+	// It is the only signal here whose evidence is a statement rather than a
+	// resemblance. name_affix compares two strings and is right often enough
+	// to be worth asking about; this repeats something a source said out loud
+	// — "Theodore, also known as Theo" — and the person who said it was talking
+	// about identity, which is what the question is.
+	//
+	// It still reports and does not merge, and the reason is not the one the
+	// other signals have. Theirs is that the evidence is weak. This one's is
+	// that the evidence is about a NAME and the question is about a NODE: two
+	// people can both be called Theo, and a source that named one of them was
+	// not claiming anything about the other. What the alias removes is the
+	// guessing, not the decision.
+	DuplicateAlias DuplicateSignal = "alias"
 )
 
 // Duplicate is two nodes that may be one node, and are not joined.

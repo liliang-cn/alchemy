@@ -105,6 +105,14 @@ func (l *Loader) writeEntities(ctx context.Context, batch []alchemy.Entity, rep 
 				// agreed with Entity.Name (preflight allows exactly that case)
 				// cannot disagree by the time it is written.
 				props["name"] = e.Name
+				// A list property, which Neo4j holds natively, so a buyer can
+				// ask WHERE $n IN n.aliases without unpacking a string. It is
+				// written only when there are any: an empty list and an absent
+				// one both mean "nobody said", and writing one is a property
+				// every query has to know to ignore.
+				if len(e.Aliases) > 0 {
+					props[pre+keyAliases] = toAny(e.Aliases)
+				}
 				props[pre+keyType] = e.Type
 				if len(encoded) > 0 {
 					props[pre+keyJSONAttrs] = toAny(encoded)

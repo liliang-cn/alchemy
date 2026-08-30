@@ -175,7 +175,12 @@ var (
 	nodeID        = []string{"id"}
 	nodeType      = []string{"type"}
 	nodeName      = []string{"name", "label"}
-	nodeSummary   = []string{"summary", "description"}
+	// aliases is what every other knowledge graph calls this: SKOS spells it
+	// altLabel, Wikidata "aliases", CortexDB keeps them under properties. A
+	// document that already has them must not have to be rewritten to be read
+	// here, so the three spellings that actually occur are all accepted.
+	nodeAliases = []string{"aliases", "alt_labels", "also_known_as"}
+	nodeSummary = []string{"summary", "description"}
 )
 
 // document holds every accepted spelling of the two collections rather than
@@ -439,7 +444,8 @@ func (o object) entity(where, source string) (alchemy.Entity, string, *alchemy.G
 	}
 	return alchemy.Entity{
 		ID: id, Type: typ, Name: name, Provenance: prov(source),
-		Attributes: o.rest(nodeID, nodeType, nodeName, nodeSummary),
+		Aliases:    o.strings(nodeAliases),
+		Attributes: o.rest(nodeID, nodeType, nodeName, nodeSummary, nodeAliases),
 	}, summary, guess, nil
 }
 
@@ -531,4 +537,38 @@ func quoteAll(ss []string) []string {
 // (DESIGN.md §5b).
 func prov(source string) alchemy.Provenance {
 	return alchemy.Provenance{Source: source, Chunk: -1, Producer: alchemy.ProducerGraphImport}
+}
+
+// strings reads a list-valued member under any of its accepted spellings.
+//
+// A member that is a single string is read as a list of one, because a
+// document with one alias writes it as one string often enough that refusing
+// it would be refusing the common case on a technicality. A member that is
+// neither is ignored rather than refused: nothing else in this file fails a
+// whole import over one node's malformed extra, and an alias is an extra.
+func (o object) strings(spellings []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, s := range spellings {
+		raw, ok := o[s]
+		if !ok {
+			continue
+		}
+		var many []string
+		if err := json.Unmarshal(raw, &many); err != nil {
+			var one string
+			if err := json.Unmarshal(raw, &one); err != nil || one == "" {
+				continue
+			}
+			many = []string{one}
+		}
+		for _, v := range many {
+			if v == "" || seen[v] {
+				continue
+			}
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
 }

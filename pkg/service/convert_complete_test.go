@@ -119,6 +119,7 @@ func TestEveryClosedSetHasAWireName(t *testing.T) {
 	signals := []alchemy.DuplicateSignal{
 		alchemy.DuplicateNameAffix,
 		alchemy.DuplicateNameAcrossProducers,
+		alchemy.DuplicateAlias,
 	}
 	if got, want := len(alchemyv1.DuplicateSignal_name), len(signals)+1; got != want {
 		t.Errorf("the proto declares %d duplicate signals and this test names %d", got-1, len(signals))

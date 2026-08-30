@@ -140,6 +140,22 @@ func (l *Loader) writeEntities(ctx context.Context, p *plan, chunks map[int]bool
 		// node_type CortexDB may canonicalise to its own spelling. Two names
 		// for one thing is a question a reader must be able to ask.
 		meta[l.opts.ReservedPrefix+keyDeclaredType] = e.Type
+		// CortexDB keeps its own aliases under properties and resolves names
+		// through them (v2.77.0). These are alchemy's, under the reserved
+		// prefix, and they are kept separate on purpose: one is what this
+		// import said, the other is what that brain has concluded, and a
+		// reader chasing "who says so" must be able to tell them apart.
+		// A JSON array in a string, the way attributeMeta encodes any value
+		// this store's metadata cannot hold natively. A comma-joined list
+		// would be shorter and would lose a name with a comma in it, which is
+		// the sort of loss that shows up years later in one row.
+		if len(e.Aliases) > 0 {
+			b, err := json.Marshal(e.Aliases)
+			if err != nil {
+				return fmt.Errorf("entity %s: aliases: %w", e.ID, err)
+			}
+			meta[l.opts.ReservedPrefix+keyAliases] = string(b)
+		}
 		if err := attributeMeta(e.Attributes, l.opts.ReservedPrefix, meta); err != nil {
 			return fmt.Errorf("entity %s: %w", e.ID, err)
 		}

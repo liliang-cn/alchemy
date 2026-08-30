@@ -119,6 +119,7 @@ const (
 	keyEntityID = "entity_id"
 	keyType     = "type"
 	keyName     = "name"
+	keyAliases  = "aliases"
 	// keyAttributes is the source's own words, nested, verbatim.
 	keyAttributes = "attributes"
 

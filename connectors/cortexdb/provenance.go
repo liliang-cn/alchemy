@@ -48,6 +48,7 @@ const (
 	keyRun           = "run"
 	keyEntityID      = "id"
 	keyDeclaredType  = "declared_type"
+	keyAliases       = "aliases"
 	keyEdgeKey       = "key"
 	keySource        = "source"
 	keyChunk         = "chunk"

@@ -848,10 +848,11 @@
       "enum": [
         "DUPLICATE_SIGNAL_UNSPECIFIED",
         "DUPLICATE_SIGNAL_NAME_AFFIX",
-        "DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS"
+        "DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS",
+        "DUPLICATE_SIGNAL_ALIAS"
       ],
       "default": "DUPLICATE_SIGNAL_UNSPECIFIED",
-      "description": "DuplicateSignal names the deterministic evidence that two nodes may be one\nthing. It is on the finding because a reviewer answering \"are these the\nsame?\" is entitled to know what asked them.\n\n - DUPLICATE_SIGNAL_NAME_AFFIX: Under one type, one node's name is the other's with whole words added at\nthe front or the back: \"document\" and \"document package\". It is the shape\na per-chunk extractor produces, since each chunk is a separate call that\ncannot see how the others named the thing.\n - DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS: Under one type, two nodes with different ids fold to the same name and two\ndifferent producers made them. Ids this pipeline mints are a function of\ntype and name, so equal names are already one node; ids a source supplies\n— a graph import's, an assertion's — are not, and that is the only case\nthis fires on."
+      "description": "DuplicateSignal names the deterministic evidence that two nodes may be one\nthing. It is on the finding because a reviewer answering \"are these the\nsame?\" is entitled to know what asked them.\n\n - DUPLICATE_SIGNAL_NAME_AFFIX: Under one type, one node's name is the other's with whole words added at\nthe front or the back: \"document\" and \"document package\". It is the shape\na per-chunk extractor produces, since each chunk is a separate call that\ncannot see how the others named the thing.\n - DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS: Under one type, two nodes with different ids fold to the same name and two\ndifferent producers made them. Ids this pipeline mints are a function of\ntype and name, so equal names are already one node; ids a source supplies\n— a graph import's, an assertion's — are not, and that is the only case\nthis fires on.\n - DUPLICATE_SIGNAL_ALIAS: Under one type, one node's name is an alias the other declares. The only\nsignal whose evidence is a statement rather than a resemblance, and it is\nranked above them for that reason and no other."
     },
     "v1Edit": {
       "type": "object",
@@ -892,6 +893,13 @@
         },
         "provenance": {
           "$ref": "#/definitions/v1Provenance"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Other names this thing is known by, as the source stated them. What SKOS\ncalls altLabel and Wikidata calls aliases.\n\nEvidence, not an instruction: an alias matching another node's name is\nDUPLICATE_SIGNAL_ALIAS, which is a question. Two people can both be called\nPhil. What the alias removes is the guessing, not the decision."
         }
       }
     },

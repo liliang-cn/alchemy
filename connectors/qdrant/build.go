@@ -63,6 +63,13 @@ func entityPoints(loadID, fp string, batch []alchemy.Entity) batchOf {
 		// source said {}" — a distinction the JSON contract makes and a store
 		// that flattened both to nothing would erase.
 		p[keyAttributes] = e.Attributes
+		// Only when there are any, unlike the attributes above: an absent
+		// alias list and an empty one are the same claim -- nobody said this
+		// goes by another name -- where an absent attribute map and an empty
+		// one are not.
+		if len(e.Aliases) > 0 {
+			p[keyAliases] = e.Aliases
+		}
 		provenancePayload(e.Provenance, p)
 		out.points = append(out.points, point{
 			ID: pointID(fp, kindEntity, e.ID), Vector: vectorless(), Payload: p,

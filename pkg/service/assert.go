@@ -108,6 +108,7 @@ func (s *Server) stated(req *alchemyv1.AssertRequest) (alchemy.Result, error) {
 	for _, e := range req.GetEntities() {
 		entities = append(entities, alchemy.Entity{
 			ID: e.GetId(), Type: e.GetType(), Name: e.GetName(),
+			Aliases:    e.GetAliases(),
 			Attributes: noted(e.GetAttributes().AsMap(), note),
 			// Deliberately not provenanceFromProto(e.GetProvenance()). The
 			// field is stamped and never read: a caller who could fill it in

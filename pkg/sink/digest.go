@@ -74,7 +74,27 @@ func Digest(res alchemy.Result) string {
 		len(res.Entities)+len(res.Relations)+len(res.Chunks)+len(res.Vectors)+1)
 
 	for _, e := range res.Entities {
-		lines = append(lines, join("E", e.ID, e.Type, e.Name, canonical(e.Attributes), canonical(e.Provenance)))
+		// The aliases are covered because they are a claim about identity that
+		// a store writes: a result which learned a node also goes by another
+		// name is a different import, and a digest that could not tell would
+		// let the second replay as the first with the claim missing.
+		//
+		// APPENDED, and only when there are any. Inserting a field into this
+		// line would have re-addressed every entity in every corpus ever
+		// loaded — the orphaning alchemy.Fingerprint's comment declined, and
+		// the exact failure alchemy.Counts is exposed to. An entity with no
+		// aliases produces the line it has always produced, byte for byte.
+		//
+		// It cannot collide with the shorter form. The longer line is the
+		// shorter one plus a NUL and a JSON array; the shorter one ends in a
+		// provenance rendered by encoding/json, which cannot contain a raw
+		// NUL, so no five-field line is ever a six-field line's prefix in a
+		// way that matters.
+		line := join("E", e.ID, e.Type, e.Name, canonical(e.Attributes), canonical(e.Provenance))
+		if len(e.Aliases) > 0 {
+			line = join(line, canonical(e.Aliases))
+		}
+		lines = append(lines, line)
 	}
 	for _, r := range res.Relations {
 		// The producer's key is in the line because it is what makes two

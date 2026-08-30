@@ -87,6 +87,7 @@ var reviewKinds = map[review.Kind]alchemyv1.ReviewKind{
 var duplicateSignals = map[alchemy.DuplicateSignal]alchemyv1.DuplicateSignal{
 	alchemy.DuplicateNameAffix:           alchemyv1.DuplicateSignal_DUPLICATE_SIGNAL_NAME_AFFIX,
 	alchemy.DuplicateNameAcrossProducers: alchemyv1.DuplicateSignal_DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS,
+	alchemy.DuplicateAlias:               alchemyv1.DuplicateSignal_DUPLICATE_SIGNAL_ALIAS,
 }
 
 var wireReviewKinds = invert(reviewKinds)
@@ -209,6 +210,7 @@ func entityToProto(e alchemy.Entity) *alchemyv1.Entity {
 		Id:         e.ID,
 		Type:       e.Type,
 		Name:       e.Name,
+		Aliases:    e.Aliases,
 		Attributes: attributesToProto(e.Attributes),
 		Provenance: provenanceToProto(e.Provenance),
 	}

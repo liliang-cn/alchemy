@@ -382,6 +382,10 @@ const (
 	// — a graph import's, an assertion's — are not, and that is the only case
 	// this fires on.
 	DuplicateSignal_DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS DuplicateSignal = 2
+	// Under one type, one node's name is an alias the other declares. The only
+	// signal whose evidence is a statement rather than a resemblance, and it is
+	// ranked above them for that reason and no other.
+	DuplicateSignal_DUPLICATE_SIGNAL_ALIAS DuplicateSignal = 3
 )
 
 // Enum value maps for DuplicateSignal.
@@ -390,11 +394,13 @@ var (
 		0: "DUPLICATE_SIGNAL_UNSPECIFIED",
 		1: "DUPLICATE_SIGNAL_NAME_AFFIX",
 		2: "DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS",
+		3: "DUPLICATE_SIGNAL_ALIAS",
 	}
 	DuplicateSignal_value = map[string]int32{
 		"DUPLICATE_SIGNAL_UNSPECIFIED":           0,
 		"DUPLICATE_SIGNAL_NAME_AFFIX":            1,
 		"DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS": 2,
+		"DUPLICATE_SIGNAL_ALIAS":                 3,
 	}
 )
 
@@ -1781,12 +1787,19 @@ func (x *Provenance) GetAt() string {
 }
 
 type Entity struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Attributes    *structpb.Struct       `protobuf:"bytes,4,opt,name=attributes,proto3" json:"attributes,omitempty"`
-	Provenance    *Provenance            `protobuf:"bytes,5,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Type       string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Name       string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Attributes *structpb.Struct       `protobuf:"bytes,4,opt,name=attributes,proto3" json:"attributes,omitempty"`
+	Provenance *Provenance            `protobuf:"bytes,5,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	// Other names this thing is known by, as the source stated them. What SKOS
+	// calls altLabel and Wikidata calls aliases.
+	//
+	// Evidence, not an instruction: an alias matching another node's name is
+	// DUPLICATE_SIGNAL_ALIAS, which is a question. Two people can both be called
+	// Theo. What the alias removes is the guessing, not the decision.
+	Aliases       []string `protobuf:"bytes,6,rep,name=aliases,proto3" json:"aliases,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1852,6 +1865,13 @@ func (x *Entity) GetAttributes() *structpb.Struct {
 func (x *Entity) GetProvenance() *Provenance {
 	if x != nil {
 		return x.Provenance
+	}
+	return nil
+}
+
+func (x *Entity) GetAliases() []string {
+	if x != nil {
+		return x.Aliases
 	}
 	return nil
 }
@@ -4862,7 +4882,7 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\bruled_by\x18\n" +
 	" \x01(\tR\aruledBy\x12\x0e\n" +
 	"\x02by\x18\v \x01(\tR\x02by\x12\x0e\n" +
-	"\x02at\x18\f \x01(\tR\x02at\"\xb1\x01\n" +
+	"\x02at\x18\f \x01(\tR\x02at\"\xcb\x01\n" +
 	"\x06Entity\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
@@ -4872,7 +4892,8 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"attributes\x126\n" +
 	"\n" +
 	"provenance\x18\x05 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
-	"provenance\"\xc5\x01\n" +
+	"provenance\x12\x18\n" +
+	"\aaliases\x18\x06 \x03(\tR\aaliases\"\xc5\x01\n" +
 	"\bRelation\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x02 \x01(\tR\x02to\x12\x12\n" +
@@ -5172,11 +5193,12 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	" CONFLICT_KIND_RELATION_DIRECTION\x10\x03\x12\x1f\n" +
 	"\x1bCONFLICT_KIND_CONTRADICTION\x10\x04\x12%\n" +
 	"!CONFLICT_KIND_RELATION_ATTRIBUTES\x10\x05\x12\x1d\n" +
-	"\x19CONFLICT_KIND_CARDINALITY\x10\x06*\x80\x01\n" +
+	"\x19CONFLICT_KIND_CARDINALITY\x10\x06*\x9c\x01\n" +
 	"\x0fDuplicateSignal\x12 \n" +
 	"\x1cDUPLICATE_SIGNAL_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bDUPLICATE_SIGNAL_NAME_AFFIX\x10\x01\x12*\n" +
-	"&DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS\x10\x02*\xb0\x01\n" +
+	"&DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS\x10\x02\x12\x1a\n" +
+	"\x16DUPLICATE_SIGNAL_ALIAS\x10\x03*\xb0\x01\n" +
 	"\n" +
 	"ReviewKind\x12\x1b\n" +
 	"\x17REVIEW_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +

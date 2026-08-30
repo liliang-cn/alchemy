@@ -178,6 +178,10 @@ var provTables = []string{"entities", "relations", "violations", "supersessions"
 
 // provAdded are the provenance columns added after this schema first shipped,
 // as ALTER fragments. A column added to provDDL from now on belongs here too.
+// aliasAdded is separate from provAdded because it is on entities only, where
+// the provenance columns are on all three tables carrying provDDL.
+var aliasAdded = []string{`aliases text[]`}
+
 var provAdded = []string{
 	`prov_by text NOT NULL DEFAULT ''`,
 	`prov_at text NOT NULL DEFAULT ''`,
@@ -249,7 +253,13 @@ func (l *Loader) ddl() []string {
 	entity_id  text NOT NULL,
 	type       text NOT NULL,
 	name       text NOT NULL,
-	attributes jsonb,` + provDDL + `,
+	attributes jsonb,
+	-- text[] rather than jsonb: a buyer asks "which node is known as Theo"
+	-- with = ANY(aliases), which jsonb would make them spell as a containment
+	-- query over a document. NULL and '{}' both mean nobody said so, and the
+	-- writer sends NULL for that rather than teaching every reader the
+	-- difference between two ways of saying nothing.
+	aliases    text[],` + provDDL + `,
 	PRIMARY KEY (load_id, entity_id)
 )`),
 		l.q(`CREATE INDEX IF NOT EXISTS entities_chunk ON {s}.entities (load_id, prov_chunk)`),
@@ -367,6 +377,9 @@ func (l *Loader) ddl() []string {
 		for _, col := range provAdded {
 			out = append(out, l.q("ALTER TABLE {s}."+table+" ADD COLUMN IF NOT EXISTS "+col))
 		}
+	}
+	for _, col := range aliasAdded {
+		out = append(out, l.q("ALTER TABLE {s}.entities ADD COLUMN IF NOT EXISTS "+col))
 	}
 	out = append(out, []string{
 

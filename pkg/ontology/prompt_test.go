@@ -169,6 +169,9 @@ func TestPromptRendersExactly(t *testing.T) {
   Node - One machine in a cluster.
   StoragePool - Backing storage a node offers.
 
+A thing may go by more than one name. When the text itself says so - "also known as", "formerly", "aka", or a name in brackets after another - put the other name in the entity's aliases list.
+Record ONLY names the text states. Do not abbreviate a name yourself, do not expand an abbreviation yourself, and do not add an alias because two things look similar to you.
+
 Use ONLY these relation types. Each line gives the ends the relation runs
 between; extract it in that direction and never the reverse:
   CONTAINS: Cluster -> Node - A cluster holds every node under it.

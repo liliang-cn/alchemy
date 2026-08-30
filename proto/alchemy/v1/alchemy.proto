@@ -285,6 +285,10 @@ enum DuplicateSignal {
   // — a graph import's, an assertion's — are not, and that is the only case
   // this fires on.
   DUPLICATE_SIGNAL_NAME_ACROSS_PRODUCERS = 2;
+  // Under one type, one node's name is an alias the other declares. The only
+  // signal whose evidence is a statement rather than a resemblance, and it is
+  // ranked above them for that reason and no other.
+  DUPLICATE_SIGNAL_ALIAS = 3;
 }
 
 // ReviewKind is §5c's ranking table as a set.
@@ -552,6 +556,14 @@ message Entity {
   string name = 3;
   google.protobuf.Struct attributes = 4;
   Provenance provenance = 5;
+  // Other names this thing is known by, as the source stated them. What SKOS
+  // calls altLabel and Wikidata calls aliases.
+  //
+  // Evidence, not an instruction: an alias matching another node's name is
+  // DUPLICATE_SIGNAL_ALIAS, which is a question. Two people can both be called
+  // Theo. What the alias removes is the guessing, not the decision.
+  repeated string aliases = 6;
+
 }
 
 message Relation {

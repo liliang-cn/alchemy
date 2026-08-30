@@ -99,14 +99,14 @@ func (l *Loader) writeChunkBatch(ctx context.Context, id string, dim int, batch 
 }
 
 func (l *Loader) writeEntityBatch(ctx context.Context, id string, batch []alchemy.Entity) error {
-	cols := with([]string{"load_id", "entity_id", "type", "name", "attributes"}, provNames)
+	cols := with([]string{"load_id", "entity_id", "type", "name", "attributes", "aliases"}, provNames)
 	return l.copyRows(ctx, "entities", cols, len(batch), func(i int) ([]any, error) {
 		e := batch[i]
 		a, err := attrs(e.Attributes)
 		if err != nil {
 			return nil, err
 		}
-		return with([]any{id, e.ID, e.Type, e.Name, a}, provRow(e.Provenance)), nil
+		return with([]any{id, e.ID, e.Type, e.Name, a, aliasesOf(e)}, provRow(e.Provenance)), nil
 	})
 }
 
@@ -189,4 +189,17 @@ func (l *Loader) writeDuplicateBatch(ctx context.Context, id string, batch []alc
 			d.Left.ID, d.Left.Type, d.Left.Name, json.RawMessage(lp),
 			d.Right.ID, d.Right.Type, d.Right.Name, json.RawMessage(rp)}, nil
 	})
+}
+
+// aliasesOf renders the alias list for a text[] column, or nothing at all.
+//
+// NULL rather than an empty array, for the reason attrs sends NULL rather than
+// '{}': a reader must not have to know two ways of saying that nobody said
+// anything. Unlike attrs there is no third case to preserve here -- a source
+// that stated an empty alias list stated nothing.
+func aliasesOf(e alchemy.Entity) any {
+	if len(e.Aliases) == 0 {
+		return nil
+	}
+	return e.Aliases
 }
