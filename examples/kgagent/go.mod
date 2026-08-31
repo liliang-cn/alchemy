@@ -12,7 +12,7 @@ replace github.com/liliang-cn/alchemy => ../..
 replace github.com/liliang-cn/alchemy/connectors => ../../connectors
 
 require (
-	github.com/liliang-cn/agent-go/v3 v3.0.0
+	github.com/liliang-cn/agent-go/v3 v3.12.1
 	github.com/liliang-cn/alchemy v0.0.0
 	github.com/liliang-cn/alchemy/connectors v0.0.0
 )
@@ -54,17 +54,18 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dslipak/pdf v0.0.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/getkin/kin-openapi v0.140.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250725192818-e39067aee2d2 // indirect
-	github.com/go-openapi/jsonpointer v0.22.1 // indirect
-	github.com/go-openapi/jsonreference v0.21.2 // indirect
-	github.com/go-openapi/spec v0.22.0 // indirect
-	github.com/go-openapi/swag/conv v0.25.1 // indirect
-	github.com/go-openapi/swag/jsonname v0.25.1 // indirect
-	github.com/go-openapi/swag/jsonutils v0.25.1 // indirect
-	github.com/go-openapi/swag/loading v0.25.1 // indirect
-	github.com/go-openapi/swag/stringutils v0.25.1 // indirect
-	github.com/go-openapi/swag/typeutils v0.25.1 // indirect
-	github.com/go-openapi/swag/yamlutils v0.25.1 // indirect
+	github.com/go-openapi/jsonpointer v0.23.1 // indirect
+	github.com/go-openapi/jsonreference v0.21.6 // indirect
+	github.com/go-openapi/spec v0.22.5 // indirect
+	github.com/go-openapi/swag/conv v0.26.0 // indirect
+	github.com/go-openapi/swag/jsonname v0.26.0 // indirect
+	github.com/go-openapi/swag/jsonutils v0.26.0 // indirect
+	github.com/go-openapi/swag/loading v0.26.0 // indirect
+	github.com/go-openapi/swag/stringutils v0.26.0 // indirect
+	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
+	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
@@ -81,22 +82,25 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/json-iterator/go v0.0.0-20171115153421-f7279a603ede // indirect
 	github.com/liliang-cn/cortexdb/v2 v2.87.0 // indirect
-	github.com/liliang-cn/mcp-swagger-server v0.4.0 // indirect
+	github.com/liliang-cn/mcp-swagger-server v1.3.0 // indirect
 	github.com/liliang-cn/pipeit v0.1.0 // indirect
-	github.com/liliang-cn/skills-go v1.7.0 // indirect
+	github.com/liliang-cn/skills-go v1.9.0 // indirect
 	github.com/mark3labs/mcp-go v0.32.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/modelcontextprotocol/go-sdk v1.6.1 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4 // indirect
+	github.com/oasdiff/yaml v0.1.0 // indirect
+	github.com/oasdiff/yaml3 v0.0.13 // indirect
 	github.com/openai/openai-go/v3 v3.39.0 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.8 // indirect
 	github.com/qdrant/go-client v1.15.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
-	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/spf13/cast v1.9.2 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
