@@ -158,9 +158,9 @@ func TestTheStoresAreTheOnesDesignNames(t *testing.T) {
 	}
 }
 
-// DESIGN.md §9: "Three implement recall.Reader, which is seven primitives —
+// DESIGN.md §9: "Three implement recall.Reader, which is eight primitives —
 // find an anchor, walk one hop, resolve a citation, ask what is unanswered, ask
-// what contributed, read the vocabulary, read out one class".
+// what contributed, read the vocabulary, read out one class, read one record".
 //
 // Two numbers in one sentence, so two assertions. The five is the interface's
 // own shape and the three is how many stores have taken it on; either can move
@@ -168,7 +168,7 @@ func TestTheStoresAreTheOnesDesignNames(t *testing.T) {
 // under cover of the other still being right.
 func TestTheReadSideIsTheShapeDesignStates(t *testing.T) {
 	// Verbatim from DESIGN.md §9, in the order the sentence lists them.
-	documented := []string{"Find", "Claims", "Cite", "Unanswered", "Contributions", "Types", "OfType"}
+	documented := []string{"Find", "Claims", "Cite", "Unanswered", "Contributions", "Types", "OfType", "Describe"}
 	sort.Strings(documented)
 
 	r := root(t)

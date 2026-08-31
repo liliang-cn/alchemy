@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -115,7 +116,7 @@ func (g *Graph) note(name, arg string) {
 // answer, in the order an agent asks them.
 func (g *Graph) Tools() []Tool {
 	return []Tool{
-		g.find(), g.types(), g.ofType(), g.claims(), g.cite(), g.openQuestions(),
+		g.find(), g.types(), g.ofType(), g.describe(), g.claims(), g.cite(), g.openQuestions(),
 	}
 }
 
@@ -214,6 +215,66 @@ func (g *Graph) ofType() Tool {
 	}
 }
 
+func (g *Graph) describe() Tool {
+	return Tool{
+		Name: "graph_describe",
+		Description: "Everything the graph records about one entity: its type, its other names, all the " +
+			"fields the source gave it, and who recorded it and when. Call this whenever a node might " +
+			"carry detail the one-line claims do not show — dates, numbers, status, anything qualified.",
+		Schema: schema([]string{"id"}, nil),
+		Do: func(ctx context.Context, a map[string]any) (any, error) {
+			id := str(a["id"])
+			g.note("graph_describe", id)
+			d, err := g.Reader.Describe(ctx, g.Load, id)
+			if err != nil {
+				return nil, err
+			}
+			if d.ID == "" {
+				return "this load holds no entity with that id", nil
+			}
+			var b strings.Builder
+			fmt.Fprintf(&b, "%s (%s) id=%s\n", d.Name, d.Type, d.ID)
+			if len(d.Aliases) > 0 {
+				fmt.Fprintf(&b, "also called: %s\n", strings.Join(d.Aliases, ", "))
+			}
+			for _, k := range sortedKeys(d.Attributes) {
+				fmt.Fprintf(&b, "  %s: %v\n", k, d.Attributes[k])
+			}
+			p := d.Provenance
+			fmt.Fprintf(&b, "recorded by %s", p.Producer)
+			// The asserter and the date, which is the point of returning the
+			// whole provenance rather than the four fields a claim carries. A
+			// record a named person made seven months ago is a record a reader
+			// can weigh and a person can be asked about; without these two it
+			// reads as timeless.
+			if p.At != "" {
+				fmt.Fprintf(&b, " on %s", p.At)
+			}
+			if p.By != "" {
+				fmt.Fprintf(&b, ", asserted by %s", p.By)
+			}
+			if m := Mark(p.Source, p.Chunk); m != "" {
+				fmt.Fprintf(&b, " %s", m)
+			}
+			b.WriteString("\n")
+			return b.String(), nil
+		},
+	}
+}
+
+// sortedKeys keeps two reads of one entity in the same order. An attribute map
+// iterated at random would make a context pack that differs between two runs of
+// the same question, which is the reproducibility every method in pkg/recall
+// orders its results for.
+func sortedKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (g *Graph) claims() Tool {
 	return Tool{
 		Name: "graph_claims",
@@ -262,7 +323,7 @@ func (g *Graph) cite() Tool {
 			// the number was handed chunk 0 of the file as though it had asked
 			// for it, with nothing about the answer looking wrong.
 			idx := atoi(str(a["chunk"]), -1)
-			g.note("graph_cite", recall.Mark(src, idx))
+			g.note("graph_cite", Mark(src, idx))
 			c, err := g.Reader.Cite(ctx, g.Load, src, idx)
 			switch {
 			case errors.Is(err, recall.ErrNoChunk):
@@ -361,3 +422,7 @@ func atoi(s string, fallback int) int {
 	}
 	return n
 }
+
+// Mark is recall.Mark, aliased so the two places this file renders a citation
+// marker read the same. A chunkless claim renders as [source] with no #n.
+func Mark(source string, chunk int) string { return recall.Mark(source, chunk) }

@@ -208,6 +208,8 @@ func (l *Loader) Claims(ctx context.Context, load, id string) ([]recall.Claim, e
 				Source:   str(r["source"]),
 				Chunk:    num(r["chunk"]),
 				Producer: alchemy.Producer(str(r["producer"])),
+				By:       str(r["by"]),
+				At:       str(r["at"]),
 			}))
 	}
 	return out, nil
@@ -235,10 +237,16 @@ func (l *Loader) claimsCypher() (string, error) {
 			// them.
 			"RETURN DISTINCT startNode(r).%[4]s AS subject, type(r) AS rel, endNode(r).%[4]s AS object, "+
 			"startNode(r).%[8]s AS subjectID, endNode(r).%[8]s AS objectID, "+
-			"r.%[5]s AS source, r.%[6]s AS chunk, r.%[7]s AS producer "+
+			"r.%[5]s AS source, r.%[6]s AS chunk, r.%[7]s AS producer, "+
+			// The asserter and the date, off the EDGE. An edge asserted by a
+			// person is the case they exist for, and a walk that reported the
+			// node's would date every claim about an entity by whatever first
+			// named it -- the same mistake reading the node's source would be.
+			"r.%[9]s AS by, r.%[10]s AS at "+
 			"ORDER BY rel, object, subject, source, chunk",
 		base, l.prop(keyRun), l.prop(keyID), keyName,
-		l.prop(keySource), l.prop(keyChunk), l.prop(keyProducer), l.prop(keyID)), nil
+		l.prop(keySource), l.prop(keyChunk), l.prop(keyProducer), l.prop(keyID),
+		l.prop(keyBy), l.prop(keyAt)), nil
 }
 
 // Cite resolves one [source#index] marker against one load.

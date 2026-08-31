@@ -94,7 +94,7 @@ func (l *Loader) Claims(ctx context.Context, load, id string) ([]recall.Claim, e
 	// twice would be telling a reader the corpus said it twice.
 	const sql = `SELECT DISTINCT coalesce(f.name, r.from_id) AS subject, r.type AS rel,
 	coalesce(t.name, r.to_id) AS object, r.from_id, r.to_id,
-	r.prov_source, r.prov_chunk, r.prov_producer
+	r.prov_source, r.prov_chunk, r.prov_producer, r.prov_by, r.prov_at
 FROM {s}.loaded_relations r
 LEFT JOIN {s}.loaded_entities f ON f.load_id = r.load_id AND f.entity_id = r.from_id
 LEFT JOIN {s}.loaded_entities t ON t.load_id = r.load_id AND t.entity_id = r.to_id
@@ -117,7 +117,7 @@ ORDER BY rel, object, subject, r.prov_source, r.prov_chunk`
 		var from, to recall.Endpoint
 		var p alchemy.Provenance
 		if err := rows.Scan(&subject, &rel, &object, &from.ID, &to.ID,
-			&p.Source, &p.Chunk, &p.Producer); err != nil {
+			&p.Source, &p.Chunk, &p.Producer, &p.By, &p.At); err != nil {
 			return nil, fmt.Errorf("pgvector: claims about %q in load %q: %w", id, load, err)
 		}
 		// Through recall.NewClaim, so that stated-or-inferred is

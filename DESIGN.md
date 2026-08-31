@@ -852,10 +852,11 @@ out — and the second half is much newer than the first.
 
 Five stores: Neo4j, pgvector, Qdrant, CortexDB, and any SPARQL endpoint that
 speaks RDF-star. All five implement `sink.Sink` and pass one conformance suite.
-Three implement `recall.Reader`, which is seven primitives — find an anchor,
+Three implement `recall.Reader`, which is eight primitives — find an anchor,
 walk one hop, resolve a citation, ask what is unanswered, ask what contributed,
-read the vocabulary, read out one class — each taking the load as a parameter
-rather than as an option, because the default is where the bug was.
+read the vocabulary, read out one class, read one record — each taking the load
+as a parameter rather than as an option, because the default is where the bug
+was.
 
 Those five were measured rather than designed: they are what building one
 context pack by hand needed and nothing more. The evidence that this is the
@@ -923,9 +924,30 @@ between reading a class out and truncating it. Walking deeper than one hop was
 the same shape one field over and needed no new method: `Claims` returned names
 and took an ID, so the fix was to return the ID as well.
 
+**And the one found by asking what happens to a fact that expires.** A
+colleague's month of leave was recorded the best way this model allows — an
+entity carrying `from`, `to`, `start_confirmed` and the announcement verbatim,
+asserted by a named person on a dated message — and the graph was asked who to
+contact four months after it ended. The agent could see there was a
+time-bounded fact and went looking for the bounds: it re-read the node three
+times, tried twice to cite the announcement, and every answer came back as the
+same dateless sentence. It then answered from the node's *name*, and dropped a
+developer from a contact list over a leave sixteen months in the past.
+Nineteen tool calls, six stored fields, none of them reachable — because
+`recall.Reader` had no way to read an entity at all. Attributes and aliases
+were write-only in every store, and `Provenance.By` and `At` were written by
+every connector and surfaced by none. `Describe` is that hole.
+
+Valid time is not. The experiment was run to find out whether the model needed
+`ValidFrom`/`ValidUntil`, and it answered a different question first: the
+plumbing for data alchemy already holds was missing, and a model change argued
+for on top of a missing read path would have been argued from a failure that
+was not the model's. It gets re-run now that the fields arrive, and what it
+says next is what decides.
+
 What is still not built: a graph store of any kind inside alchemy, which is §4
-and deliberate. On the read side, nothing is a measured gap today — which is a
-statement about what has been measured, not a claim that seven is the number.
+and deliberate. On the read side, whether a fact needs to be able to say how
+long it is good for — measured once, inconclusively, for the reason above.
 
 The document this began as was written so the first line of code would answer
 to something. It did.

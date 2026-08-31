@@ -18,6 +18,7 @@ import (
 type store struct {
 	load      string
 	nodes     []recall.Node
+	records   map[string]recall.Description
 	claims    map[string][]recall.Claim
 	chunks    map[string]recall.Citation // keyed source#index
 	questions []recall.Question
@@ -73,6 +74,10 @@ func (s *store) Contributions(_ context.Context, _, id string) (recall.Contribut
 	return recall.Contributions{ID: id}, nil
 }
 
+func (s *store) Describe(_ context.Context, _, id string) (recall.Description, error) {
+	return s.records[id], nil
+}
+
 func (s *store) Types(_ context.Context, _ string) ([]recall.TypeCount, error) {
 	return s.types, nil
 }
@@ -107,9 +112,27 @@ func graph() *store {
 	}
 	prose := alchemy.Provenance{Source: "profile.pdf", Chunk: 20, Producer: alchemy.ProducerLLMExtract}
 	asserted := alchemy.Provenance{Source: "team.json", Chunk: -1, Producer: alchemy.ProducerGraphImport}
+	said := alchemy.Provenance{
+		Source: "slack/#general", Chunk: -1, Producer: alchemy.ProducerHuman,
+		By: "joel.c@halcyon.com", At: "2026-08-31T18:35:00Z",
+	}
 	return &store{
 		load:  "ld-1",
 		nodes: nodes,
+		// One record carrying detail no one-line claim can show: a window in
+		// attributes, and a named person with a date. This is the shape the
+		// leave experiment proved unreachable.
+		records: map[string]recall.Description{
+			"absence:1": {
+				ID: "absence:1", Type: "Absence", Name: "Joel C parental leave",
+				Aliases: []string{"Joel parental leave"},
+				Attributes: map[string]any{
+					"from": "2026-10-05", "to": "2026-11-05", "start_confirmed": false,
+				},
+				Provenance: said,
+			},
+			"person:mira": {ID: "person:mira", Type: "Person", Name: "Mira", Provenance: prose},
+		},
 		types: []recall.TypeCount{{Type: "Person", Count: 15}, {Type: "Product", Count: 1}},
 		claims: map[string][]recall.Claim{
 			"person:mira": {

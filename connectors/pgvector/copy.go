@@ -85,6 +85,8 @@ func csvValue(v any) (string, error) {
 		return string(t), nil
 	case []float32:
 		return vectorLiteral(t), nil
+	case []string:
+		return arrayLiteral(t), nil
 	}
 	return "", fmt.Errorf("pgvector: %T is not a value this encoder writes", v)
 }
@@ -160,4 +162,32 @@ func (l *Loader) copyBatch(ctx context.Context, sql string, body []byte) error {
 	defer conn.Release()
 	_, err = conn.Conn().PgConn().CopyFrom(ctx, bytes.NewReader(body), sql)
 	return err
+}
+
+// arrayLiteral renders a text[] the way COPY reads one.
+//
+// It was missing, and the gap was invisible because nothing had ever loaded an
+// entity with aliases into this store: alchemy.Entity.Aliases became a []string
+// in a COPY row, csvValue had no case for it, and the load failed at the first
+// record that had one. Every alias test in this repository was written against
+// the two stores that keep aliases some other way.
+//
+// The two escapes are Postgres's own, inside the value, and the CSV quoting
+// outside it is a separate layer that writeCSV applies afterwards. An element
+// therefore goes through both, which is why a name containing a double quote
+// comes out as \"" -- backslash-escaped for the array parser and then doubled
+// for the CSV reader.
+func arrayLiteral(items []string) string {
+	var b strings.Builder
+	b.WriteByte('{')
+	for i, s := range items {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteByte('"')
+		b.WriteString(strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s))
+		b.WriteByte('"')
+	}
+	b.WriteByte('}')
+	return b.String()
 }

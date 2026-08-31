@@ -226,3 +226,47 @@ func TestTheTraceRecordsWhatWasAskedInOrder(t *testing.T) {
 		}
 	}
 }
+
+// The gap the leave experiment found: an entity's own fields were write-only.
+// Every store kept the attributes and the aliases and the asserter and the
+// date; no reader could return any of them, so an agent looking for a window it
+// could see must exist re-read the node three times, tried twice to cite the
+// announcement, and answered from the node's name.
+func TestAnEntitysOwnFieldsCanBeRead(t *testing.T) {
+	byName, _ := tools(t)
+	got := call(t, byName["graph_describe"], map[string]any{"id": "absence:1"})
+
+	// The window, which is the whole of what answers "is this still true".
+	for _, want := range []string{"from: 2026-10-05", "to: 2026-11-05", "start_confirmed: false"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the record does not carry %q: %q", want, got)
+		}
+	}
+	// The asserter and the date. "human" alone says somebody can be asked;
+	// these say who, and how long ago they said it.
+	if !strings.Contains(got, "2026-08-31") || !strings.Contains(got, "joel.c@halcyon.com") {
+		t.Errorf("the record does not say who recorded it or when: %q", got)
+	}
+	if !strings.Contains(got, "Joel parental leave") {
+		t.Errorf("the aliases were dropped: %q", got)
+	}
+
+	// Attributes in a fixed order, so one question asked twice builds the same
+	// pack. Every other method in pkg/recall orders its results for this.
+	if strings.Index(got, "from:") > strings.Index(got, "start_confirmed:") {
+		t.Errorf("attributes are not ordered: %q", got)
+	}
+}
+
+// A record with no extra fields must not grow empty lines, and an id that is
+// not there is an ordinary answer rather than an error.
+func TestDescribingAPlainRecordAndAMissingOne(t *testing.T) {
+	byName, _ := tools(t)
+	got := call(t, byName["graph_describe"], map[string]any{"id": "person:mira"})
+	if strings.Contains(got, "also called") || strings.Contains(got, "asserted by") {
+		t.Errorf("a record with no aliases and no asserter grew a clause: %q", got)
+	}
+	if got := call(t, byName["graph_describe"], map[string]any{"id": "nobody"}); !strings.Contains(got, "no entity") {
+		t.Errorf("a missing id answered %q", got)
+	}
+}
