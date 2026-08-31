@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/preflight"
 	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
@@ -119,20 +120,29 @@ func (e *ConflictingLoadError) Error() string {
 		e.ID, e.Have[:12], e.Want[:12], e.State)
 }
 
-// DuplicateEntityError is a result whose own entity IDs collide.
+// DuplicateEntityError is a result in which two records claim one entity ID and
+// describe DIFFERENT nodes.
 //
-// alchemy.Entity.ID "is how relations refer to entities", so two entities under
-// one ID make every relation naming it ambiguous. That is a broken result
-// rather than a storage problem, and the connector says so instead of picking
-// a winner: a store that kept the last one would silently answer with a graph
-// whose edges point at the wrong node.
+// alchemy.Entity.ID "is how relations refer to entities", so two different
+// nodes under one ID make every relation naming it ambiguous. That is a broken
+// result rather than a storage problem, and the connector says so instead of
+// picking a winner: a store that kept the last one would silently answer with a
+// graph whose edges point at the wrong node.
+//
+// Two records that AGREE are not this. They are one node asserted by two
+// sources, which is corroboration and the ordinary shape of a merged corpus;
+// pkg/sink folds them into one row and reports the count. This error was raised
+// for both until the rule moved into pkg/preflight, and for as long as it was,
+// no graph built from more than one document could be loaded here at all.
 type DuplicateEntityError struct {
 	ID string
 }
 
 func (e *DuplicateEntityError) Error() string {
-	return fmt.Sprintf("pgvector: two entities in this result have the ID %q, and relations refer to entities "+
-		"by ID; nothing was written, because either one of them would make some edge point at the wrong node", e.ID)
+	return fmt.Sprintf("pgvector: two entities in this result claim the ID %q and are not the same node, and "+
+		"relations refer to entities by ID; nothing was written, because either one of them would make some "+
+		"edge point at the wrong node. Two records that agree about the type and the name are corroboration "+
+		"and are loaded", e.ID)
 }
 
 // Load writes one result into the store.
@@ -204,16 +214,32 @@ func (l *Loader) Load(ctx context.Context, res alchemy.Result, opts LoadOptions)
 // the counts and the policy, all of which this store writes.
 func Fingerprint(res alchemy.Result) (string, error) { return sink.Digest(res), nil }
 
-// checkEntityIDs is a pass over the result the type system does not do.
-// Entity.ID is documented as "stable within one result", which a caller can
-// read as a promise and a producer can break.
+// checkEntityIDs refuses the ID collisions that are collisions, and it asks
+// pkg/preflight rather than deciding.
+//
+// It used to hold its own rule -- an ID seen twice is an error -- and that rule
+// was right until fb437ce, which legalised two records under one ID that AGREE
+// about what the node is. The connectors were not touched by that commit, so
+// the one thing this product exists to produce, a graph merged from several
+// sources, still could not be loaded here: two documents each asserting
+// "LINSTOR controller is a Component" were refused as a broken result.
+//
+// Asking preflight is the fix and not a refactor. A store deciding for itself
+// which graphs are writable, while the envelope it calls decides again with a
+// different rule, is two answers to one question -- and the store's answer wins
+// because it runs first, which is how a rule change landed in the core and
+// changed nothing here.
+//
+// The typed error stays, because a caller matching on *DuplicateEntityError is
+// matching on this package's contract. What changed is which inputs produce it:
+// only records that disagree. An entity with no ID at all is preflight's to
+// report -- it is the same Kind but a different mistake, and its own message
+// says so better than this one's could.
 func checkEntityIDs(res alchemy.Result) error {
-	seen := make(map[string]bool, len(res.Entities))
-	for _, e := range res.Entities {
-		if seen[e.ID] {
-			return &DuplicateEntityError{ID: e.ID}
+	for _, d := range preflight.Check(res) {
+		if d.Kind == preflight.EntityIDReused && d.Subject != "" {
+			return &DuplicateEntityError{ID: d.Subject}
 		}
-		seen[e.ID] = true
 	}
 	return nil
 }

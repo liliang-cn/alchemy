@@ -198,14 +198,21 @@ type Report struct {
 	// retried nightly import cost nothing.
 	Converged bool
 
-	Entities   int
-	Relations  int
-	Chunks     int
-	Vectors    int
-	Violations int
-	Duplicates int
-	Guesses    int
-	Unread     int
+	Entities int
+	// Corroborated is how many entity records were folded into a row that was
+	// already there because another record claimed the same ID and agreed about
+	// the node. It is not a defect and not a loss of a record -- it is the
+	// number that says this graph came from more than one source, and the
+	// reason it is reported rather than silent is that the folded record's
+	// provenance does not survive into the row. See fold.
+	Corroborated int
+	Relations    int
+	Chunks       int
+	Vectors      int
+	Violations   int
+	Duplicates   int
+	Guesses      int
+	Unread       int
 	// Supersessions is how many retirements were handed over. It is counted
 	// like the records and not like the findings, because it is handed over
 	// like them: in batches, so a load that died with half the corrections

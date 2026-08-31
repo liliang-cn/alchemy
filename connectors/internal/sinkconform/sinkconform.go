@@ -124,6 +124,49 @@ func Run(t *testing.T, open Open) {
 		}
 	})
 
+	// The case this whole product exists to produce, and the one that could not
+	// be loaded into two of the five stores.
+	//
+	// pkg/preflight legalised two records under one ID that agree about what the
+	// node is -- corroboration, the ordinary shape of a corpus merged from more
+	// than one document -- and the connectors were written before it did. Two of
+	// them still refused the whole result, so a graph a second source agreed
+	// with was a graph they would not hold. It is in the shared suite rather
+	// than in either of their own tests because all five have to answer it the
+	// same way, and the reason two of them had the old answer is that nothing
+	// asked all five at once.
+	t.Run("a_node_two_sources_agree_about_loads_as_one", func(t *testing.T) {
+		res := Corroborated(0)
+		rep, err := sink.Load(context.Background(), open(t), res, sink.Options{Load: "load-corroborated"})
+		if err != nil {
+			t.Fatalf("Load of a graph two sources agree about: %v", err)
+		}
+		// One row, not two: every one of the five keys entities by ID.
+		if rep.Entities != 2 {
+			t.Errorf("Entities = %d, want 2; three records under two IDs is two rows", rep.Entities)
+		}
+		// And the fold is reported rather than silent, because what it costs --
+		// the second record's provenance -- is not recoverable from the row.
+		if rep.Corroborated != 1 {
+			t.Errorf("Corroborated = %d, want 1; a store that folds a record without saying so "+
+				"reports a merged graph as a single-source one", rep.Corroborated)
+		}
+	})
+
+	// The other half of the same rule, so that widening it did not widen it into
+	// nothing. Two records under one ID that describe DIFFERENT nodes are still
+	// a broken result: relations name entities by ID, and either winner leaves
+	// some edge pointing at the wrong node.
+	t.Run("a_node_two_sources_disagree_about_is_still_refused", func(t *testing.T) {
+		res := Corroborated(0)
+		res.Entities[2].Name = "Something Else Entirely"
+		res.Counts = res.Derivable()
+		if _, err := sink.Load(context.Background(), open(t), res, sink.Options{Load: "load-collided"}); err == nil {
+			t.Fatal("Load of two different nodes under one ID succeeded; " +
+				"corroboration is agreement, and this is a collision")
+		}
+	})
+
 	t.Run("a_result_with_no_vectors_loads", func(t *testing.T) {
 		res := Graph(0)
 		if _, err := sink.Load(context.Background(), open(t), res, sink.Options{Load: "load-1"}); err != nil {
@@ -224,6 +267,30 @@ func Graph(dim int) alchemy.Result {
 			res.Vectors = append(res.Vectors, v)
 		}
 	}
+	res.Counts = res.Derivable()
+	return res
+}
+
+// Corroborated is Graph with one node asserted a second time, by a second
+// source, agreeing about what the node is.
+//
+// The second record is deliberately NOT identical. It agrees about the type and
+// the name -- which is what pkg/preflight compares, because those two are what
+// a store writes as the node itself -- and differs in its provenance and its
+// attributes, which are claims ABOUT the node and are the ordinary thing two
+// documents differ on. A fixture whose two records were identical would pass
+// against a store that compared whole structs and would prove nothing about the
+// rule.
+func Corroborated(dim int) alchemy.Result {
+	res := Graph(dim)
+	second := alchemy.Provenance{
+		Source: "team.json", Chunk: -1, Producer: alchemy.ProducerGraphImport, Ontology: "sds@3",
+	}
+	res.Entities = append(res.Entities, alchemy.Entity{
+		ID: "e2", Type: "System", Name: "CortexDB",
+		Attributes: map[string]any{"tier": "storage"},
+		Provenance: second,
+	})
 	res.Counts = res.Derivable()
 	return res
 }

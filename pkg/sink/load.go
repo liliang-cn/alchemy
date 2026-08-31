@@ -122,8 +122,12 @@ func stream(ctx context.Context, tx Tx, res alchemy.Result, batch int) (Report, 
 		// states and the reason it is a contract: every one of the four stores
 		// decides what to do with an edge by asking whether both ends are
 		// there, and a store that met the edge first would have to buffer.
-		for b := range batches(len(res.Entities), batch) {
-			if err := tx.Entities(ctx, res.Entities[b.from:b.to]); err != nil {
+		// Folded first, because a store keys entities by ID and every one of
+		// them keeps one row. See fold.
+		ents, corroborated := fold(res.Entities)
+		rep.Corroborated = corroborated
+		for b := range batches(len(ents), batch) {
+			if err := tx.Entities(ctx, ents[b.from:b.to]); err != nil {
 				return rep, fmt.Errorf("sink: entities %d..%d: %w", b.from, b.to, err)
 			}
 			rep.Entities += b.to - b.from
@@ -276,4 +280,48 @@ func batches(n, size int) func(func(span) bool) {
 			}
 		}
 	}
+}
+
+// fold collapses the records that share an entity ID, keeping the first, and
+// says how many it collapsed.
+//
+// This is the fifth answer to a question four stores had each answered
+// differently, which is the same shape of defect this package was extracted to
+// end. preflight.EntityCorroborated legalised two sources asserting one node --
+// "relation identity has said so for edges since it was written; entities never
+// had the equivalent, and without it every graph merged from more than one
+// source was refused by every store" -- and then each store met the second
+// record on its own terms: Neo4j MERGEd and kept the last write, Qdrant upserted
+// and kept the last write silently, pgvector had a primary key and would have
+// failed at the database, and the triple store did something worse than losing
+// one -- both records annotate the SAME quoted triple, so two sources and two
+// producers land on it with nothing saying which goes with which.
+//
+// So the rule is here, once, and it is the first record rather than the last.
+// Not arbitrarily: preflight reports the pair as "asserted by A and by B" with A
+// being the first it saw, and a store that kept B would be keeping the record
+// the report names second. Two of the four kept the last, which is how nobody
+// noticed the stores disagreed.
+//
+// What is lost is stated rather than dropped: the folded record's provenance is
+// not recoverable from the row, which is exactly what preflight's detail says
+// out loud, and Report.Corroborated is the count a caller can see it by.
+// recall.Reader.Contributions is the other half -- an edge carries its own
+// provenance, so the second source is still visible where it asserted one.
+//
+// Nothing here re-checks agreement. preflight.Refuse ran before this and
+// refuses any ID whose records describe different nodes, so anything repeated
+// by the time it gets here has already been ruled corroboration. A second test
+// would be a second rule, which is the thing this function exists to stop.
+func fold(in []alchemy.Entity) ([]alchemy.Entity, int) {
+	seen := make(map[string]bool, len(in))
+	out := make([]alchemy.Entity, 0, len(in))
+	for _, e := range in {
+		if seen[e.ID] {
+			continue
+		}
+		seen[e.ID] = true
+		out = append(out, e)
+	}
+	return out, len(in) - len(out)
 }
