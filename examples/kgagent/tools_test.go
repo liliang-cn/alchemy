@@ -281,8 +281,17 @@ func TestDescribingAPlainRecordAndAMissingOne(t *testing.T) {
 // duplicates inside one parallel batch. The trace is the instrument, and an
 // instrument that cannot tell those apart keeps producing that mistake.
 func TestTheTraceTellsAParallelBatchFromARetry(t *testing.T) {
-	byName, g := tools(t)
-	claims := byName["graph_claims"]
+	// A reader slow enough that the four callers genuinely overlap. Without it
+	// the first call can finish before the last one starts and nothing is
+	// concurrent -- which is a test that passes or fails on how fast the
+	// machine is, about the one property it exists to check.
+	g := &kgagent.Graph{Reader: &counting{store: graph()}, Load: "ld-1"}
+	var claims kgagent.Tool
+	for _, tool := range g.Tools() {
+		if tool.Name == "graph_claims" {
+			claims = tool
+		}
+	}
 
 	// Four identical calls at once, which is what the model actually emitted.
 	var wg sync.WaitGroup

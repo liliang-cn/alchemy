@@ -76,6 +76,20 @@ type Tool struct {
 	Do          func(ctx context.Context, args map[string]any) (any, error)
 }
 
+// ReadOnly reports that a tool changes nothing, which every tool here does.
+//
+// It is a method rather than a field because there is nothing to decide: all
+// seven read one finished load, and a load is immutable once complete.
+//
+// It matters to the agent framework rather than to this package. agent-go
+// collapses a duplicate call only for tools DECLARED read-only -- "assuming a
+// tool nobody described is safe to skip is the wrong way round" -- and it
+// infers the declaration from names containing read, list, get, search, fetch
+// or query. Not one of these seven matches, so without saying so out loud they
+// were treated as possibly-stateful and every duplicate in a parallel batch was
+// executed.
+func (t Tool) ReadOnly() bool { return true }
+
 // Graph is the tool set over one load of one store.
 //
 // The Reader is an interface and nothing here knows which store is behind it,

@@ -53,7 +53,13 @@ func main() {
 
 	g := &kgagent.Graph{Reader: reader, Load: os.Getenv("RUN_ID")}
 	for _, t := range g.Tools() {
-		svc.AddTool(t.Name, t.Description, t.Schema, t.Do)
+		// Declared read-only, which every tool here is: they read one finished
+		// load and a load is immutable once complete. Without the declaration
+		// agent-go treats them as possibly-stateful and executes every
+		// duplicate the model emits in a parallel batch -- measured at
+		// twenty-five calls for thirteen distinct questions.
+		svc.AddToolWithMetadata(t.Name, t.Description, t.Schema, t.Do,
+			agent.ToolMetadata{ReadOnly: t.ReadOnly(), ConcurrencySafe: true})
 	}
 
 	fmt.Printf("Q: %s\n\n", question)
