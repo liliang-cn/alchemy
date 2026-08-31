@@ -17,7 +17,7 @@ func TestAClaimTakesStatedOrInferredFromTheProducerRuleAndNotFromACopy(t *testin
 		alchemy.ProducerDDL, alchemy.ProducerGraphImport, alchemy.ProducerTabular,
 		alchemy.ProducerLLMExtract, alchemy.ProducerHuman, alchemy.Producer("something-new"),
 	} {
-		c := NewClaim("a", "USES", "b", alchemy.Provenance{Producer: p})
+		c := NewClaim(Endpoint{ID: "e1", Name: "a"}, Endpoint{ID: "e2", Name: "b"}, "USES", alchemy.Provenance{Producer: p})
 		if c.Stated != p.Deterministic() {
 			t.Errorf("NewClaim(producer %q).Stated = %v, alchemy says %v; "+
 				"the rule lives in alchemy.Producer.Deterministic and nowhere else", p, c.Stated, p.Deterministic())
@@ -35,7 +35,7 @@ func TestAClaimRendersAsOneLineAnAgentCanPutInAContextPack(t *testing.T) {
 		want  string
 	}{{
 		name: "a model proposed it, so the line says inferred and cites a chunk",
-		claim: NewClaim("SuperAI", "USES", "CortexDB", alchemy.Provenance{
+		claim: NewClaim(Endpoint{ID: "e1", Name: "SuperAI"}, Endpoint{ID: "e2", Name: "CortexDB"}, "USES", alchemy.Provenance{
 			Source: "architecture.pdf", Chunk: 14, Producer: alchemy.ProducerLLMExtract,
 		}),
 		want: "SuperAI -[USES]-> CortexDB (inferred, llm-extract) [architecture.pdf#14]",
@@ -44,13 +44,13 @@ func TestAClaimRendersAsOneLineAnAgentCanPutInAContextPack(t *testing.T) {
 		// no chunk to cite and printing #-1 would hand an agent a citation it
 		// would then try, and fail, to resolve.
 		name: "a producer that worked in no chunks cites the file and no chunk",
-		claim: NewClaim("orders", "REFERENCES", "customers", alchemy.Provenance{
+		claim: NewClaim(Endpoint{ID: "t1", Name: "orders"}, Endpoint{ID: "t2", Name: "customers"}, "REFERENCES", alchemy.Provenance{
 			Source: "schema.sql", Chunk: -1, Producer: alchemy.ProducerDDL,
 		}),
 		want: "orders -[REFERENCES]-> customers (stated, ddl) [schema.sql]",
 	}, {
 		name: "no source at all is no marker rather than an empty one",
-		claim: NewClaim("a", "R", "b", alchemy.Provenance{
+		claim: NewClaim(Endpoint{ID: "e1", Name: "a"}, Endpoint{ID: "e2", Name: "b"}, "R", alchemy.Provenance{
 			Chunk: -1, Producer: alchemy.ProducerHuman,
 		}),
 		want: "a -[R]-> b (stated, human)",
@@ -107,5 +107,23 @@ func TestAPageSaysWhenItIsOne(t *testing.T) {
 			t.Errorf("%s: Truncated() = %v, want %v (%d of %d)",
 				tc.name, got, tc.want, len(tc.found.Nodes), tc.found.Total)
 		}
+	}
+}
+
+// The names are what a claim reads as and the IDs are what it walks by, and a
+// renderer that leaked one into the other would put "e17 -[USES]-> e04" in front
+// of a person. String is where that would show up first.
+func TestTheWalkableIDsAreCarriedWithoutReachingTheRenderedLine(t *testing.T) {
+	c := NewClaim(Endpoint{ID: "person:mira", Name: "Mira"},
+		Endpoint{ID: "product:ledger", Name: "Ledger"}, "DEVELOPS",
+		alchemy.Provenance{Source: "team.json", Chunk: -1, Producer: alchemy.ProducerGraphImport})
+	if c.FromID != "person:mira" || c.ToID != "product:ledger" {
+		t.Errorf("the IDs did not survive: %+v", c)
+	}
+	if c.From != "Mira" || c.To != "Ledger" {
+		t.Errorf("the names did not survive: %+v", c)
+	}
+	if got, want := c.String(), "Mira -[DEVELOPS]-> Ledger (stated, graph-import) [team.json]"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
 	}
 }

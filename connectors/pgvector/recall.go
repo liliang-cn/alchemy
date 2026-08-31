@@ -93,7 +93,8 @@ func (l *Loader) Claims(ctx context.Context, load, id string) ([]recall.Claim, e
 	// every field below render as one sentence, and a pack that printed it
 	// twice would be telling a reader the corpus said it twice.
 	const sql = `SELECT DISTINCT coalesce(f.name, r.from_id) AS subject, r.type AS rel,
-	coalesce(t.name, r.to_id) AS object, r.prov_source, r.prov_chunk, r.prov_producer
+	coalesce(t.name, r.to_id) AS object, r.from_id, r.to_id,
+	r.prov_source, r.prov_chunk, r.prov_producer
 FROM {s}.loaded_relations r
 LEFT JOIN {s}.loaded_entities f ON f.load_id = r.load_id AND f.entity_id = r.from_id
 LEFT JOIN {s}.loaded_entities t ON t.load_id = r.load_id AND t.entity_id = r.to_id
@@ -107,8 +108,16 @@ ORDER BY rel, object, subject, r.prov_source, r.prov_chunk`
 	out := []recall.Claim{}
 	for rows.Next() {
 		var subject, rel, object string
+		// The IDs are the columns the edge is actually keyed on, taken straight
+		// rather than through the join that produced the names. coalesce above
+		// falls back to the ID for an endpoint this load does not describe --
+		// ViolationDanglingRelation, which §7.3 delivers rather than refuses --
+		// so a caller reading only the names cannot tell that case from a node
+		// whose name happens to be an identifier. These two always mean the ID.
+		var from, to recall.Endpoint
 		var p alchemy.Provenance
-		if err := rows.Scan(&subject, &rel, &object, &p.Source, &p.Chunk, &p.Producer); err != nil {
+		if err := rows.Scan(&subject, &rel, &object, &from.ID, &to.ID,
+			&p.Source, &p.Chunk, &p.Producer); err != nil {
 			return nil, fmt.Errorf("pgvector: claims about %q in load %q: %w", id, load, err)
 		}
 		// Through recall.NewClaim, so that stated-or-inferred is
@@ -118,7 +127,8 @@ ORDER BY rel, object, subject, r.prov_source, r.prov_chunk`
 		// rule; it is also the answer the rule gave on the day of the import,
 		// and a reader deciding how far to trust a sentence today should be
 		// told today's answer.
-		out = append(out, recall.NewClaim(subject, rel, object, p))
+		from.Name, to.Name = subject, object
+		out = append(out, recall.NewClaim(from, to, rel, p))
 	}
 	return out, rows.Err()
 }
@@ -130,13 +140,32 @@ ORDER BY rel, object, subject, r.prov_source, r.prov_chunk`
 // caller who passed the right number with the wrong file would be handed the
 // other file's text, with nothing about the answer looking wrong.
 //
-// Nothing found is an error and never a zero Citation, and which error says
-// which mistake was made. The second query runs on the failure path only and is
-// worth its round trip because the two have different fixes: ErrNoCitation is a
-// claim pointing at material that was not loaded, ErrNoLoad is a caller naming
-// the wrong import — the bug the load parameter exists for, arriving as a typo
-// rather than as a wrong answer.
+// Three outcomes, not two, and the third is the common one. ErrNoChunk when
+// the marker carries no chunk number, which is an ordinary answer: the producer
+// did not work in chunks and there was never any text under this claim.
+// ErrNoCitation when the load holds no such chunk, which IS a failure — a claim
+// pointing at material that was not loaded. ErrNoLoad when there is no finished
+// load of that name, which is a caller naming the wrong import, the bug the
+// load parameter exists for arriving as a typo instead of as a wrong answer.
+// Never a zero Citation for any of the three.
+//
+// The first two were one error until a measurement separated them: across
+// thirty runs of an agent over a graph loaded here, seven of thirteen citation
+// attempts were against a graph-import source whose chunk is -1, and every one
+// was refused with the sentence reserved for evidence that does not check out.
+// All seven were false alarms — §5b ranks a machine reading something that
+// already asserted a fact ABOVE a model reading prose — and the agents cited
+// the claims regardless, which is a tool teaching its caller to ignore it.
 func (l *Loader) Cite(ctx context.Context, load, source string, index int) (recall.Citation, error) {
+	// A negative index is not a lookup that failed, it is a marker with no chunk
+	// number in it, and there is nothing to ask the store for. It goes through
+	// whyNoCitation anyway, because the load is checked before anything else:
+	// answering "this claim has no text, and that is fine" for an import that is
+	// not here would be an ordinary answer handed back for a caller's mistake,
+	// which is the one thing the load parameter exists to prevent.
+	if index < 0 {
+		return recall.Citation{}, l.whyNoCitation(ctx, load, source, index)
+	}
 	const sql = `SELECT source, idx, start_byte, end_byte, body FROM {s}.loaded_chunks
 	WHERE load_id = $1 AND source = $2::text AND idx = $3`
 	var c recall.Citation
@@ -166,6 +195,17 @@ func (l *Loader) whyNoCitation(ctx context.Context, load, source string, index i
 			"a load that is still arriving answers nothing, and a corpus imported twice is two loads",
 			recall.ErrNoLoad, load)
 	}
+	// The claim never had a chunk, which Mark already says by rendering its
+	// marker as [source] with no #n. It is an ordinary answer and deliberately
+	// not ErrNoCitation: the two say opposite things about how far to trust the
+	// claim, and conflating them refused every graph-import claim in the store
+	// with the sentence reserved for evidence that does not check out.
+	if index < 0 {
+		return fmt.Errorf("%w: the claim citing %q carries no chunk number, so load %q holds no text "+
+			"to quote for it — the claim is not weakened by that, and must not be reported as uncited",
+			recall.ErrNoChunk, source, load)
+	}
+
 	return fmt.Errorf("%w: load %q holds no chunk %d of %q — the claim that cited it cannot be checked "+
 		"against this import, and must not be offered as evidence from it",
 		recall.ErrNoCitation, load, index, source)

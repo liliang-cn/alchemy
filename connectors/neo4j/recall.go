@@ -189,7 +189,10 @@ func (l *Loader) Claims(ctx context.Context, load, id string) ([]recall.Claim, e
 		// written for the buyer's own Cypher, and it is the rule as it stood on
 		// the day of the import; a reader deciding how far to trust a sentence
 		// today should be told today's answer.
-		out = append(out, recall.NewClaim(str(r["subject"]), str(r["rel"]), str(r["object"]),
+		out = append(out, recall.NewClaim(
+			recall.Endpoint{ID: str(r["subjectID"]), Name: str(r["subject"])},
+			recall.Endpoint{ID: str(r["objectID"]), Name: str(r["object"])},
+			str(r["rel"]),
 			alchemy.Provenance{
 				Source:   str(r["source"]),
 				Chunk:    num(r["chunk"]),
@@ -214,11 +217,17 @@ func (l *Loader) claimsCypher() (string, error) {
 	return scope + fmt.Sprintf(
 		"MATCH (x:%[1]s {%[2]s: $run, %[3]s: $id})-[r]-(y:%[1]s {%[2]s: $run}) "+
 			"WHERE NOT type(r) IN $bookkeeping AND NOT any(lbl IN labels(y) WHERE lbl IN $internal) "+
+			// The IDs come off the same two nodes as the names, in the same
+			// row, so a walk cannot pair a name with the wrong identifier.
+			// Reading them from the relationship instead is not available and
+			// should not be: an edge stores its ends by being attached to
+			// them.
 			"RETURN DISTINCT startNode(r).%[4]s AS subject, type(r) AS rel, endNode(r).%[4]s AS object, "+
+			"startNode(r).%[8]s AS subjectID, endNode(r).%[8]s AS objectID, "+
 			"r.%[5]s AS source, r.%[6]s AS chunk, r.%[7]s AS producer "+
 			"ORDER BY rel, object, subject, source, chunk",
 		base, l.prop(keyRun), l.prop(keyID), keyName,
-		l.prop(keySource), l.prop(keyChunk), l.prop(keyProducer)), nil
+		l.prop(keySource), l.prop(keyChunk), l.prop(keyProducer), l.prop(keyID)), nil
 }
 
 // Cite resolves one [source#index] marker against one load.
@@ -231,14 +240,32 @@ func (l *Loader) claimsCypher() (string, error) {
 // about the answer looking wrong — which is the same failure as the missing
 // load filter, one field over.
 //
-// Nothing found is an error and never a zero Citation, and which error it is
-// says which mistake was made: ErrNoLoad for a load that is not here or not
-// finished, ErrNoCitation for a chunk this load does not hold. The second query
-// is on the failure path only, and it is worth a round trip because the two
-// have different fixes — one is a claim pointing at material that was not
-// loaded, the other is an agent citing the wrong import, which is the bug the
+// Three outcomes, not two, and the third is the common one. ErrNoChunk when
+// the marker carries no chunk number, which is an ordinary answer: the producer
+// did not work in chunks and there was never any text under this claim.
+// ErrNoCitation when the load holds no such chunk, which IS a failure — a claim
+// pointing at material that was not loaded. ErrNoLoad when there is no finished
+// load of that name, which is a caller naming the wrong import, the bug the
 // load parameter exists for arriving as a typo instead of as a wrong answer.
+// Never a zero Citation for any of the three.
+//
+// The first two were one error until a measurement separated them: across
+// thirty runs of an agent over a graph loaded here, seven of thirteen citation
+// attempts were against a graph-import source whose chunk is -1, and every one
+// was refused with the sentence reserved for evidence that does not check out.
+// All seven were false alarms — §5b ranks a machine reading something that
+// already asserted a fact ABOVE a model reading prose — and the agents cited
+// the claims regardless, which is a tool teaching its caller to ignore it.
 func (l *Loader) Cite(ctx context.Context, load, source string, index int) (recall.Citation, error) {
+	// A negative index is not a lookup that failed, it is a marker with no chunk
+	// number in it, and there is nothing to ask the store for. It goes through
+	// whyNoCitation anyway, because the load is checked before anything else:
+	// answering "this claim has no text, and that is fine" for an import that is
+	// not here would be an ordinary answer handed back for a caller's mistake,
+	// which is the one thing the load parameter exists to prevent.
+	if index < 0 {
+		return recall.Citation{}, l.whyNoCitation(ctx, load, source, index)
+	}
 	stmt, err := l.citeCypher()
 	if err != nil {
 		return recall.Citation{}, err
@@ -291,6 +318,17 @@ func (l *Loader) whyNoCitation(ctx context.Context, load, source string, index i
 			"a load that is still arriving answers nothing, and a corpus imported twice is two loads",
 			recall.ErrNoLoad, load)
 	}
+	// The claim never had a chunk, which Mark already says by rendering its
+	// marker as [source] with no #n. It is an ordinary answer and deliberately
+	// not ErrNoCitation: the two say opposite things about how far to trust the
+	// claim, and conflating them refused every graph-import claim in the store
+	// with the sentence reserved for evidence that does not check out.
+	if index < 0 {
+		return fmt.Errorf("%w: the claim citing %q carries no chunk number, so load %q holds no text "+
+			"to quote for it — the claim is not weakened by that, and must not be reported as uncited",
+			recall.ErrNoChunk, source, load)
+	}
+
 	return fmt.Errorf("%w: load %q holds no chunk %d of %q — the claim that cited it cannot be checked "+
 		"against this import, and must not be offered as evidence from it",
 		recall.ErrNoCitation, load, index, source)

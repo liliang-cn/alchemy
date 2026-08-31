@@ -20,6 +20,7 @@ func builders(l *Loader) map[string]func() (string, error) {
 		"resolve a citation":      func() (string, error) { return l.citeSPARQL("ld-1", "architecture.md", 3) },
 		"ask what is unanswered":  func() (string, error) { return l.unansweredSPARQL("ld-1", "cortex") },
 		"ask what is unanswered2": func() (string, error) { return l.unansweredSPARQL("ld-1", "") },
+		"see what contributed":    func() (string, error) { return l.contributionsSPARQL("ld-1", "e1") },
 	}
 }
 

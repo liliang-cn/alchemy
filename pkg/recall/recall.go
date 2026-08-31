@@ -98,6 +98,27 @@ import (
 // this load" knows not to offer the claim as evidence.
 var ErrNoCitation = errors.New("recall: this citation does not resolve in this load")
 
+// ErrNoChunk is returned by Cite for a claim whose producer did not work in
+// chunks. There is nothing to quote and that is not a defect.
+//
+// It is separate from ErrNoCitation because they say opposite things about how
+// far to trust the claim, and conflating them taught an agent to distrust the
+// most trustworthy records in the store. Measured: across thirty runs of a
+// graph-backed agent, thirteen citation attempts, seven of them against a
+// graph-import source whose chunk is -1, and all seven refused with "this
+// citation does not resolve, so do not treat it as evidence". Every one of
+// those seven was a false alarm — a graph-import claim is a machine reading
+// something that already asserted the fact, which §5b ranks ABOVE a model
+// reading prose. The agents cited it anyway, being substantively right and
+// procedurally wrong, which is a tool teaching its caller to ignore it.
+//
+// Mark already emits the marker this error belongs to: a claim with chunk -1
+// renders as "[team.json]" with no #n, so a caller has no number to pass and
+// is not making a mistake by having none. Cite is therefore reached with a
+// negative index legitimately, and must say which of the three cases it is —
+// here is the text, there is no such chunk, or this claim never had one.
+var ErrNoChunk = errors.New("recall: this claim's producer did not work in chunks, so there is no text to quote")
+
 // ErrNoLoad is returned by Cite when the load itself is not in the store, or
 // is there and unfinished.
 //
@@ -157,6 +178,24 @@ type Claim struct {
 	From string
 	Type string
 	To   string
+	// FromID and ToID are the same two ends as the argument the next question
+	// takes, and they are here because without them a walk cannot continue.
+	//
+	// Measured, on the question this interface exists to answer: an agent asked
+	// which products a team's people work on made thirteen tool calls, and eight
+	// of them were four Find/Claims pairs — one anchor search per neighbour,
+	// spent entirely on turning a name this method had just returned back into
+	// the ID this method requires. The names are what a claim is read in and
+	// stay the fields a reader sees; the IDs are what it is walked by.
+	//
+	// It is not a convenience. A name is not a key: Find is a substring search
+	// whose page can be truncated, so the round trip an agent has to make can
+	// return two candidates, or the wrong one, or -- when a corpus is about the
+	// name being searched for -- a page that does not contain the node at all.
+	// A walk that has to guess its way back to an identifier it was already
+	// holding is a walk that can silently continue from the wrong node.
+	FromID string
+	ToID   string
 	// Stated says the producer read something that already asserted this,
 	// rather than inferring it. It is computed by NewClaim through
 	// alchemy.Producer.Deterministic and never re-implemented here or in a
@@ -187,14 +226,28 @@ type Claim struct {
 // value is the answer the rule gave on the day of the import, and a graph
 // loaded a year ago would answer with the rule as it stood a year ago, in a
 // field an agent is about to decide how much to trust a sentence on.
-func NewClaim(from, typ, to string, p alchemy.Provenance) Claim {
+func NewClaim(from, to Endpoint, typ string, p alchemy.Provenance) Claim {
 	return Claim{
-		From: from, Type: typ, To: to,
+		From: from.Name, Type: typ, To: to.Name,
+		FromID:   from.ID,
+		ToID:     to.ID,
 		Stated:   p.Producer.Deterministic(),
 		Producer: p.Producer,
 		Source:   p.Source,
 		Chunk:    p.Chunk,
 	}
+}
+
+// Endpoint is one end of a claim: what a document calls the node, and what this
+// package's other methods take as an argument.
+//
+// It is a parameter type rather than four strings on NewClaim because the four
+// are two pairs and transposing a pair is silent -- a claim built with the
+// subject's ID against the object's name still renders, still cites, and points
+// a walk at the wrong node.
+type Endpoint struct {
+	ID   string
+	Name string
 }
 
 // String renders the claim as the one line it occupies in a context pack.
@@ -252,6 +305,70 @@ type Citation struct {
 	Start  int
 	End    int
 	Text   string
+}
+
+// Contributor is one source that had a hand in a node.
+//
+// It exists because a comparison of two agent runtimes over one graph produced
+// the same wrong answer on both sides, six runs out of six. The graph held
+// `Mira` as a single node carrying an edge from a PDF and an edge from a
+// hand-written team file: two sources, two mentions of a bare first name,
+// joined on exact string equality by the id rule, silently. Meanwhile
+// `Nadia` and `Nadia Okonkwo` -- the same corpus, the same kind of
+// ambiguity -- were held apart as an Unanswered question, because the strings
+// differed.
+//
+// So the identity risk an agent could see was the one the graph was unsure
+// about, and the one it could not see was the one the graph had settled by
+// fiat. Every run stated "Mira is the CTO" as though the two mentions were
+// established to be one person. None of Find, Claims, Cite or Unanswered could
+// have told it otherwise.
+//
+// This is deliberately not a warning and not a score. It reports what
+// contributed and a reader decides: two sources agreeing on a full name and a
+// type are corroboration, two agreeing on a first name are a question somebody
+// should look at, and a primitive that returned "risky" would be doing the
+// judging §2.1 reserves for a person.
+type Contributor struct {
+	// Source and Chunk locate the mention. Chunk is -1 when the producer did
+	// not work in chunks; see Mark.
+	Source string
+	Chunk  int
+	// Producer is what made it, and Stated is alchemy.Producer.Deterministic,
+	// computed the way NewClaim computes it and for the same reason.
+	Producer alchemy.Producer
+	Stated   bool
+	// Name is what THIS source called the node, and it is the whole of the
+	// question. A node whose contributors all wrote "Nadia Okonkwo" was
+	// joined on a full name; one where they wrote "Mira" and "Mira" was joined
+	// on a first name. Both are exact matches and they are not the same
+	// evidence.
+	Name string
+}
+
+// Contributions is every source that had a hand in one node.
+type Contributions struct {
+	// ID and Type are the node asked about, echoed so a caller holding several
+	// answers can tell them apart.
+	ID   string
+	Type string
+	// Names are the distinct names the contributors used, sorted. One is the
+	// ordinary case; more than one means the store joined records that did not
+	// agree about what the thing is called, which a reader must be able to see.
+	Names []string
+	// Contributors are the mentions, ordered by source then chunk so two reads
+	// of one node produce the same document.
+	Contributors []Contributor
+}
+
+// Joined reports whether more than one source contributed. It is a method
+// rather than a field so it cannot fall out of step with the slice.
+func (c Contributions) Joined() bool {
+	seen := make(map[string]bool, len(c.Contributors))
+	for _, x := range c.Contributors {
+		seen[x.Source] = true
+	}
+	return len(seen) > 1
 }
 
 // Question is one thing the graph has not decided.
@@ -345,10 +462,18 @@ type Reader interface {
 	// Cite resolves a [source#index] marker to the text it names, within this
 	// load.
 	//
-	// It returns ErrNoCitation when the load holds no such chunk and ErrNoLoad
-	// when there is no finished load of that name, and never a zero Citation
-	// for either. A caller reaching this method was told by a Claim that the
-	// chunk exists, so nothing here is a normal absence.
+	// Three outcomes, and telling them apart is the point. The text, when the
+	// chunk is there. ErrNoChunk when index is negative, which means the claim
+	// came from a producer that did not work in chunks — an ordinary answer,
+	// not a failure, and the one Mark's chunk-less marker leads a caller to.
+	// ErrNoCitation when the load holds no such chunk, which IS a failure. And
+	// ErrNoLoad when there is no finished load of that name. Never a zero
+	// Citation for any of them.
+	//
+	// The middle case was missing and it cost something measurable: with only
+	// two outcomes, every chunk-less claim was refused with the sentence
+	// reserved for a citation that does not resolve, and an agent was told not
+	// to trust the most trustworthy records in the store.
 	//
 	// Both the source and the index have to match. They are two halves of one
 	// marker: a chunk index is unique across a job, so the index alone would
@@ -366,4 +491,18 @@ type Reader interface {
 	//
 	// Ordered by subject and then detail.
 	Unanswered(ctx context.Context, load, about string) ([]Question, error)
+
+	// Contributions reports every source that had a hand in one node, so a
+	// reader can see a join the store MADE as well as the ones it declined.
+	//
+	// Unanswered reports the joins the loader refused; this reports the ones it
+	// performed. Without both, only half of identity is visible, and a caller
+	// can be cautious only about the half the machine was already unsure of --
+	// which is the wrong half, because the other one has already been acted on.
+	//
+	// It returns ErrNoLoad for an unknown load, and a zero Contributions with a
+	// nil error for an id the load does not hold. The asymmetry is deliberate:
+	// a load that is not there is a caller's mistake, and an id that is not
+	// there is an ordinary answer to "what contributed to this" -- nothing.
+	Contributions(ctx context.Context, load, id string) (Contributions, error)
 }

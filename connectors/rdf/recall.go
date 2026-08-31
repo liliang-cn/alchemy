@@ -187,7 +187,10 @@ func (l *Loader) Assertions(ctx context.Context, load, id string) ([]Assertion, 
 		// the day of the import; a reader deciding how far to trust a sentence
 		// today should be told today's answer.
 		out = append(out, Assertion{
-			Claim:      recall.NewClaim(r["subject"].Value, r["rel"].Value, r["object"].Value, p),
+			Claim: recall.NewClaim(
+				recall.Endpoint{ID: l.entityIDFromIRI(load, r["s"].Value), Name: r["subject"].Value},
+				recall.Endpoint{ID: l.entityIDFromIRI(load, r["o"].Value), Name: r["object"].Value},
+				r["rel"].Value, p),
 			Provenance: p,
 		})
 	}
@@ -217,7 +220,11 @@ func (l *Loader) claimsSPARQL(load, id string) (string, error) {
 		return "", ent.err
 	}
 	const q = "<< ?s ?p ?o >>"
-	return "SELECT DISTINCT ?subject ?rel ?object" + provVars() + " WHERE {\n" + scope +
+	// ?s and ?o are projected beside the labels, because a triple names its
+	// ends by IRI and the ID a walk needs is inside it. They are the same two
+	// terms the labels are read off, in the same row, so a name cannot be
+	// paired with another node's identifier.
+	return "SELECT DISTINCT ?s ?o ?subject ?rel ?object" + provVars() + " WHERE {\n" + scope +
 		fmt.Sprintf(
 			// The inclusion list: ?p is walkable because this connector
 			// declared it a relation type when it wrote the edge.
@@ -241,13 +248,32 @@ func (l *Loader) claimsSPARQL(load, id string) (string, error) {
 // the wrong file would be handed the other file's text with nothing about the
 // answer looking wrong.
 //
-// Nothing found is an error and never a zero Citation, and which error says
-// which mistake was made. The second query runs only on the failure path,
-// because the two have different fixes: one is a claim pointing at material
-// that was not loaded, the other is an agent naming the wrong import — which is
-// the bug the load parameter exists for, arriving as a typo instead of as a
-// silent wrong answer.
+// Three outcomes, not two, and the third is the common one. ErrNoChunk when
+// the marker carries no chunk number, which is an ordinary answer: the producer
+// did not work in chunks and there was never any text under this claim.
+// ErrNoCitation when the load holds no such chunk, which IS a failure — a claim
+// pointing at material that was not loaded. ErrNoLoad when there is no finished
+// load of that name, which is a caller naming the wrong import, the bug the
+// load parameter exists for arriving as a typo instead of as a wrong answer.
+// Never a zero Citation for any of the three.
+//
+// The first two were one error until a measurement separated them: across
+// thirty runs of an agent over a graph loaded here, seven of thirteen citation
+// attempts were against a graph-import source whose chunk is -1, and every one
+// was refused with the sentence reserved for evidence that does not check out.
+// All seven were false alarms — §5b ranks a machine reading something that
+// already asserted a fact ABOVE a model reading prose — and the agents cited
+// the claims regardless, which is a tool teaching its caller to ignore it.
 func (l *Loader) Cite(ctx context.Context, load, source string, index int) (recall.Citation, error) {
+	// A negative index is not a lookup that failed, it is a marker with no chunk
+	// number in it, and there is nothing to ask the store for. It goes through
+	// whyNoCitation anyway, because the load is checked before anything else:
+	// answering "this claim has no text, and that is fine" for an import that is
+	// not here would be an ordinary answer handed back for a caller's mistake,
+	// which is the one thing the load parameter exists to prevent.
+	if index < 0 {
+		return recall.Citation{}, l.whyNoCitation(ctx, load, source, index)
+	}
 	q, err := l.citeSPARQL(load, source, index)
 	if err != nil {
 		return recall.Citation{}, err
@@ -299,6 +325,17 @@ func (l *Loader) whyNoCitation(ctx context.Context, load, source string, index i
 			"a load that is still arriving answers nothing, and a corpus imported twice is two loads",
 			recall.ErrNoLoad, load)
 	}
+	// The claim never had a chunk, which Mark already says by rendering its
+	// marker as [source] with no #n. It is an ordinary answer and deliberately
+	// not ErrNoCitation: the two say opposite things about how far to trust the
+	// claim, and conflating them refused every graph-import claim in the store
+	// with the sentence reserved for evidence that does not check out.
+	if index < 0 {
+		return fmt.Errorf("%w: the claim citing %q carries no chunk number, so load %q holds no text "+
+			"to quote for it — the claim is not weakened by that, and must not be reported as uncited",
+			recall.ErrNoChunk, source, load)
+	}
+
 	return fmt.Errorf("%w: load %q holds no chunk %d of %q — the claim that cited it cannot be checked "+
 		"against this import, and must not be offered as evidence from it",
 		recall.ErrNoCitation, load, index, source)

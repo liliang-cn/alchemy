@@ -1,6 +1,10 @@
 package rdf
 
-import "strconv"
+import (
+	"net/url"
+	"strconv"
+	"strings"
+)
 
 // The vocabulary, in one place, because a predicate spelled in a writer and
 // again in a query is a name with two homes and the query is the one that fails
@@ -204,6 +208,33 @@ func (l *Loader) loadIRI(load string) string {
 // a within-load identifier would be doing it wrong and calling it done.
 func (l *Loader) entityIRI(load, id string) string {
 	return l.loadIRI(load) + "/entity/" + escapeSegment(id)
+}
+
+// entityIDFromIRI is entityIRI read backwards, and it exists because a walk
+// needs the argument the next question takes.
+//
+// recall.Claim carries the names a claim is read in AND the IDs it is walked
+// by; a triple names its ends by IRI and nothing else, so the ID has to come
+// out of the IRI. It is exact rather than best-effort: the prefix is the one
+// this loader mints, and an IRI that does not carry it belongs to another load
+// or another kind of record and returns empty rather than a guess. url.PathUnescape
+// is the inverse of escapeSegment, which percent-encodes everything outside the
+// unreserved set -- "/" included, so an ID with a slash in it survives the round
+// trip in both directions.
+//
+// An empty answer is a claim that can be read and not walked, which is the
+// honest report. Inventing an ID from the tail of an unrecognised IRI would
+// hand a caller an identifier that resolves to nothing, or worse, to something.
+func (l *Loader) entityIDFromIRI(load, s string) string {
+	prefix := l.loadIRI(load) + "/entity/"
+	if !strings.HasPrefix(s, prefix) {
+		return ""
+	}
+	id, err := url.PathUnescape(strings.TrimPrefix(s, prefix))
+	if err != nil {
+		return ""
+	}
+	return id
 }
 
 func (l *Loader) chunkIRI(load string, index int) string {

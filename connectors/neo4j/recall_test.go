@@ -29,6 +29,7 @@ func TestEveryReadIsScopedToOneLoadAndToALoadThatFinished(t *testing.T) {
 		{"walk one hop", l.claimsCypher},
 		{"resolve a citation", l.citeCypher},
 		{"ask what is unanswered", l.unansweredCypher},
+		{"see what contributed", l.contributionsCypher},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stmt, err := tc.build()
