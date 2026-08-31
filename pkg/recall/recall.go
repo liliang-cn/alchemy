@@ -16,10 +16,12 @@
 // outside the repository, because the connector that holds the graph had no
 // way to be asked a question about it.
 //
-// # The four, and why exactly these four
+// # The seven, and how each one got here
 //
-// They are not designed. They are what building one context pack by hand
-// needed, and nothing else was needed:
+// None of them is designed. The first four are what building one context pack
+// by hand needed and nothing else was; the last three were each added after an
+// agent answered a question wrongly in a way none of the others could have
+// prevented, and the measurement is written down beside the method:
 //
 //  1. Find an anchor — the entities whose name contains some text. This is
 //     where a question enters the graph, and it is the only primitive that
@@ -31,6 +33,18 @@
 //  4. Ask what is unanswered — the duplicate and identity questions touching a
 //     subject, so an agent can say "these two may be one thing and nobody has
 //     decided" instead of answering as if somebody had.
+//  5. Ask what contributed — the sources that had a hand in one node, so a
+//     reader can see a join the store MADE and not only the ones it declined.
+//  6. Read the vocabulary — the entity types in a load and how many of each,
+//     because without it "what is in this graph" is answered by guessing.
+//  7. Read out one class — the entities of a type, sized by the count the
+//     vocabulary gave, so enumerating is one call rather than the alphabet.
+//
+// That the list grew is the argument for how it was built rather than against
+// it. A read interface designed up front would have had all seven on day one
+// and would have had them wrong; every one of the last three exists because a
+// specific wrong answer was traced back to a question the graph could not be
+// asked. Nothing here was added because it seemed likely to be useful.
 //
 // A vector search is deliberately not one of them. pgvector's Search and
 // Around and Qdrant's Search answer a genuinely different question — "which
@@ -371,6 +385,18 @@ func (c Contributions) Joined() bool {
 	return len(seen) > 1
 }
 
+// TypeCount is one entity type in a load and how many entities carry it.
+//
+// The count is here rather than left to a second call because it is what makes
+// the answer usable. A caller told a load holds Person and Product knows what
+// kinds of question it can ask; a caller told it holds twenty People and nine
+// Products knows what limit to pass to OfType, which is the difference between
+// enumerating a type and truncating it.
+type TypeCount struct {
+	Type  string
+	Count int
+}
+
 // Question is one thing the graph has not decided.
 //
 // It is the duplicate finding read back, and it is in this interface because
@@ -491,6 +517,56 @@ type Reader interface {
 	//
 	// Ordered by subject and then detail.
 	Unanswered(ctx context.Context, load, about string) ([]Question, error)
+
+	// Types is the vocabulary of this load: every entity type in it and how
+	// many entities carry it, ordered by type.
+	//
+	// It is the primitive that was missing when a graph was asked what was in
+	// it. Measured: an agent asked "what kinds of things are in this graph, and
+	// how many of each" made EIGHTY-THREE tool calls, every one an anchor search
+	// for a single letter of the alphabet, and produced a table that got the
+	// total right and five things under it wrong -- thirteen types where the
+	// load has fourteen, four counts off, and one row reading "1-2" because it
+	// could not tell. Asked separately to list every person it named thirteen of
+	// twenty-one, having said twenty in that table a moment before. One graph,
+	// two runs, two answers that do not agree with each other, neither hedged.
+	//
+	// The right total is the worst part of it. It is the number a reader would
+	// spot-check, and it came out right because the errors cancelled.
+	//
+	// None of that is the model being careless. Find is a substring search, so
+	// the alphabet is genuinely the only way to enumerate with it, and a search
+	// for a letter returns a truncated page that reports how many more exist
+	// and offers nothing to do about it. A tool that states a number a caller
+	// cannot act on has told them their answer is incomplete and left them to
+	// state it anyway.
+	//
+	// An empty load, or one that is not in the store, is an empty slice and not
+	// an error, for the reason Find gives.
+	Types(ctx context.Context, load string) ([]TypeCount, error)
+
+	// OfType returns the entities in this load of exactly this type, ordered by
+	// name and then by ID so that a limit cuts the same place twice.
+	//
+	// Exactly, and not a substring or a fold: a type is declared by an ontology
+	// rather than written by a person, so "Person" and "person" are not the same
+	// type and matching them together would report a vocabulary the load does
+	// not have. That is the opposite of Find's rule, and deliberately -- Find
+	// takes what somebody typed, this takes what Types returned.
+	//
+	// It is separate from Find rather than a type filter on it because they are
+	// different acts. Find is where a question enters the graph and its input is
+	// free text; this one takes no text at all and is how a caller reads out a
+	// class it already knows exists. Folding them would give Find a second mode
+	// reached by leaving its only argument empty, which is the shape of defect
+	// Unanswered's "all" already cost thirty runs.
+	//
+	// limit must be positive, as with Find and for the same reason. A caller who
+	// wants all of them asks Types first and passes the count -- which is what
+	// the count is for, and why Found.Total is still returned here: a page that
+	// does not say it is a page asks a reader to trust a list that is not the
+	// list.
+	OfType(ctx context.Context, load, typ string, limit int) (Found, error)
 
 	// Contributions reports every source that had a hand in one node, so a
 	// reader can see a join the store MADE as well as the ones it declined.

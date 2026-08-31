@@ -102,6 +102,17 @@ func (l *Loader) Find(ctx context.Context, load, name string, limit int) (recall
 	if err != nil {
 		return recall.Found{}, fmt.Errorf("neo4j: find %q in load %q: %w", name, load, err)
 	}
+	return pageOf(recs), nil
+}
+
+// pageOf decodes the collect-then-slice shape both anchor queries return.
+//
+// It is one function because the two are one answer: a page and how many
+// matched. Written twice it would be two chances to drop the total, and a
+// Found whose Total is zero reports a complete list -- Truncated is derived
+// from it -- so a page that lost its count would silently claim to be the whole
+// of the graph.
+func pageOf(recs []map[string]any) recall.Found {
 	found := recall.Found{Nodes: []recall.Node{}}
 	for _, r := range recs {
 		found.Total = num(r["total"])
@@ -116,7 +127,7 @@ func (l *Loader) Find(ctx context.Context, load, name string, limit int) (recall
 			})
 		}
 	}
-	return found, nil
+	return found
 }
 
 // findCypher is the anchor query. The four builders in this file are separate

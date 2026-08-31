@@ -852,10 +852,10 @@ out — and the second half is much newer than the first.
 
 Five stores: Neo4j, pgvector, Qdrant, CortexDB, and any SPARQL endpoint that
 speaks RDF-star. All five implement `sink.Sink` and pass one conformance suite.
-Three implement `recall.Reader`, which is five primitives — find an anchor, walk
-one hop, resolve a citation, ask what is unanswered, ask what contributed — each
-taking the load as a parameter rather than as an option, because the default is
-where the bug was.
+Three implement `recall.Reader`, which is seven primitives — find an anchor,
+walk one hop, resolve a citation, ask what is unanswered, ask what contributed,
+read the vocabulary, read out one class — each taking the load as a parameter
+rather than as an option, because the default is where the bug was.
 
 Those five were measured rather than designed: they are what building one
 context pack by hand needed and nothing more. The evidence that this is the
@@ -906,11 +906,26 @@ the conformance suite all five run — which is where it should have been found,
 except that the suite drives the envelope and the refusal sat in the connector's
 own `Load`.
 
+**And the two that were still missing when the paragraph above was written.**
+Asked what kinds of thing a graph held, an agent made eighty-three tool calls —
+an anchor search per letter of the alphabet, because a substring search is
+genuinely the only way to enumerate with one — and produced a table that was
+right about the total and wrong in five places under it: thirteen types where
+the load has fourteen, four of the counts off by one or two, and one row reading
+"1–2" because it could not tell. Asked to list every person it named thirteen of
+twenty-one, having said twenty in the table a minute earlier — one graph, two
+runs, two answers that do not agree with each other, neither hedged. A total
+that comes out right because the errors cancel is the worst version of this: it
+is the number a reader would spot-check. `Types` and `OfType` are that hole, and
+the count is on the vocabulary rather than left to a second call because the
+count is what tells a caller which limit to pass — which is the difference
+between reading a class out and truncating it. Walking deeper than one hop was
+the same shape one field over and needed no new method: `Claims` returned names
+and took an ID, so the fix was to return the ID as well.
+
 What is still not built: a graph store of any kind inside alchemy, which is §4
-and deliberate. On the read side, enumeration by type and a walk deeper than one
-hop — measured gaps rather than suspected ones, an agent with no way to
-enumerate having spent its whole budget calling the anchor search with single
-letters.
+and deliberate. On the read side, nothing is a measured gap today — which is a
+statement about what has been measured, not a claim that seven is the number.
 
 The document this began as was written so the first line of code would answer
 to something. It did.
