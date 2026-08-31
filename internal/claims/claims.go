@@ -33,8 +33,12 @@ package claims
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -303,4 +307,108 @@ func keys(m map[string]float64) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// StoreConnectors is the stores the companion module holds: the directories
+// directly under connectors/ that carry non-test Go source, minus the shared
+// internal ones.
+//
+// It counts directories rather than packages because that is what the sentence
+// in DESIGN.md §9 counts -- "five stores" -- and a helper added under
+// connectors/internal is not a store. Reading the tree rather than a list keeps
+// the number honest in the one direction that matters: a sixth connector cannot
+// be added without the sentence being corrected.
+func StoreConnectors(root string) ([]string, error) {
+	base := filepath.Join(root, "connectors")
+	ents, err := os.ReadDir(base)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range ents {
+		if !e.IsDir() || e.Name() == "internal" || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		files, err := os.ReadDir(filepath.Join(base, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f.Name(), ".go") && !strings.HasSuffix(f.Name(), "_test.go") {
+				out = append(out, e.Name())
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// InterfaceMethods is the method names of one interface declared in one file.
+//
+// Parsed rather than grepped, because the sentence it checks is about the SHAPE
+// of the interface -- "five primitives" -- and a comment inside the block that
+// happened to look like a signature would make a grep agree with a number that
+// was wrong. go/ast is the standard library, so this costs the dependency count
+// nothing, which §4 cares about more than most repositories would.
+func InterfaceMethods(path, name string) ([]string, error) {
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range f.Decls {
+		gd, ok := d.(*ast.GenDecl)
+		if !ok || gd.Tok != token.TYPE {
+			continue
+		}
+		for _, sp := range gd.Specs {
+			ts, ok := sp.(*ast.TypeSpec)
+			if !ok || ts.Name.Name != name {
+				continue
+			}
+			it, ok := ts.Type.(*ast.InterfaceType)
+			if !ok {
+				return nil, fmt.Errorf("%s in %s is not an interface", name, path)
+			}
+			var out []string
+			for _, m := range it.Methods.List {
+				for _, n := range m.Names {
+					out = append(out, n.Name)
+				}
+			}
+			sort.Strings(out)
+			return out, nil
+		}
+	}
+	return nil, fmt.Errorf("no interface %s in %s", name, path)
+}
+
+// ReadersAmong is the connectors that declare themselves a recall.Reader.
+//
+// The declaration is the assertion -- `var _ recall.Reader = (*Loader)(nil)` is
+// what makes the compiler check it -- so this counts the stores that have made
+// it, which is exactly what "three implement recall.Reader" says.
+func ReadersAmong(root string, stores []string) ([]string, error) {
+	var out []string
+	for _, s := range stores {
+		files, err := filepath.Glob(filepath.Join(root, "connectors", s, "*.go"))
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f, "_test.go") {
+				continue
+			}
+			b, err := os.ReadFile(f)
+			if err != nil {
+				return nil, err
+			}
+			if strings.Contains(string(b), "recall.Reader = ") {
+				out = append(out, s)
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }

@@ -1,6 +1,8 @@
 package claims_test
 
 import (
+	"path/filepath"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -135,4 +137,58 @@ func TestNoSourceFileExceedsSixHundredLines(t *testing.T) {
 		t.Fatalf("%d file(s) over %d lines: %v", len(over), limit, over)
 	}
 	t.Logf("longest hand-written file: %s at %d lines (limit %d)", longestName, longest, limit)
+}
+
+// DESIGN.md §9: "Five stores: Neo4j, pgvector, Qdrant, CortexDB, and any SPARQL
+// endpoint that speaks RDF-star."
+//
+// The list and not the count, for the reason the dependency check is a list: a
+// buyer reads the names. A connector renamed or swapped would leave a count
+// passing and the sentence wrong about what they can actually load into.
+func TestTheStoresAreTheOnesDesignNames(t *testing.T) {
+	// Verbatim from DESIGN.md §9. Correct both together or neither.
+	documented := []string{"cortexdb", "neo4j", "pgvector", "qdrant", "rdf"}
+
+	got, err := claims.StoreConnectors(root(t))
+	if err != nil {
+		t.Fatalf("reading connectors/: %v", err)
+	}
+	if !reflect.DeepEqual(got, documented) {
+		t.Fatalf("connectors/ holds %v, DESIGN.md §9 names %v", got, documented)
+	}
+}
+
+// DESIGN.md §9: "Three implement recall.Reader, which is five primitives —
+// find an anchor, walk one hop, resolve a citation, ask what is unanswered, ask
+// what contributed".
+//
+// Two numbers in one sentence, so two assertions. The five is the interface's
+// own shape and the three is how many stores have taken it on; either can move
+// without the other, and a check that folded them together would let one drift
+// under cover of the other still being right.
+func TestTheReadSideIsTheShapeDesignStates(t *testing.T) {
+	// Verbatim from DESIGN.md §9, in the order the sentence lists them.
+	documented := []string{"Find", "Claims", "Cite", "Unanswered", "Contributions"}
+	sort.Strings(documented)
+
+	r := root(t)
+	got, err := claims.InterfaceMethods(filepath.Join(r, "pkg", "recall", "recall.go"), "Reader")
+	if err != nil {
+		t.Fatalf("reading recall.Reader: %v", err)
+	}
+	if !reflect.DeepEqual(got, documented) {
+		t.Fatalf("recall.Reader has %v, DESIGN.md §9 names %v", got, documented)
+	}
+
+	stores, err := claims.StoreConnectors(r)
+	if err != nil {
+		t.Fatalf("reading connectors/: %v", err)
+	}
+	readers, err := claims.ReadersAmong(r, stores)
+	if err != nil {
+		t.Fatalf("reading the connectors: %v", err)
+	}
+	if len(readers) != 3 {
+		t.Fatalf("%d connectors implement recall.Reader (%v), DESIGN.md §9 says three", len(readers), readers)
+	}
 }

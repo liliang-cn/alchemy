@@ -844,7 +844,73 @@ would mean the service holding graphs so a new claim could be checked against
 an old one, and that is §4 — so the honest answer today is that alchemy
 corrects a corpus by re-running it, not by patching it.
 
-What is still not built: a graph store of any kind, which is §4 and deliberate.
+### The read side, and what it is for
+
+§4 still holds: alchemy stores nothing. What it has is a companion module,
+`connectors/`, that puts a result into somebody else's store and reads it back
+out — and the second half is much newer than the first.
+
+Five stores: Neo4j, pgvector, Qdrant, CortexDB, and any SPARQL endpoint that
+speaks RDF-star. All five implement `sink.Sink` and pass one conformance suite.
+Three implement `recall.Reader`, which is five primitives — find an anchor, walk
+one hop, resolve a citation, ask what is unanswered, ask what contributed — each
+taking the load as a parameter rather than as an option, because the default is
+where the bug was.
+
+Those five were measured rather than designed: they are what building one
+context pack by hand needed and nothing more. The evidence that this is the
+right way to arrive at a primitive is that the fifth arrived after the first
+four were in use. An agent was asked who the CTO was and answered from a node
+two sources had silently been merged into — two mentions of a bare first name,
+joined on string equality — while the graph carefully reported the join it had
+*refused* to make on a fuller name one row over. Both agent runtimes stated it
+as settled, six runs out of six, and none of the first four primitives could
+have told them otherwise. So the graph reported the joins it declined and said
+nothing about the ones it made, and only half of identity was visible — the
+wrong half, because the other one has already been acted on. `Contributions` is
+that hole. It reports and does not judge: a primitive that answered "risky"
+would be doing the judging §2.1 reserves for a person.
+
+**What the read side is checked against.** Four Halcyon sources through the
+pipeline, into Neo4j, out through `recall.Reader`, into a ReAct agent on two
+unrelated runtimes — one Go, one Rust — five questions, three runs each. The
+answers were identical in content on both sides: the same people, the same
+citations, the same stated-versus-inferred split, the same refusal where the
+graph does not say. Where the graph is the constraint the runtime is invisible,
+which is the result that experiment was for.
+
+It also produced three defects that belonged to the graph rather than to either
+agent, and all three were one shape — a tool demanding something its own output
+does not contain.
+
+- `Unanswered` treated `"all"` as a literal substring while its description told
+  the model to pass `"all"`. Twenty-nine runs in thirty wrote "no unresolved
+  identity questions" against a store holding thirteen of them.
+- `Cite` had two outcomes where the data has three. A record whose producer did
+  not work in chunks has nothing to quote, which is not a citation that failed;
+  seven of thirteen attempts were refused with the sentence reserved for
+  evidence that does not check out, and §5b ranks those records *above* a model
+  reading prose.
+- `Mark` renders a chunkless claim as `[team.json]` with no `#n`, and `Cite`
+  required an index.
+
+**And one that was a rule change nothing carried into the stores.** Two records
+under one ID that agree about the node are corroboration and not a collision —
+`preflight` says so — but each connector had met the second record on its own
+terms: two kept the last write, one would have failed at a primary key, and the
+triple store put both sources on one annotation with nothing saying which went
+with which. Two of the five refused such a result outright, so the one thing
+this product exists to produce, a graph merged from several documents, could not
+be loaded into them at all. The fold is now in `sink`, once, and the case is in
+the conformance suite all five run — which is where it should have been found,
+except that the suite drives the envelope and the refusal sat in the connector's
+own `Load`.
+
+What is still not built: a graph store of any kind inside alchemy, which is §4
+and deliberate. On the read side, enumeration by type and a walk deeper than one
+hop — measured gaps rather than suspected ones, an agent with no way to
+enumerate having spent its whole budget calling the anchor search with single
+letters.
 
 The document this began as was written so the first line of code would answer
 to something. It did.
