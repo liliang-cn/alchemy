@@ -3,6 +3,7 @@ package kgagent_test
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/liliang-cn/alchemy/examples/kgagent"
@@ -268,5 +269,105 @@ func TestDescribingAPlainRecordAndAMissingOne(t *testing.T) {
 	}
 	if got := call(t, byName["graph_describe"], map[string]any{"id": "nobody"}); !strings.Contains(got, "no entity") {
 		t.Errorf("a missing id answered %q", got)
+	}
+}
+
+// A trace has to tell a batch from a retry, and it did not.
+//
+// Ten calls arrived in one message inside ten milliseconds, four of them the
+// same call. Rendered as a list of names they read as an agent re-asking a
+// question it was unhappy with, and that reading was written up twice as
+// evidence a tool had answered the wrong question. It was not: the model emits
+// duplicates inside one parallel batch. The trace is the instrument, and an
+// instrument that cannot tell those apart keeps producing that mistake.
+func TestTheTraceTellsAParallelBatchFromARetry(t *testing.T) {
+	byName, g := tools(t)
+	claims := byName["graph_claims"]
+
+	// Four identical calls at once, which is what the model actually emitted.
+	var wg sync.WaitGroup
+	release := make(chan struct{})
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-release
+			if _, err := claims.Do(context.Background(), map[string]any{"id": "person:mira"}); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	close(release)
+	wg.Wait()
+
+	got := g.Calls()
+	if len(got) != 4 {
+		t.Fatalf("trace = %v, want all four calls recorded; a trace that hides duplicates hides the finding", got)
+	}
+	var repeats, parallel int
+	for _, c := range got {
+		if strings.Contains(c, "repeat") {
+			repeats++
+		}
+		if strings.Contains(c, "batch") || strings.Contains(c, "parallel") {
+			parallel++
+		}
+	}
+	if repeats != 3 {
+		t.Errorf("%d calls marked as repeats, want 3: %v", repeats, got)
+	}
+	if parallel == 0 {
+		t.Errorf("no call is marked as concurrent, so the trace still reads as a sequence: %v", got)
+	}
+}
+
+// Identical calls share one read of the store. It is sound rather than a
+// cache with a caveat: a load is immutable once complete and pkg/recall refuses
+// to serve one that is not, so two identical reads in one run cannot disagree.
+func TestIdenticalCallsReadTheStoreOnce(t *testing.T) {
+	s := graph()
+	counted := &counting{store: s}
+	g := &kgagent.Graph{Reader: counted, Load: "ld-1"}
+	var claims kgagent.Tool
+	for _, tool := range g.Tools() {
+		if tool.Name == "graph_claims" {
+			claims = tool
+		}
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := claims.Do(context.Background(), map[string]any{"id": "person:mira"}); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := counted.claims.Load(); n != 1 {
+		t.Errorf("the store was read %d times for six identical calls, want 1", n)
+	}
+	// And all six are still in the trace, because collapsing the read must not
+	// collapse the evidence.
+	if len(g.Calls()) != 6 {
+		t.Errorf("trace lost calls: %v", g.Calls())
+	}
+}
+
+// Different arguments are different questions, even when the argument the trace
+// displays is the same. graph_of_type shows only the type; a key built from
+// what is displayed would answer a request for 200 with a page of 2.
+func TestCallsThatDifferOnlyInAnUndisplayedArgumentAreNotShared(t *testing.T) {
+	byName, _ := tools(t)
+	ofType := byName["graph_of_type"]
+	small := call(t, ofType, map[string]any{"type": "Person", "limit": "2"})
+	large := call(t, ofType, map[string]any{"type": "Person", "limit": "15"})
+	if small == large {
+		t.Fatal("two different limits returned the same page; the key ignores an argument that changes the answer")
+	}
+	if !strings.Contains(small, "shown") {
+		t.Errorf("the small page does not report that it is one: %q", small)
 	}
 }

@@ -3,6 +3,8 @@ package kgagent_test
 import (
 	"context"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/recall"
@@ -151,4 +153,18 @@ func graph() *store {
 			Detail: "one name is the other with a word added", Left: "Nadia", Right: "Nadia Okonkwo",
 		}},
 	}
+}
+
+// counting wraps a store to say how often it was actually read.
+type counting struct {
+	*store
+	claims atomic.Int64
+}
+
+func (c *counting) Claims(ctx context.Context, load, id string) ([]recall.Claim, error) {
+	c.claims.Add(1)
+	// Slow enough that six concurrent callers overlap, which is the case
+	// single-flight exists for and a plain cache would miss.
+	time.Sleep(20 * time.Millisecond)
+	return c.store.Claims(ctx, load, id)
 }

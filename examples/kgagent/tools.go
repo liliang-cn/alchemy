@@ -85,8 +85,46 @@ type Graph struct {
 	Reader recall.Reader
 	Load   string
 
-	mu    sync.Mutex
-	calls []string
+	mu       sync.Mutex
+	calls    []call
+	inflight map[string]*flight
+	live     int
+}
+
+// call is one thing the agent asked, with the two facts that make a trace
+// readable.
+//
+// Both were missing, and their absence cost a wrong conclusion rather than a
+// wrong answer. A trace that is a list of names reads as a sequence, so ten
+// calls emitted in one message inside ten milliseconds -- four of them the same
+// call -- read as an agent re-asking a question it was unhappy with, and were
+// written up twice as evidence that a tool had answered the wrong question. The
+// timestamps said otherwise: one parallel batch, with duplicates inside it. An
+// instrument that cannot tell a retry from a batch will keep producing that
+// mistake.
+type call struct {
+	text string
+	// Parallel is true when another call was still in flight when this one
+	// started, which is what distinguishes a batch from a sequence.
+	Parallel bool
+	// Repeat is true when an identical call had already been made in this run.
+	Repeat bool
+}
+
+// flight is one distinct call, in progress or finished.
+//
+// Identical calls share it, which is sound rather than an optimisation with a
+// caveat: a load is immutable once complete and pkg/recall refuses to serve one
+// that is not, so two identical reads in one run cannot disagree. Nothing is
+// hidden by it -- every duplicate is still recorded and still rendered as one.
+//
+// It is single-flight and not a cache, because a cache would not have helped:
+// ten identical calls arriving inside ten milliseconds all miss a map that is
+// only written when the first one returns.
+type flight struct {
+	done chan struct{}
+	out  any
+	err  error
 }
 
 // Calls is what was asked of the graph, in order, rendered the way a person
@@ -100,16 +138,73 @@ type Graph struct {
 func (g *Graph) Calls() []string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return append([]string(nil), g.calls...)
+	out := make([]string, 0, len(g.calls))
+	for _, c := range g.calls {
+		line := c.text
+		switch {
+		case c.Repeat && c.Parallel:
+			line += "  [repeat, same batch]"
+		case c.Repeat:
+			line += "  [repeat]"
+		case c.Parallel:
+			line += "  [parallel]"
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
-// note records one call. It is locked because a Reader is documented as safe
-// for concurrent use, "because the thing on the other end of it is an agent
-// that will ask three of these at once".
-func (g *Graph) note(name, arg string) {
+// serve runs one tool call, records it, and lets identical calls share a single
+// read of the store.
+//
+// key is what makes two calls identical and is built from every argument rather
+// than from the one the trace displays: graph_of_type("Person", limit 15) and
+// the same type with a different limit are different questions, and a key taken
+// from the displayed argument alone would answer the second with the first's
+// truncated page.
+func (g *Graph) serve(name, shown, key string, do func() (any, error)) (any, error) {
 	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.calls = append(g.calls, name+"("+arg+")")
+	if g.inflight == nil {
+		g.inflight = map[string]*flight{}
+	}
+	f, repeat := g.inflight[key]
+	g.calls = append(g.calls, call{text: name + "(" + shown + ")", Parallel: g.live > 0, Repeat: repeat})
+	g.live++
+	if repeat {
+		g.mu.Unlock()
+		<-f.done
+		g.done()
+		return f.out, f.err
+	}
+	f = &flight{done: make(chan struct{})}
+	g.inflight[key] = f
+	g.mu.Unlock()
+
+	f.out, f.err = do()
+	close(f.done)
+	g.done()
+	return f.out, f.err
+}
+
+func (g *Graph) done() {
+	g.mu.Lock()
+	g.live--
+	g.mu.Unlock()
+}
+
+// key renders a call for comparison: the tool and every argument, ordered.
+func key(name string, a map[string]any) string {
+	parts := make([]string, 0, len(a))
+	for k := range a {
+		parts = append(parts, k)
+	}
+	sort.Strings(parts)
+	var b strings.Builder
+	b.WriteString(name)
+	for _, k := range parts {
+		fmt.Fprintf(&b, "\x00%s=%s", k, str(a[k]))
+	}
+	return b.String()
 }
 
 // Tools is the graph as an agent sees it: one tool per question pkg/recall can
@@ -128,26 +223,27 @@ func (g *Graph) find() Tool {
 		Schema: schema([]string{"name"}, nil),
 		Do: func(ctx context.Context, a map[string]any) (any, error) {
 			name := str(a["name"])
-			g.note("graph_find", name)
-			found, err := g.Reader.Find(ctx, g.Load, name, anchorLimit)
-			if err != nil {
-				return nil, err
-			}
-			if len(found.Nodes) == 0 {
-				return "no entity in the graph has that in its name", nil
-			}
-			var b strings.Builder
-			for _, n := range found.Nodes {
-				fmt.Fprintf(&b, "%s  (%s)  id=%s\n", n.Name, n.Type, n.ID)
-			}
-			if found.Truncated() {
-				// Naming what to DO about it. The number alone is what an agent
-				// had before: told its list was incomplete, given nothing to
-				// complete it with, and left to state it anyway.
-				fmt.Fprintf(&b, "(%d more not shown — narrow the text, or use graph_types and "+
-					"graph_of_type to read a whole kind)\n", found.Total-len(found.Nodes))
-			}
-			return b.String(), nil
+			return g.serve("graph_find", name, key("graph_find", a), func() (any, error) {
+				found, err := g.Reader.Find(ctx, g.Load, name, anchorLimit)
+				if err != nil {
+					return nil, err
+				}
+				if len(found.Nodes) == 0 {
+					return "no entity in the graph has that in its name", nil
+				}
+				var b strings.Builder
+				for _, n := range found.Nodes {
+					fmt.Fprintf(&b, "%s  (%s)  id=%s\n", n.Name, n.Type, n.ID)
+				}
+				if found.Truncated() {
+					// Naming what to DO about it. The number alone is what an agent
+					// had before: told its list was incomplete, given nothing to
+					// complete it with, and left to state it anyway.
+					fmt.Fprintf(&b, "(%d more not shown — narrow the text, or use graph_types and "+
+						"graph_of_type to read a whole kind)\n", found.Total-len(found.Nodes))
+				}
+				return b.String(), nil
+			})
 		},
 	}
 }
@@ -159,19 +255,20 @@ func (g *Graph) types() Tool {
 			"question about what the graph contains, or to list everything of some kind. Takes no arguments.",
 		Schema: schema(nil, nil),
 		Do: func(ctx context.Context, a map[string]any) (any, error) {
-			g.note("graph_types", "")
-			types, err := g.Reader.Types(ctx, g.Load)
-			if err != nil {
-				return nil, err
-			}
-			if len(types) == 0 {
-				return "this load holds no entities", nil
-			}
-			var b strings.Builder
-			for _, t := range types {
-				fmt.Fprintf(&b, "%s  %d\n", t.Type, t.Count)
-			}
-			return b.String(), nil
+			return g.serve("graph_types", "", key("graph_types", a), func() (any, error) {
+				types, err := g.Reader.Types(ctx, g.Load)
+				if err != nil {
+					return nil, err
+				}
+				if len(types) == 0 {
+					return "this load holds no entities", nil
+				}
+				var b strings.Builder
+				for _, t := range types {
+					fmt.Fprintf(&b, "%s  %d\n", t.Type, t.Count)
+				}
+				return b.String(), nil
+			})
 		},
 	}
 }
@@ -184,33 +281,34 @@ func (g *Graph) ofType() Tool {
 		Schema: schema([]string{"type"}, []string{"limit"}),
 		Do: func(ctx context.Context, a map[string]any) (any, error) {
 			typ := str(a["type"])
-			g.note("graph_of_type", typ)
-			// The limit is the model's, because graph_types has just told it the
-			// number. graph_find's is fixed, and that is how an agent came to
-			// answer "list every person" with thirteen of twenty-one.
-			limit := atoi(str(a["limit"]), defaultOfTypeLimit)
-			if limit <= 0 {
-				// Clamped here rather than in atoi, because zero is a legal
-				// value for the other caller and the wrong one for this: chunk
-				// 0 is a real chunk, and recall refuses a limit of 0 outright.
-				limit = defaultOfTypeLimit
-			}
-			found, err := g.Reader.OfType(ctx, g.Load, typ, limit)
-			if err != nil {
-				return nil, err
-			}
-			if len(found.Nodes) == 0 {
-				return "no entity in the graph has that type — the type names are what graph_types returns", nil
-			}
-			var b strings.Builder
-			for _, n := range found.Nodes {
-				fmt.Fprintf(&b, "%s  id=%s\n", n.Name, n.ID)
-			}
-			if found.Truncated() {
-				fmt.Fprintf(&b, "(%d of %d shown — ask again with limit %d)\n",
-					len(found.Nodes), found.Total, found.Total)
-			}
-			return b.String(), nil
+			return g.serve("graph_of_type", typ, key("graph_of_type", a), func() (any, error) {
+				// The limit is the model's, because graph_types has just told it the
+				// number. graph_find's is fixed, and that is how an agent came to
+				// answer "list every person" with thirteen of twenty-one.
+				limit := atoi(str(a["limit"]), defaultOfTypeLimit)
+				if limit <= 0 {
+					// Clamped here rather than in atoi, because zero is a legal
+					// value for the other caller and the wrong one for this: chunk
+					// 0 is a real chunk, and recall refuses a limit of 0 outright.
+					limit = defaultOfTypeLimit
+				}
+				found, err := g.Reader.OfType(ctx, g.Load, typ, limit)
+				if err != nil {
+					return nil, err
+				}
+				if len(found.Nodes) == 0 {
+					return "no entity in the graph has that type — the type names are what graph_types returns", nil
+				}
+				var b strings.Builder
+				for _, n := range found.Nodes {
+					fmt.Fprintf(&b, "%s  id=%s\n", n.Name, n.ID)
+				}
+				if found.Truncated() {
+					fmt.Fprintf(&b, "(%d of %d shown — ask again with limit %d)\n",
+						len(found.Nodes), found.Total, found.Total)
+				}
+				return b.String(), nil
+			})
 		},
 	}
 }
@@ -224,40 +322,41 @@ func (g *Graph) describe() Tool {
 		Schema: schema([]string{"id"}, nil),
 		Do: func(ctx context.Context, a map[string]any) (any, error) {
 			id := str(a["id"])
-			g.note("graph_describe", id)
-			d, err := g.Reader.Describe(ctx, g.Load, id)
-			if err != nil {
-				return nil, err
-			}
-			if d.ID == "" {
-				return "this load holds no entity with that id", nil
-			}
-			var b strings.Builder
-			fmt.Fprintf(&b, "%s (%s) id=%s\n", d.Name, d.Type, d.ID)
-			if len(d.Aliases) > 0 {
-				fmt.Fprintf(&b, "also called: %s\n", strings.Join(d.Aliases, ", "))
-			}
-			for _, k := range sortedKeys(d.Attributes) {
-				fmt.Fprintf(&b, "  %s: %v\n", k, d.Attributes[k])
-			}
-			p := d.Provenance
-			fmt.Fprintf(&b, "recorded by %s", p.Producer)
-			// The asserter and the date, which is the point of returning the
-			// whole provenance rather than the four fields a claim carries. A
-			// record a named person made seven months ago is a record a reader
-			// can weigh and a person can be asked about; without these two it
-			// reads as timeless.
-			if p.At != "" {
-				fmt.Fprintf(&b, " on %s", p.At)
-			}
-			if p.By != "" {
-				fmt.Fprintf(&b, ", asserted by %s", p.By)
-			}
-			if m := Mark(p.Source, p.Chunk); m != "" {
-				fmt.Fprintf(&b, " %s", m)
-			}
-			b.WriteString("\n")
-			return b.String(), nil
+			return g.serve("graph_describe", id, key("graph_describe", a), func() (any, error) {
+				d, err := g.Reader.Describe(ctx, g.Load, id)
+				if err != nil {
+					return nil, err
+				}
+				if d.ID == "" {
+					return "this load holds no entity with that id", nil
+				}
+				var b strings.Builder
+				fmt.Fprintf(&b, "%s (%s) id=%s\n", d.Name, d.Type, d.ID)
+				if len(d.Aliases) > 0 {
+					fmt.Fprintf(&b, "also called: %s\n", strings.Join(d.Aliases, ", "))
+				}
+				for _, k := range sortedKeys(d.Attributes) {
+					fmt.Fprintf(&b, "  %s: %v\n", k, d.Attributes[k])
+				}
+				p := d.Provenance
+				fmt.Fprintf(&b, "recorded by %s", p.Producer)
+				// The asserter and the date, which is the point of returning the
+				// whole provenance rather than the four fields a claim carries. A
+				// record a named person made seven months ago is a record a reader
+				// can weigh and a person can be asked about; without these two it
+				// reads as timeless.
+				if p.At != "" {
+					fmt.Fprintf(&b, " on %s", p.At)
+				}
+				if p.By != "" {
+					fmt.Fprintf(&b, ", asserted by %s", p.By)
+				}
+				if m := Mark(p.Source, p.Chunk); m != "" {
+					fmt.Fprintf(&b, " %s", m)
+				}
+				b.WriteString("\n")
+				return b.String(), nil
+			})
 		},
 	}
 }
@@ -285,24 +384,25 @@ func (g *Graph) claims() Tool {
 		Schema: schema([]string{"id"}, nil),
 		Do: func(ctx context.Context, a map[string]any) (any, error) {
 			id := str(a["id"])
-			g.note("graph_claims", id)
-			claims, err := g.Reader.Claims(ctx, g.Load, id)
-			if err != nil {
-				return nil, err
-			}
-			if len(claims) == 0 {
-				return "that entity has no neighbours in this graph", nil
-			}
-			var b strings.Builder
-			for _, c := range claims {
-				// The rendered claim stays names, because that is what a model
-				// weighs the sentence in; the ids follow it as the argument for
-				// the next call. Putting ids into the sentence would hand a
-				// reader "e17 -[USES]-> e04", which is what recall.Claim keeps
-				// names to avoid.
-				fmt.Fprintf(&b, "%s   (ids: %s -> %s)\n", c.String(), c.FromID, c.ToID)
-			}
-			return b.String(), nil
+			return g.serve("graph_claims", id, key("graph_claims", a), func() (any, error) {
+				claims, err := g.Reader.Claims(ctx, g.Load, id)
+				if err != nil {
+					return nil, err
+				}
+				if len(claims) == 0 {
+					return "that entity has no neighbours in this graph", nil
+				}
+				var b strings.Builder
+				for _, c := range claims {
+					// The rendered claim stays names, because that is what a model
+					// weighs the sentence in; the ids follow it as the argument for
+					// the next call. Putting ids into the sentence would hand a
+					// reader "e17 -[USES]-> e04", which is what recall.Claim keeps
+					// names to avoid.
+					fmt.Fprintf(&b, "%s   (ids: %s -> %s)\n", c.String(), c.FromID, c.ToID)
+				}
+				return b.String(), nil
+			})
 		},
 	}
 }
@@ -323,24 +423,25 @@ func (g *Graph) cite() Tool {
 			// the number was handed chunk 0 of the file as though it had asked
 			// for it, with nothing about the answer looking wrong.
 			idx := atoi(str(a["chunk"]), -1)
-			g.note("graph_cite", Mark(src, idx))
-			c, err := g.Reader.Cite(ctx, g.Load, src, idx)
-			switch {
-			case errors.Is(err, recall.ErrNoChunk):
-				// Deliberately not phrased as a refusal. §5b ranks a machine
-				// reading something that already asserted a fact ABOVE a model
-				// reading prose, so these are the store's strongest records --
-				// and while this answer was the ErrNoCitation sentence, they
-				// were the ones the model was told to distrust.
-				return "that claim was not extracted from a passage of text, so there is nothing to quote. " +
-					"It came from a source that already asserted the fact. Cite it as [" + src + "] " +
-					"and do not report it as uncited", nil
-			case errors.Is(err, recall.ErrNoCitation):
-				return "that citation does not resolve in this load, so do not treat it as evidence", nil
-			case err != nil:
-				return nil, err
-			}
-			return fmt.Sprintf("%s bytes %d-%d:\n%s", c.Source, c.Start, c.End, c.Text), nil
+			return g.serve("graph_cite", Mark(src, idx), key("graph_cite", a), func() (any, error) {
+				c, err := g.Reader.Cite(ctx, g.Load, src, idx)
+				switch {
+				case errors.Is(err, recall.ErrNoChunk):
+					// Deliberately not phrased as a refusal. §5b ranks a machine
+					// reading something that already asserted a fact ABOVE a model
+					// reading prose, so these are the store's strongest records --
+					// and while this answer was the ErrNoCitation sentence, they
+					// were the ones the model was told to distrust.
+					return "that claim was not extracted from a passage of text, so there is nothing to quote. " +
+						"It came from a source that already asserted the fact. Cite it as [" + src + "] " +
+						"and do not report it as uncited", nil
+				case errors.Is(err, recall.ErrNoCitation):
+					return "that citation does not resolve in this load, so do not treat it as evidence", nil
+				case err != nil:
+					return nil, err
+				}
+				return fmt.Sprintf("%s bytes %d-%d:\n%s", c.Source, c.Start, c.End, c.Text), nil
+			})
 		},
 	}
 }
@@ -353,26 +454,27 @@ func (g *Graph) openQuestions() Tool {
 		Schema: schema(nil, []string{"about"}),
 		Do: func(ctx context.Context, a map[string]any) (any, error) {
 			about := str(a["about"])
-			g.note("graph_open_questions", about)
-			qs, err := g.Reader.Unanswered(ctx, g.Load, about)
-			if err != nil {
-				return nil, err
-			}
-			if len(qs) == 0 {
-				return "no unresolved identity questions touch that", nil
-			}
-			var b strings.Builder
-			for _, q := range qs {
-				// The subject as well as the detail. recall.Question keeps them
-				// apart because the subject is the PAIR -- "left ~ right", as
-				// alchemy rendered it -- and the detail is the case against
-				// them. Printing only the detail leaves the model reading "one
-				// name is the other with a word added" with no way to tell which
-				// two nodes, and it read as an answer at all only because
-				// alchemy's detail text usually repeats the names.
-				fmt.Fprintf(&b, "- %s: %s\n", q.Subject, q.Detail)
-			}
-			return b.String(), nil
+			return g.serve("graph_open_questions", about, key("graph_open_questions", a), func() (any, error) {
+				qs, err := g.Reader.Unanswered(ctx, g.Load, about)
+				if err != nil {
+					return nil, err
+				}
+				if len(qs) == 0 {
+					return "no unresolved identity questions touch that", nil
+				}
+				var b strings.Builder
+				for _, q := range qs {
+					// The subject as well as the detail. recall.Question keeps them
+					// apart because the subject is the PAIR -- "left ~ right", as
+					// alchemy rendered it -- and the detail is the case against
+					// them. Printing only the detail leaves the model reading "one
+					// name is the other with a word added" with no way to tell which
+					// two nodes, and it read as an answer at all only because
+					// alchemy's detail text usually repeats the names.
+					fmt.Fprintf(&b, "- %s: %s\n", q.Subject, q.Detail)
+				}
+				return b.String(), nil
+			})
 		},
 	}
 }
