@@ -56,6 +56,11 @@ the graph had made silently, a citation refused for the store's most trustworthy
 records, an enumeration attempted by trying the alphabet. The measurement is
 written down beside each method.
 
+`examples/kgagent` is that agent — a ReAct loop that knows nothing but these
+seven — and doubles as the instrument the defects were found with. Its tests
+need no server and no model: every case in them is a wrong answer that reached
+production.
+
 `DESIGN.md` is the specification and the argument, including what is deliberately
 *not* built. Every measurable sentence in its status section is a check in
 `internal/claims` that `go test ./...` runs, so the next number to go stale fails

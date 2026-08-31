@@ -45,17 +45,26 @@ tools:
 	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.30.0
 	go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@v2.30.0
 
+# The three modules. They are separate so that the core's dependency list stays
+# what DESIGN.md §9 states -- a buyer wanting Neo4j must not compile pgvector,
+# and neither should compile an agent framework -- but `go test ./...` stops at
+# a module boundary, so a target that named only the first was gating a third of
+# the repository. connectors and examples/kgagent were outside it until this
+# line existed; connectors skips loudly without ALCHEMY_TEST_* servers, and
+# kgagent needs neither a server nor a model.
+MODULES := . connectors examples/kgagent
+
 build:
-	go build ./...
+	@for m in $(MODULES); do (cd $$m && go build ./...) || exit 1; done
 
 test:
-	go test ./... -race -count=1
+	@for m in $(MODULES); do echo "== $$m"; (cd $$m && go test ./... -race -count=1) || exit 1; done
 
 vet:
-	go vet ./...
+	@for m in $(MODULES); do (cd $$m && go vet ./...) || exit 1; done
 
 fmt:
-	gofmt -l .
+	@for m in $(MODULES); do gofmt -l $$m; done
 
 clean:
 	rm -f proto/alchemy/v1/*.pb.go proto/alchemy/v1/*.pb.gw.go docs/*.swagger.json
