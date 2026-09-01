@@ -133,8 +133,17 @@ func TestASourceThatOnlyReferredToANodeIsNotRecordedAsHavingNamedIt(t *testing.T
 				"so repeating the node's own name here would invent unanimity", c.Name)
 		}
 	}
-	if want := []string{"Mira"}; !reflect.DeepEqual(got.Names, want) {
-		t.Errorf("Names = %v, want %v: only the record that named the node contributes a name", got.Names, want)
+	// Only the record that CREATED the node carries a name; a source recovered
+	// from an edge is reported with an empty one rather than the node's, which
+	// would make every join read as unanimous.
+	var named []string
+	for _, c := range got.Contributors {
+		if c.Name != "" {
+			named = append(named, c.Name)
+		}
+	}
+	if want := []string{"Mira"}; !reflect.DeepEqual(named, want) {
+		t.Errorf("named = %v, want %v", named, want)
 	}
 }
 

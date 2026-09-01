@@ -852,7 +852,7 @@ out — and the second half is much newer than the first.
 
 Five stores: Neo4j, pgvector, Qdrant, CortexDB, and any SPARQL endpoint that
 speaks RDF-star. All five implement `sink.Sink` and pass one conformance suite.
-Three implement `recall.Reader`, which is eight primitives — find an anchor,
+Four implement `recall.Reader`, which is eight primitives — find an anchor,
 walk one hop, resolve a citation, ask what is unanswered, ask what contributed,
 read the vocabulary, read out one class, read one record — each taking the load
 as a parameter rather than as an option, because the default is where the bug

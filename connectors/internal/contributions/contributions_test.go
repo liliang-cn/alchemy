@@ -28,7 +28,7 @@ func TestOneSourceMentioningANodeSeveralTimesIsOneContributor(t *testing.T) {
 		{Source: "team.json", Chunk: -1, Producer: alchemy.ProducerGraphImport},
 	})
 	want := recall.Contributions{
-		ID: "person:mira", Type: "Person", Names: []string{"Mira"},
+		ID: "person:mira", Type: "Person",
 		Contributors: []recall.Contributor{
 			{Source: "halcyon-profile.pdf", Chunk: 20, Producer: pdf, Stated: false, Name: "Mira"},
 			{Source: "team.json", Chunk: -1, Producer: alchemy.ProducerGraphImport, Stated: true},
@@ -113,8 +113,10 @@ func TestASourceWithNoRecoverableNameContributesNoName(t *testing.T) {
 		{Source: "team.json", Chunk: -1, Producer: alchemy.ProducerGraphImport},
 		{Source: "docs.md", Chunk: 3, Producer: alchemy.ProducerLLMExtract},
 	})
-	if got.Names != nil {
-		t.Errorf("Names = %#v, want none: nothing here records what either file called the node", got.Names)
+	for _, c := range got.Contributors {
+		if c.Name != "" {
+			t.Errorf("contributor %+v carries a name; nothing here records what either file called the node", c)
+		}
 	}
 }
 

@@ -158,7 +158,7 @@ func TestTheStoresAreTheOnesDesignNames(t *testing.T) {
 	}
 }
 
-// DESIGN.md §9: "Three implement recall.Reader, which is eight primitives —
+// DESIGN.md §9: "Four implement recall.Reader, which is eight primitives —
 // find an anchor, walk one hop, resolve a citation, ask what is unanswered, ask
 // what contributed, read the vocabulary, read out one class, read one record".
 //
@@ -188,7 +188,7 @@ func TestTheReadSideIsTheShapeDesignStates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the connectors: %v", err)
 	}
-	if len(readers) != 3 {
-		t.Fatalf("%d connectors implement recall.Reader (%v), DESIGN.md §9 says three", len(readers), readers)
+	if len(readers) != 4 {
+		t.Fatalf("%d connectors implement recall.Reader (%v), DESIGN.md §9 says four", len(readers), readers)
 	}
 }

@@ -102,26 +102,5 @@ func Assemble(id, typ string, mentions []recall.Contributor) recall.Contribution
 		}
 		return a.Producer < b.Producer
 	})
-	return recall.Contributions{ID: id, Type: typ, Names: names(out), Contributors: out}
-}
-
-// names is the distinct names the contributors used, sorted.
-//
-// An empty name is not a name and is left out. It means "this source referred
-// to the node and this store does not record what it called it", which is a
-// different fact from a source that called it nothing, and putting an empty
-// string into the list would make a reader counting the names conclude the
-// sources disagreed.
-func names(cs []recall.Contributor) []string {
-	seen := make(map[string]bool, len(cs))
-	var out []string
-	for _, c := range cs {
-		if c.Name == "" || seen[c.Name] {
-			continue
-		}
-		seen[c.Name] = true
-		out = append(out, c.Name)
-	}
-	sort.Strings(out)
-	return out
+	return recall.Contributions{ID: id, Type: typ, Contributors: out}
 }

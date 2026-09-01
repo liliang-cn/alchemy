@@ -191,9 +191,13 @@ func (l *Loader) Findings(ctx context.Context, loadID string) (Findings, error) 
 
 func readEntity(p map[string]any) alchemy.Entity {
 	return alchemy.Entity{
-		ID:         str(p[keyEntityID]),
-		Type:       str(p[keyType]),
-		Name:       str(p[keyName]),
+		ID:   str(p[keyEntityID]),
+		Type: str(p[keyType]),
+		Name: str(p[keyName]),
+		// Written by build.go and dropped here until Describe asked for them,
+		// so every entity this package returned came back with no aliases while
+		// the store held them.
+		Aliases:    aliasesOf(p[keyAliases]),
 		Attributes: attrs(p[keyAttributes]),
 		Provenance: readProvenance(p),
 	}

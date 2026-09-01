@@ -263,14 +263,31 @@ type Contributions struct {
 	// answers can tell them apart.
 	ID   string
 	Type string
-	// Names are the distinct names the contributors used, sorted. One is the
-	// ordinary case; more than one means the store joined records that did not
-	// agree about what the thing is called, which a reader must be able to see.
-	Names []string
 	// Contributors are the mentions, ordered by source then chunk so two reads
 	// of one node produce the same document.
 	Contributors []Contributor
 }
+
+// There was a Names field here, and it promised something no store can deliver.
+//
+// It said: "the distinct names the contributors used; more than one means the
+// store joined records that did not agree about what the thing is called". That
+// is the right question to be able to ask and it is unreachable by
+// construction. preflight refuses two entities under one ID whose names differ
+// -- that is EntityIDReused, a refusal, not a join -- and sink.fold keeps the
+// first of the ones that agree. So by the time anything is stored, every record
+// under one ID has the same name, and the slice could hold nothing or one thing
+// and never the case it was written for.
+//
+// A field that can only ever take the shape its documentation calls ordinary is
+// a promise the reader will believe. The name each contributor gave is on the
+// Contributor, where it is what the store actually knows -- filled for the
+// record that created the node, empty for a source recovered from an edge --
+// and the count a caller wanted is len(Contributors).
+//
+// Making it true is a write-side change and not a reader change: nothing on an
+// alchemy.Relation records what the asserting document called its endpoints.
+// That is worth doing if somebody needs it. Documenting it as done was not.
 
 // Joined reports whether more than one source contributed. It is a method
 // rather than a field so it cannot fall out of step with the slice.
