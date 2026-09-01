@@ -76,7 +76,7 @@ func TestTheDependenciesAreTheOnesDesignSaysTheyAre(t *testing.T) {
 // wrote and maintains. internal/ is excluded for the same reason the build
 // gate is not itself a product feature.
 func TestThePackageCountIsTheOneDesignStates(t *testing.T) {
-	const documented = 23
+	const documented = 24
 
 	pkgs, err := claims.PackagesUnder(root(t), "pkg")
 	if err != nil {

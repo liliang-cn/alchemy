@@ -1,4 +1,4 @@
-package kgagent_test
+package agenttool_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/liliang-cn/alchemy/examples/kgagent"
+	"github.com/liliang-cn/alchemy/pkg/agenttool"
 )
 
 // Every test in this file is a defect that reached production and was found by
@@ -15,17 +15,17 @@ import (
 // each was invisible from inside pkg/recall, which answered exactly what it was
 // asked every time.
 
-func tools(t *testing.T) (map[string]kgagent.Tool, *kgagent.Graph) {
+func tools(t *testing.T) (map[string]agenttool.Tool, *agenttool.Graph) {
 	t.Helper()
-	g := &kgagent.Graph{Reader: graph(), Load: "ld-1"}
-	byName := map[string]kgagent.Tool{}
+	g := &agenttool.Graph{Reader: graph(), Load: "ld-1"}
+	byName := map[string]agenttool.Tool{}
 	for _, tool := range g.Tools() {
 		byName[tool.Name] = tool
 	}
 	return byName, g
 }
 
-func call(t *testing.T, tool kgagent.Tool, args map[string]any) string {
+func call(t *testing.T, tool agenttool.Tool, args map[string]any) string {
 	t.Helper()
 	out, err := tool.Do(context.Background(), args)
 	if err != nil {
@@ -285,8 +285,8 @@ func TestTheTraceTellsAParallelBatchFromARetry(t *testing.T) {
 	// the first call can finish before the last one starts and nothing is
 	// concurrent -- which is a test that passes or fails on how fast the
 	// machine is, about the one property it exists to check.
-	g := &kgagent.Graph{Reader: &counting{store: graph()}, Load: "ld-1"}
-	var claims kgagent.Tool
+	g := &agenttool.Graph{Reader: &counting{store: graph()}, Load: "ld-1"}
+	var claims agenttool.Tool
 	for _, tool := range g.Tools() {
 		if tool.Name == "graph_claims" {
 			claims = tool
@@ -336,8 +336,8 @@ func TestTheTraceTellsAParallelBatchFromARetry(t *testing.T) {
 func TestIdenticalCallsReadTheStoreOnce(t *testing.T) {
 	s := graph()
 	counted := &counting{store: s}
-	g := &kgagent.Graph{Reader: counted, Load: "ld-1"}
-	var claims kgagent.Tool
+	g := &agenttool.Graph{Reader: counted, Load: "ld-1"}
+	var claims agenttool.Tool
 	for _, tool := range g.Tools() {
 		if tool.Name == "graph_claims" {
 			claims = tool
@@ -378,5 +378,62 @@ func TestCallsThatDifferOnlyInAnUndisplayedArgumentAreNotShared(t *testing.T) {
 	}
 	if !strings.Contains(small, "shown") {
 		t.Errorf("the small page does not report that it is one: %q", small)
+	}
+}
+
+// The primitive that reports the joins the store MADE had no tool at all.
+//
+// Eight questions pkg/recall can answer, seven tools. The missing one is the
+// one added after both agent runtimes stated "Mira is the CTO" as settled fact,
+// six runs out of six, from a node two sources had silently been merged into.
+// An agent could not ask about it, which is the same as the graph not knowing.
+func TestTheJoinsTheGraphMadeCanBeAsked(t *testing.T) {
+	byName, _ := tools(t)
+	tool, ok := byName["graph_contributors"]
+	if !ok {
+		t.Fatal("no tool asks which sources had a hand in a node")
+	}
+
+	// A node one source named and another only referred to: a join.
+	got := call(t, tool, map[string]any{"id": "person:mira"})
+	if !strings.Contains(got, "join the graph made") {
+		t.Errorf("a node two sources contributed to did not report as a join: %q", got)
+	}
+	if !strings.Contains(got, "[team.json]") || !strings.Contains(got, "[profile.pdf#20]") {
+		t.Errorf("the contributing sources are not named: %q", got)
+	}
+	// Only the record that created the node knows what it called it; saying so
+	// is what stops a reader concluding the sources agreed on the name.
+	if !strings.Contains(got, "did not name it") {
+		t.Errorf("a source recovered from an edge was reported as having named the node: %q", got)
+	}
+	// Reported, not judged: no verdict word anywhere.
+	for _, verdict := range []string{"risky", "suspicious", "unsafe", "warning"} {
+		if strings.Contains(strings.ToLower(got), verdict) {
+			t.Errorf("the tool judged rather than reported (%q): %q", verdict, got)
+		}
+	}
+
+	if got := call(t, tool, map[string]any{"id": "nobody"}); !strings.Contains(got, "nothing in this load") {
+		t.Errorf("an id the load does not hold answered %q", got)
+	}
+}
+
+// Every question pkg/recall can answer has a tool. The count is the assertion:
+// a primitive added without one is a question an agent cannot ask, which is
+// what happened to Contributions for as long as it existed.
+func TestEveryPrimitiveHasATool(t *testing.T) {
+	_, g := tools(t)
+	if n := len(g.Tools()); n != 8 {
+		t.Fatalf("%d tools for 8 primitives in recall.Reader", n)
+	}
+	byName, _ := tools(t)
+	for _, want := range []string{
+		"graph_find", "graph_types", "graph_of_type", "graph_describe",
+		"graph_claims", "graph_contributors", "graph_cite", "graph_open_questions",
+	} {
+		if _, ok := byName[want]; !ok {
+			t.Errorf("no tool named %q", want)
+		}
 	}
 }

@@ -45,21 +45,29 @@ honest shape over HTTP.
 
 alchemy holds no database. The companion module `connectors/` writes a result into
 a store you already run — **Neo4j, pgvector, Qdrant, CortexDB, or any SPARQL
-endpoint speaking RDF-star** — and reads it back through `pkg/recall`, seven
+endpoint speaking RDF-star** — and reads it back through `pkg/recall`, eight
 primitives an agent can build a context pack from:
 
-    Find · Claims · Cite · Unanswered · Contributions · Types · OfType
+    Find · Claims · Cite · Unanswered · Contributions · Types · OfType · Describe
 
-They were not designed up front. Each of the last three was added after an agent
+They were not designed up front. Each of the last four was added after an agent
 answered a question wrongly in a way none of the others could have caught: a join
 the graph had made silently, a citation refused for the store's most trustworthy
-records, an enumeration attempted by trying the alphabet. The measurement is
-written down beside each method.
+records, an enumeration attempted by trying the alphabet, an entity whose own
+fields no reader could return. The measurement is written down beside each
+method.
 
-`examples/kgagent` is that agent — a ReAct loop that knows nothing but these
-seven — and doubles as the instrument the defects were found with. Its tests
-need no server and no model: every case in them is a wrong answer that reached
-production.
+`pkg/agenttool` renders those eight as tools a model can choose between, and
+`mcp/` serves that set over Model Context Protocol — so any MCP client can ask a
+loaded graph these questions directly:
+
+```sh
+alchemy-mcp -store neo4j -uri neo4j://host:7687 -load nightly-2026-09-01
+```
+
+`examples/kgagent` is the same tools inside a ReAct loop, and doubles as the
+instrument the defects were found with. Its tests need no server and no model:
+every case in them is a wrong answer that reached production.
 
 `DESIGN.md` is the specification and the argument, including what is deliberately
 *not* built. Every measurable sentence in its status section is a check in

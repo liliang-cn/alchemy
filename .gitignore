@@ -7,3 +7,9 @@
 # Agent worktrees are working state, not source.
 .claude/
 .playwright-mcp/
+
+# Built binaries. The example builds one next to its source, so it reappears
+# every time somebody runs it from that directory.
+/alchemy
+/examples/kgagent/kgagent
+/mcp/alchemy-mcp

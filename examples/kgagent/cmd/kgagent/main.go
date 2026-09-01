@@ -21,7 +21,7 @@ import (
 	"github.com/liliang-cn/agent-go/v3/pkg/providers"
 
 	"github.com/liliang-cn/alchemy/connectors/neo4j"
-	"github.com/liliang-cn/alchemy/examples/kgagent"
+	"github.com/liliang-cn/alchemy/pkg/agenttool"
 	"github.com/liliang-cn/alchemy/pkg/recall"
 )
 
@@ -47,11 +47,11 @@ func main() {
 	})
 	must(err)
 
-	svc, err := agent.New("kgagent").WithLLM(p).WithSystemPrompt(kgagent.Prompt).Build()
+	svc, err := agent.New("kgagent").WithLLM(p).WithSystemPrompt(agenttool.Prompt).Build()
 	must(err)
 	defer svc.Close()
 
-	g := &kgagent.Graph{Reader: reader, Load: os.Getenv("RUN_ID")}
+	g := &agenttool.Graph{Reader: reader, Load: os.Getenv("RUN_ID")}
 	for _, t := range g.Tools() {
 		// Declared read-only, which every tool here is: they read one finished
 		// load and a load is immutable once complete. Without the declaration

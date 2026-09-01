@@ -1,4 +1,4 @@
-package kgagent_test
+package agenttool_test
 
 import (
 	"context"
@@ -18,13 +18,14 @@ import (
 // negative chunk is ErrNoChunk, and a claim carries both names and ids. A fake
 // that got those wrong would let the tests pass over the bugs they exist for.
 type store struct {
-	load      string
-	nodes     []recall.Node
-	records   map[string]recall.Description
-	claims    map[string][]recall.Claim
-	chunks    map[string]recall.Citation // keyed source#index
-	questions []recall.Question
-	types     []recall.TypeCount
+	load          string
+	nodes         []recall.Node
+	records       map[string]recall.Description
+	contributions map[string]recall.Contributions
+	claims        map[string][]recall.Claim
+	chunks        map[string]recall.Citation // keyed source#index
+	questions     []recall.Question
+	types         []recall.TypeCount
 }
 
 func (s *store) Find(_ context.Context, load, name string, limit int) (recall.Found, error) {
@@ -73,7 +74,7 @@ func (s *store) Unanswered(_ context.Context, _, about string) ([]recall.Questio
 }
 
 func (s *store) Contributions(_ context.Context, _, id string) (recall.Contributions, error) {
-	return recall.Contributions{ID: id}, nil
+	return s.contributions[id], nil
 }
 
 func (s *store) Describe(_ context.Context, _, id string) (recall.Description, error) {
@@ -124,6 +125,14 @@ func graph() *store {
 		// One record carrying detail no one-line claim can show: a window in
 		// attributes, and a named person with a date. This is the shape the
 		// leave experiment proved unreachable.
+		// Mira: named by the PDF, referred to by team.json. One node, two
+		// sources, and the second one never said what it called him.
+		contributions: map[string]recall.Contributions{
+			"person:mira": {ID: "person:mira", Type: "Person", Contributors: []recall.Contributor{
+				{Source: "profile.pdf", Chunk: 20, Producer: alchemy.ProducerLLMExtract, Name: "Mira"},
+				{Source: "team.json", Chunk: -1, Producer: alchemy.ProducerGraphImport, Stated: true},
+			}},
+		},
 		records: map[string]recall.Description{
 			"absence:1": {
 				ID: "absence:1", Type: "Absence", Name: "Joel C parental leave",

@@ -51,8 +51,8 @@ tools:
 # a module boundary, so a target that named only the first was gating a third of
 # the repository. connectors and examples/kgagent were outside it until this
 # line existed; connectors skips loudly without ALCHEMY_TEST_* servers, and
-# kgagent needs neither a server nor a model.
-MODULES := . connectors examples/kgagent
+# kgagent and mcp need neither a server nor a model.
+MODULES := . connectors mcp examples/kgagent
 
 build:
 	@for m in $(MODULES); do (cd $$m && go build ./...) || exit 1; done

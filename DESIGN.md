@@ -771,7 +771,7 @@ measured yet.
 **Built, 2026-08-29/30.** §1–§7 are implemented and §6's gateway with them; §8
 is implemented for a single node and designed for more.
 
-Twenty-three packages, 600+ tests, `go test ./... -race` green, six direct
+Twenty-four packages, 600+ tests, `go test ./... -race` green, six direct
 dependencies: a PDF reader, gRPC, protobuf, grpc-gateway with the generated
 API annotations it needs, and a Postgres driver. The pipeline runs end to end
 against real model endpoints, over gRPC and over HTTP.
@@ -944,6 +944,24 @@ plumbing for data alchemy already holds was missing, and a model change argued
 for on top of a missing read path would have been argued from a failure that
 was not the model's. It gets re-run now that the fields arrive, and what it
 says next is what decides.
+
+**And the layer that lets anything call it.** `pkg/agenttool` renders the eight
+primitives as tools a model can choose between — names, descriptions, and the
+argument schemas — and imports no framework and no store, so it is in the core
+module at no cost to the dependency list. `mcp/` is a module of its own that
+serves that set over Model Context Protocol, which means any MCP client can ask
+a graph alchemy loaded the eight questions directly, with no code in between.
+Every tool is declared read-only, because they read one finished load and a load
+is immutable once complete; a client that has to guess assumes it may not
+collapse a repeated call, and the cost of not saying so was measured at
+twenty-five calls for thirteen distinct questions.
+
+The descriptions live with the tools and nowhere else. Four of this repository's
+read-side defects were sentences rather than functions — a tool naming "all" as
+the way to ask for everything while the library took the empty string, one
+demanding a chunk number its own output does not always carry, a walk returning
+names and taking ids — so a second copy of a description for a second client is
+how one tool comes to say two different things.
 
 What is still not built: a graph store of any kind inside alchemy, which is §4
 and deliberate. On the read side, whether a fact needs to be able to say how
