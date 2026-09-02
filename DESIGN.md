@@ -851,12 +851,29 @@ corrects a corpus by re-running it, not by patching it.
 out — and the second half is much newer than the first.
 
 Five stores: Neo4j, pgvector, Qdrant, CortexDB, and any SPARQL endpoint that
-speaks RDF-star. All five implement `sink.Sink` and pass one conformance suite.
-Four implement `recall.Reader`, which is eight primitives — find an anchor,
-walk one hop, resolve a citation, ask what is unanswered, ask what contributed,
-read the vocabulary, read out one class, read one record — each taking the load
-as a parameter rather than as an option, because the default is where the bug
-was.
+speaks RDF-star. All five implement `sink.Sink` and pass one conformance suite,
+and all five implement `recall.Reader` — eight primitives: find an anchor, walk
+one hop, resolve a citation, ask what is unanswered, ask what contributed, read
+the vocabulary, read out one class, read one record. Each takes the load as a
+parameter rather than as an option, because the default is where the bug was.
+
+CortexDB was the last of the five and for a while the argument was that it
+could not be one. The other four hold alchemy's graphs and nothing else;
+CortexDB is somebody's brain, where memories, knowledge, other importers'
+triples and this load share one table — and its only filter on a read was the
+node type, which is not a batch. An importer that wrote a thousand `Person`
+nodes on Tuesday and a thousand more on Friday could ask for all two thousand
+or for none. So the two available implementations were to scan the whole shared
+brain for every question, or to return a `Found.Total` counted over rows the
+load does not contain, which is the exact defect that field exists to prevent.
+
+The fix was upstream and it was small: `GraphFilter` gained a property scope, a
+substring match and a cap, `CountNodes` answers what the cap cut off, and
+`ListNodes` reads the columns without dragging every embedding along to count
+names. The `run` those queries filter on had been stamped on every node this
+connector wrote since it was written, and nothing could read it back. Removing
+the scope now fails four tests by returning two entities named SuperAI from two
+different imports — not an error, an answer.
 
 Those five were measured rather than designed: they are what building one
 context pack by hand needed and nothing more. The evidence that this is the

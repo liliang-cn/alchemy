@@ -158,14 +158,19 @@ func TestTheStoresAreTheOnesDesignNames(t *testing.T) {
 	}
 }
 
-// DESIGN.md §9: "Four implement recall.Reader, which is eight primitives —
-// find an anchor, walk one hop, resolve a citation, ask what is unanswered, ask
-// what contributed, read the vocabulary, read out one class, read one record".
+// DESIGN.md §9: "all five implement recall.Reader — eight primitives: find an
+// anchor, walk one hop, resolve a citation, ask what is unanswered, ask what
+// contributed, read the vocabulary, read out one class, read one record".
 //
-// Two numbers in one sentence, so two assertions. The five is the interface's
-// own shape and the three is how many stores have taken it on; either can move
+// Two numbers in one sentence, so two assertions. The eight is the interface's
+// own shape and the five is how many stores have taken it on; either can move
 // without the other, and a check that folded them together would let one drift
 // under cover of the other still being right.
+//
+// The five was four until CortexDB grew a way to be asked about one batch.
+// This assertion is what made that a documentation change rather than a
+// documentation drift: it failed with "5 connectors implement recall.Reader,
+// DESIGN.md §9 says four" the moment the connector compiled.
 func TestTheReadSideIsTheShapeDesignStates(t *testing.T) {
 	// Verbatim from DESIGN.md §9, in the order the sentence lists them.
 	documented := []string{"Find", "Claims", "Cite", "Unanswered", "Contributions", "Types", "OfType", "Describe"}
@@ -188,7 +193,7 @@ func TestTheReadSideIsTheShapeDesignStates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the connectors: %v", err)
 	}
-	if len(readers) != 4 {
-		t.Fatalf("%d connectors implement recall.Reader (%v), DESIGN.md §9 says four", len(readers), readers)
+	if len(readers) != 5 {
+		t.Fatalf("%d connectors implement recall.Reader (%v), DESIGN.md §9 says all five", len(readers), readers)
 	}
 }

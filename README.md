@@ -45,7 +45,7 @@ honest shape over HTTP.
 
 alchemy holds no database. The companion module `connectors/` writes a result into
 a store you already run — **Neo4j, pgvector, Qdrant, CortexDB, or any SPARQL
-endpoint speaking RDF-star** — and reads it back through `pkg/recall`, eight
+endpoint speaking RDF-star** — and reads all five back through `pkg/recall`, eight
 primitives an agent can build a context pack from:
 
     Find · Claims · Cite · Unanswered · Contributions · Types · OfType · Describe

@@ -11,7 +11,7 @@ replace github.com/liliang-cn/alchemy => ..
 require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/liliang-cn/alchemy v0.0.0
-	github.com/liliang-cn/cortexdb/v2 v2.87.0
+	github.com/liliang-cn/cortexdb/v2 v2.90.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 )
 

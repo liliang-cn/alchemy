@@ -160,8 +160,8 @@ github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728 h1:QwWKgMY28TAXaDl+
 github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728/go.mod h1:1fEHWurg7pvf5SG6XNE5Q8UZmOwex51Mkx3SLhrW5B4=
 github.com/liliang-cn/agent-go/v3 v3.12.1 h1:EN2/+WDXbScRRxJeXlgW78vwCXyO79ODVlIZJgACaq4=
 github.com/liliang-cn/agent-go/v3 v3.12.1/go.mod h1:WDAi1Le/NFHwa2cOUzNxFmKBEMD45IgpVQLVc2v670A=
-github.com/liliang-cn/cortexdb/v2 v2.87.0 h1:w3GrKgiSaSQd2WXhSOtwxwhOGhQj9K7hO6/tEwwo+Wk=
-github.com/liliang-cn/cortexdb/v2 v2.87.0/go.mod h1:O4EPYRbBsEpEsRisT2Hs2jhKVoEMPuRm87xAXpwLMwc=
+github.com/liliang-cn/cortexdb/v2 v2.90.0 h1:OL6qdyab44nyx+x9VPMNxknPh4zwJl5N3QP11oK85/Y=
+github.com/liliang-cn/cortexdb/v2 v2.90.0/go.mod h1:O4EPYRbBsEpEsRisT2Hs2jhKVoEMPuRm87xAXpwLMwc=
 github.com/liliang-cn/mcp-swagger-server v1.3.0 h1:PFnm9mSbjVoFv4AelRzmHuxuuJXI8QRUYVeYmjkpsPw=
 github.com/liliang-cn/mcp-swagger-server v1.3.0/go.mod h1:xci2K+i6OU3pMeb/hQOialGiIUrMS38ZswQdOFoRraw=
 github.com/liliang-cn/pipeit v0.1.0 h1:ZU5hkL5SXr6vHtn/gcJBX9i55l0HM4rVsYTfxqn5M34=
