@@ -22,6 +22,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/liliang-cn/alchemy/connectors/cortexdb"
 	"github.com/liliang-cn/alchemy/connectors/neo4j"
 	"github.com/liliang-cn/alchemy/connectors/pgvector"
 	"github.com/liliang-cn/alchemy/connectors/qdrant"
@@ -32,18 +33,22 @@ import (
 
 // stores is every connector that implements recall.Reader.
 //
-// Four of the five. CortexDB is absent and that is a property of the store
-// rather than an omission here: its read API is entirely seeded — by node id,
-// by name, by vector top-K — and its one enumeration has no filter for which
-// import a node belongs to, so three of the eight questions cannot be answered
-// over it without either scanning the whole store or reporting a match count
-// that is not the real one.
-var stores = []string{"neo4j", "pgvector", "qdrant", "rdf"}
+// All five, and CortexDB was the last to arrive. It used to be absent for a
+// reason worth keeping: its one enumeration had no filter for which import a
+// node belongs to, so three of the eight questions could not be answered over
+// it without either scanning the whole store or reporting a match count that
+// is not the real one. cortexdb v2.89.0 gave GraphFilter a property scope and
+// the connector a way to name its own batch.
+//
+// It is the one entry here whose -uri is a file path, because CortexDB is a
+// file rather than a server — and the one whose store holds things this load
+// did not put there, which is what the scoping is for.
+var stores = []string{"cortexdb", "neo4j", "pgvector", "qdrant", "rdf"}
 
 func main() {
 	fs := flag.NewFlagSet("alchemy-mcp", flag.ContinueOnError)
 	store := fs.String("store", "", "which store holds the graph: "+strings.Join(stores, ", "))
-	uri := fs.String("uri", "", "how to reach it (bolt/neo4j URL, Qdrant or SPARQL base URL)")
+	uri := fs.String("uri", "", "how to reach it (bolt/neo4j URL, Qdrant or SPARQL base URL, CortexDB file path)")
 	load := fs.String("load", "", "the load to answer from; every tool is scoped to it")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		os.Exit(2)
@@ -74,6 +79,16 @@ func main() {
 // open returns the reader for one store, and the function that closes it.
 func open(ctx context.Context, store, uri string) (recall.Reader, func(), error) {
 	switch store {
+	case "cortexdb":
+		// No credential: a CortexDB is a file, and reaching it is a matter of
+		// having the file. RunID is deliberately left empty — it is the write
+		// side's identity for a load, and every read below takes the load as
+		// an argument instead, which is the whole of what -load means here.
+		l, err := cortexdb.Open(uri, cortexdb.Options{})
+		if err != nil {
+			return nil, nil, fmt.Errorf("cortexdb: %w", err)
+		}
+		return l, func() { _ = l.Close() }, nil
 	case "neo4j":
 		l, err := neo4j.Open(ctx, uri, os.Getenv("ALCHEMY_MCP_USER"), os.Getenv("ALCHEMY_MCP_PASSWORD"), neo4j.Options{})
 		if err != nil {
