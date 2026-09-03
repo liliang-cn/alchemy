@@ -850,14 +850,15 @@ corrects a corpus by re-running it, not by patching it.
 `connectors/`, that puts a result into somebody else's store and reads it back
 out — and the second half is much newer than the first.
 
-Five stores: Neo4j, pgvector, Qdrant, CortexDB, and any SPARQL endpoint that
-speaks RDF-star. All five implement `sink.Sink` and pass one conformance suite,
-and all five implement `recall.Reader` — eight primitives: find an anchor, walk
+Six stores: Neo4j, pgvector, Qdrant, CortexDB, Dgraph, and any SPARQL endpoint
+that speaks RDF-star or SPARQL 1.1. All six implement `sink.Sink` and pass one
+conformance suite, and all six implement `recall.Reader` — eight primitives:
+find an anchor, walk
 one hop, resolve a citation, ask what is unanswered, ask what contributed, read
 the vocabulary, read out one class, read one record. Each takes the load as a
 parameter rather than as an option, because the default is where the bug was.
 
-CortexDB was the last of the five and for a while the argument was that it
+CortexDB was the last of the original five and for a while the argument was that it
 could not be one. The other four hold alchemy's graphs and nothing else;
 CortexDB is somebody's brain, where memories, knowledge, other importers'
 triples and this load share one table — and its only filter on a read was the
@@ -875,7 +876,26 @@ connector wrote since it was written, and nothing could read it back. Removing
 the scope now fails four tests by returning two entities named SuperAI from two
 different imports — not an error, an answer.
 
-Those five were measured rather than designed: they are what building one
+Dgraph is the sixth and it answers §5b's oldest question a third way. An RDF
+triple cannot carry a property, so `connectors/rdf` names the triple and hangs
+the provenance off the name; a property graph gives an edge its own map and
+pays nothing. A Dgraph *facet* is the second of those with the numbers intact —
+`chunk` comes back an integer and `confidence` a float, where RDF costs a
+datatype IRI on every literal and a decoder that does not drop it, which
+`connectors/rdf` shipped a bug for. What it costs is that facets overwrite
+silently: two records asserting one edge leave the second's facets and drop the
+first's, under a "Success". So one edge holds one provenance, the first is
+kept, and the rest are counted into the report — the same answer the RDF
+connector gives for a quoted triple, arrived at from the other direction.
+
+Its own trap is worth naming because no other store here has it: **Dgraph
+answers HTTP 200 when it refuses.** A malformed mutation and a malformed query
+both come back 200 with the reason in an `errors` array, so a connector that
+checked the status code would write nothing, read nothing, and report success
+for a whole corpus. Every request goes through one function that parses the
+body, and a test sends deliberate garbage to hold it there.
+
+Those eight were measured rather than designed: they are what building one
 context pack by hand needed and nothing more. The evidence that this is the
 right way to arrive at a primitive is that the fifth arrived after the first
 four were in use. An agent was asked who the CTO was and answered from a node
@@ -920,7 +940,7 @@ triple store put both sources on one annotation with nothing saying which went
 with which. Two of the five refused such a result outright, so the one thing
 this product exists to produce, a graph merged from several documents, could not
 be loaded into them at all. The fold is now in `sink`, once, and the case is in
-the conformance suite all five run — which is where it should have been found,
+the conformance suite all six run — which is where it should have been found,
 except that the suite drives the envelope and the refusal sat in the connector's
 own `Load`.
 

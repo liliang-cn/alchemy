@@ -147,7 +147,7 @@ func TestNoSourceFileExceedsSixHundredLines(t *testing.T) {
 // passing and the sentence wrong about what they can actually load into.
 func TestTheStoresAreTheOnesDesignNames(t *testing.T) {
 	// Verbatim from DESIGN.md §9. Correct both together or neither.
-	documented := []string{"cortexdb", "neo4j", "pgvector", "qdrant", "rdf"}
+	documented := []string{"cortexdb", "dgraph", "neo4j", "pgvector", "qdrant", "rdf"}
 
 	got, err := claims.StoreConnectors(root(t))
 	if err != nil {
@@ -158,7 +158,7 @@ func TestTheStoresAreTheOnesDesignNames(t *testing.T) {
 	}
 }
 
-// DESIGN.md §9: "all five implement recall.Reader — eight primitives: find an
+// DESIGN.md §9: "all six implement recall.Reader — eight primitives: find an
 // anchor, walk one hop, resolve a citation, ask what is unanswered, ask what
 // contributed, read the vocabulary, read out one class, read one record".
 //
@@ -193,7 +193,7 @@ func TestTheReadSideIsTheShapeDesignStates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the connectors: %v", err)
 	}
-	if len(readers) != 5 {
-		t.Fatalf("%d connectors implement recall.Reader (%v), DESIGN.md §9 says all five", len(readers), readers)
+	if len(readers) != 6 {
+		t.Fatalf("%d connectors implement recall.Reader (%v), DESIGN.md §9 says all six", len(readers), readers)
 	}
 }

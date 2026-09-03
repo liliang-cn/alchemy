@@ -7,6 +7,7 @@
 //
 //	ALCHEMY_MCP_USER, ALCHEMY_MCP_PASSWORD   neo4j
 //	ALCHEMY_MCP_DSN                          pgvector  (-uri is ignored)
+//	ALCHEMY_MCP_TOKEN                        dgraph, when the alpha has ACL on
 //
 // The store is a flag because the tools are not: every one of the eight is a
 // question pkg/recall answers, and which database is behind it is the one thing
@@ -23,6 +24,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/liliang-cn/alchemy/connectors/cortexdb"
+	"github.com/liliang-cn/alchemy/connectors/dgraph"
 	"github.com/liliang-cn/alchemy/connectors/neo4j"
 	"github.com/liliang-cn/alchemy/connectors/pgvector"
 	"github.com/liliang-cn/alchemy/connectors/qdrant"
@@ -43,7 +45,7 @@ import (
 // It is the one entry here whose -uri is a file path, because CortexDB is a
 // file rather than a server — and the one whose store holds things this load
 // did not put there, which is what the scoping is for.
-var stores = []string{"cortexdb", "neo4j", "pgvector", "qdrant", "rdf"}
+var stores = []string{"cortexdb", "dgraph", "neo4j", "pgvector", "qdrant", "rdf"}
 
 func main() {
 	fs := flag.NewFlagSet("alchemy-mcp", flag.ContinueOnError)
@@ -79,6 +81,16 @@ func main() {
 // open returns the reader for one store, and the function that closes it.
 func open(ctx context.Context, store, uri string) (recall.Reader, func(), error) {
 	switch store {
+	case "dgraph":
+		// -uri is the alpha's HTTP address, not its gRPC port: this connector
+		// speaks the HTTP API so that a buyer can reproduce any request it
+		// makes with curl. RunID is left empty because every read takes the
+		// load as an argument, which is what -load means here.
+		l, err := dgraph.Open(ctx, dgraph.Options{Endpoint: uri, Token: os.Getenv("ALCHEMY_MCP_TOKEN")})
+		if err != nil {
+			return nil, nil, fmt.Errorf("dgraph: %w", err)
+		}
+		return l, func() { _ = l.Close() }, nil
 	case "cortexdb":
 		// No credential: a CortexDB is a file, and reaching it is a matter of
 		// having the file. RunID is deliberately left empty — it is the write

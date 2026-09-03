@@ -44,8 +44,8 @@ honest shape over HTTP.
 ## It returns a graph; it does not store one
 
 alchemy holds no database. The companion module `connectors/` writes a result into
-a store you already run — **Neo4j, pgvector, Qdrant, CortexDB, or any SPARQL
-endpoint speaking RDF-star** — and reads all five back through `pkg/recall`, eight
+a store you already run — **Neo4j, pgvector, Qdrant, CortexDB, Dgraph, or any
+SPARQL endpoint** — and reads all six back through `pkg/recall`, eight
 primitives an agent can build a context pack from:
 
     Find · Claims · Cite · Unanswered · Contributions · Types · OfType · Describe
