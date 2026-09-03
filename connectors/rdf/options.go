@@ -44,16 +44,55 @@ var (
 	ErrEndpoint = errors.New("rdf: the store refused a request")
 )
 
+// Protocol is which HTTP layout a store puts its SPARQL endpoints behind.
+//
+// It exists because the two things this package speaks are not the same
+// protocol and were never claimed to be. SPARQL 1.1 standardises the *request*
+// — the query as a body under application/sparql-query, the results as
+// application/sparql-results+json — and says nothing about where the endpoint
+// lives. RDF4J answers that with /repositories/{id}, one server holding many
+// repositories; a server that holds one store answers it with /query and
+// /update at the root. Everything else in this package is identical between
+// them, which is why this is a URL layout and not a driver.
+type Protocol string
+
+const (
+	// ProtocolRDF4J is /repositories/{id} for queries and
+	// /repositories/{id}/statements for updates and the graph store, with the
+	// graph named by ?context=<iri>. GraphDB, RDF4J Server, and anything else
+	// serving the RDF4J HTTP protocol.
+	//
+	// It is the default because it was the only one for this package's whole
+	// life and a default that moved would repoint an existing deployment.
+	ProtocolRDF4J Protocol = "rdf4j"
+	// ProtocolSPARQL is the bare SPARQL 1.1 Protocol: /query, /update, and the
+	// Graph Store Protocol at /store with the graph named by ?graph=iri.
+	// Oxigraph, Fuseki's dataset root, and most single-store servers.
+	//
+	// Measured against Oxigraph 0.5.11 before it was written: the write is a
+	// 201 and << ?s ?p ?o >> al:producer ?producer returns the edge with its
+	// provenance in one row, which is the shape this whole connector rests on.
+	// Oxigraph stores it as RDF 1.2 — a reifier node with rdf:reifies onto a
+	// triple term — and matches the RDF-star pattern against it, so what
+	// travels between the two stores is the query and not the storage model.
+	ProtocolSPARQL Protocol = "sparql"
+)
+
 // Options configures one Loader.
 type Options struct {
-	// Endpoint is the GraphDB base URL, e.g. http://localhost:47200. The
-	// RDF4J-compatible paths are built from it; nothing here assumes the
-	// Workbench.
+	// Endpoint is the store's base URL, e.g. http://localhost:47200 for
+	// GraphDB or http://localhost:47878 for Oxigraph. The paths are built from
+	// it according to Protocol; nothing here assumes a particular workbench.
 	Endpoint string
-	// Repository is the repository ID to write into. It is required and has no
-	// default: a connector that invented one would write a customer's graph
-	// into a repository nobody asked for and nobody knows to back up.
+	// Repository is the repository ID to write into. Under ProtocolRDF4J it is
+	// required and has no default: a connector that invented one would write a
+	// customer's graph into a repository nobody asked for and nobody knows to
+	// back up. Under ProtocolSPARQL the endpoint already names one store, so
+	// it is unused and must be empty — accepting and ignoring it would let a
+	// caller believe they had scoped a write that went somewhere else.
 	Repository string
+	// Protocol is the URL layout. Empty means ProtocolRDF4J.
+	Protocol Protocol
 
 	// RunID names the import. Required, no default — see neo4j's Options.RunID
 	// for the argument, which is this connector's too: alchemy.Entity.ID is
@@ -137,6 +176,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.BatchSize <= 0 {
 		o.BatchSize = defaultBatchSize
+	}
+	if o.Protocol == "" {
+		o.Protocol = ProtocolRDF4J
 	}
 	if o.OntologyPart == "" {
 		o.OntologyPart = ontology.PartProse

@@ -117,8 +117,17 @@ func TestReplacingALoadLeavesNothingOfTheOldOneBehind(t *testing.T) {
 	ctx := context.Background()
 	l := liveLoader(t, Options{})
 
+	// A fresh name per run rather than a fixed one. The load name used to be
+	// "ld-replace" and the test passed for as long as every run got a
+	// repository of its own — which is a property of how GraphDB is driven
+	// here, not of anything this test is about. Against a store that serves one
+	// dataset the second run met its own first load and was refused with
+	// "already written from a different result", which is the connector doing
+	// exactly what it promises. The isolation the test needs is a name nobody
+	// else has, and that is what every load has in production.
+	load := "ld-replace-" + randomName(t)
 	first := fixture()
-	if _, err := sink.Load(ctx, l, first, sink.Options{Load: "ld-replace"}); err != nil {
+	if _, err := sink.Load(ctx, l, first, sink.Options{Load: load}); err != nil {
 		t.Fatalf("first Load: %v", err)
 	}
 	second := fixture()
@@ -127,18 +136,18 @@ func TestReplacingALoadLeavesNothingOfTheOldOneBehind(t *testing.T) {
 	second.Relations = nil
 	second.Duplicates = nil
 	second.Counts = second.Derivable()
-	if _, err := sink.Load(ctx, l, second, sink.Options{Load: "ld-replace", Replace: true}); err != nil {
+	if _, err := sink.Load(ctx, l, second, sink.Options{Load: load, Replace: true}); err != nil {
 		t.Fatalf("Load with Replace: %v", err)
 	}
 
-	found, err := l.Find(ctx, "ld-replace", "cortexdb", 10)
+	found, err := l.Find(ctx, load, "cortexdb", 10)
 	if err != nil {
 		t.Fatalf("Find: %v", err)
 	}
 	if len(found.Nodes) != 0 {
 		t.Errorf("an entity from the replaced load is still readable: %+v", found.Nodes)
 	}
-	qs, err := l.Unanswered(ctx, "ld-replace", "")
+	qs, err := l.Unanswered(ctx, load, "")
 	if err != nil {
 		t.Fatalf("Unanswered: %v", err)
 	}
@@ -157,7 +166,10 @@ func TestALoadWithVectorsReportsThatTheyWereNotKept(t *testing.T) {
 	res.Vectors = []alchemy.Vector{{Chunk: 14, Model: "embed-3", Values: []float32{0.1, 0.2, 0.3, 0.4}}}
 	res.Counts = res.Derivable()
 
-	rep, err := sink.Load(ctx, l, res, sink.Options{Load: "ld-vectors"})
+	// Fresh per run, for the reason the replace test above gives: a second run
+	// against a one-dataset store meets its own first load, and a replay
+	// reports nothing lost because it wrote nothing.
+	rep, err := sink.Load(ctx, l, res, sink.Options{Load: "ld-vectors-" + randomName(t)})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

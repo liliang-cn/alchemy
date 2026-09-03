@@ -25,11 +25,11 @@ import (
 // graphs, so the cases cannot see each other — and creating eight repositories
 // to prove it would be testing GraphDB's administration API eight times.
 func TestTheSharedConformanceSuitePasses(t *testing.T) {
-	endpoint := liveEndpoint(t)
-	repo := testRepository(t, endpoint)
+	target := liveTarget(t, Options{})
+	endpoint, repo := target.Endpoint, target.Repository
 	sinkconform.Run(t, func(t *testing.T) sink.Sink {
 		return New(Options{
-			Endpoint: endpoint, Repository: repo,
+			Endpoint: endpoint, Repository: repo, Protocol: target.Protocol,
 			// A private base per case: two cases both loading "load-1" write
 			// two different graph IRIs, so the second does not converge on the
 			// first's marker.

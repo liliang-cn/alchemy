@@ -127,7 +127,15 @@ func Open(ctx context.Context, o Options) (*Loader, error) {
 	if l.opts.Endpoint == "" {
 		return nil, fmt.Errorf("rdf: Options.Endpoint is required")
 	}
-	if l.opts.Repository == "" {
+	switch {
+	case l.opts.Protocol == ProtocolSPARQL && l.opts.Repository != "":
+		// Refused rather than ignored. Under this protocol the endpoint IS the
+		// store, so a Repository would be a scope the caller believes they set
+		// and the writes would land somewhere else entirely — which is the
+		// silent kind of wrong this connector spends its length refusing.
+		return nil, fmt.Errorf("rdf: Options.Repository is not used under %s: the endpoint names one "+
+			"store, so %q would be a scope you set and nothing honoured", ProtocolSPARQL, l.opts.Repository)
+	case l.opts.Protocol != ProtocolSPARQL && l.opts.Repository == "":
 		return nil, fmt.Errorf("rdf: Options.Repository is required; a connector that invented one " +
 			"would write a customer's graph into a repository nobody knows to back up")
 	}

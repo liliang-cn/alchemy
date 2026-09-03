@@ -13,19 +13,49 @@ import (
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 )
 
-// envEndpoint names the one environment variable the live tests need. They skip
-// without it so that `go test ./...` passes on a machine with no triple store —
-// but a skipped test proves nothing, so the message says exactly what to set.
-const envEndpoint = "ALCHEMY_TEST_GRAPHDB"
+// The two environment variables the live tests take, one per protocol.
+//
+// They skip without either so that `go test ./...` passes on a machine with no
+// triple store — but a skipped test proves nothing, so the message says exactly
+// what to set. Setting either runs the WHOLE suite against that store: the
+// choice is per invocation rather than a subtest loop, because a store is a
+// deployment and running both in one process would interleave two servers'
+// failures under one test name.
+const (
+	envEndpoint = "ALCHEMY_TEST_GRAPHDB"
+	// envSPARQL is a server that puts SPARQL 1.1 at /query and /update with no
+	// repository layer — Oxigraph, or a Fuseki dataset root. It exists because
+	// this package's doc has always claimed "nothing in it is GraphDB's" and a
+	// portability claim with one store behind it is an untested claim.
+	envSPARQL = "ALCHEMY_TEST_SPARQL"
+)
 
-func liveEndpoint(t *testing.T) string {
+// liveTarget fills in the endpoint, the protocol and — for RDF4J only — a
+// repository made for this test.
+//
+// The two are not isolated the same way and they cannot be. Under RDF4J each
+// test gets a private repository, which is also how the suite exercises a
+// genuinely empty store: no vocabulary present, no index warmed, the state
+// every first import is in. Oxigraph serves exactly one dataset per process,
+// so tests there share it and are kept apart by the random RunID and its named
+// graph, which is what every load is scoped by in production anyway. What is
+// lost is the empty-store property, and it is lost rather than faked: a test
+// that dropped the whole store between cases would be testing a gesture no
+// deployment makes.
+func liveTarget(t *testing.T, o Options) Options {
 	t.Helper()
+	if e := os.Getenv(envSPARQL); e != "" {
+		o.Endpoint, o.Protocol, o.Repository = e, ProtocolSPARQL, ""
+		return o
+	}
 	e := os.Getenv(envEndpoint)
 	if e == "" {
-		t.Skipf("no live GraphDB: set %s to a base URL (e.g. %s=http://127.0.0.1:47200) to run this test",
-			envEndpoint, envEndpoint)
+		t.Skipf("no live triple store: set %s to a GraphDB base URL (e.g. %s=http://127.0.0.1:47200), "+
+			"or %s to a SPARQL 1.1 server (e.g. %s=http://127.0.0.1:47878), to run this test",
+			envEndpoint, envEndpoint, envSPARQL, envSPARQL)
 	}
-	return e
+	o.Endpoint, o.Repository = e, testRepository(t, e)
+	return o
 }
 
 // liveLoader opens a Loader against a repository created for this one test and
@@ -42,9 +72,8 @@ func liveEndpoint(t *testing.T) string {
 // somebody made by hand would never find that out.
 func liveLoader(t *testing.T, o Options) *Loader {
 	t.Helper()
-	endpoint := liveEndpoint(t)
-	repo := testRepository(t, endpoint)
-	o.Endpoint, o.Repository = endpoint, repo
+	o = liveTarget(t, o)
+	endpoint, repo := o.Endpoint, o.Repository
 	if o.RunID == "" {
 		o.RunID = "ld-" + randomName(t)
 	}

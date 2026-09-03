@@ -40,9 +40,54 @@ func (l *Loader) httpClient() *http.Client {
 	return &http.Client{Timeout: defaultTimeout}
 }
 
-// repoURL is the SPARQL endpoint of the configured repository.
+// The three URLs this package needs, and the one difference between the two
+// protocols it speaks.
+//
+// SPARQL 1.1 standardises what goes in a request and says nothing about where
+// the endpoint lives, so these three functions are the whole of the difference
+// between a GraphDB and an Oxigraph. Every other line in this package — the
+// Turtle-star it writes, the RDF-star patterns it reads, the results JSON it
+// decodes — is the same against both, which is the claim the package doc has
+// always made and could not check while there was one store to check against.
+
+// repoURL is the base a query is sent to.
 func (l *Loader) repoURL() string {
-	return strings.TrimSuffix(l.opts.Endpoint, "/") + "/repositories/" + url.PathEscape(l.opts.Repository)
+	base := strings.TrimSuffix(l.opts.Endpoint, "/")
+	if l.opts.Protocol == ProtocolSPARQL {
+		return base + "/query"
+	}
+	return base + "/repositories/" + url.PathEscape(l.opts.Repository)
+}
+
+// updateURL is where a SPARQL Update goes.
+//
+// RDF4J puts updates on the same /statements path as the graph store, which is
+// why this used to be repoURL()+"/statements" at both call sites; the two are
+// separate endpoints under SPARQL 1.1 and folding them again would work on one
+// store and 404 on the other.
+func (l *Loader) updateURL() string {
+	base := strings.TrimSuffix(l.opts.Endpoint, "/")
+	if l.opts.Protocol == ProtocolSPARQL {
+		return base + "/update"
+	}
+	return base + "/repositories/" + url.PathEscape(l.opts.Repository) + "/statements"
+}
+
+// graphURL is the Graph Store Protocol endpoint for one named graph.
+//
+// The parameter name and the value's shape both differ, and the second is the
+// one that bites: RDF4J's ?context= takes an N-Triples term, angle brackets
+// and all, while SPARQL 1.1's ?graph= takes the bare IRI. Sending RDF4J's
+// spelling to a SPARQL 1.1 server writes into a graph whose IRI literally
+// contains the angle brackets — a 201, a graph that exists, and every read
+// afterwards empty.
+func (l *Loader) graphURL(graph string) string {
+	base := strings.TrimSuffix(l.opts.Endpoint, "/")
+	if l.opts.Protocol == ProtocolSPARQL {
+		return base + "/store?graph=" + url.QueryEscape(graph)
+	}
+	return base + "/repositories/" + url.PathEscape(l.opts.Repository) +
+		"/statements?context=" + url.QueryEscape("<"+graph+">")
 }
 
 // do sends one request and reads the answer, or the reason it was refused.
@@ -98,7 +143,7 @@ func (l *Loader) addTurtle(ctx context.Context, graph, body string) error {
 	if strings.TrimSpace(body) == "" {
 		return nil
 	}
-	u := l.repoURL() + "/statements?context=" + url.QueryEscape("<"+graph+">")
+	u := l.graphURL(graph)
 	// Turtle-star: the annotation syntax this connector's whole design rests
 	// on. GraphDB parses it under text/turtle, which is what the media type
 	// registration says it should — RDF-star is part of Turtle in RDF 1.2 and
@@ -112,7 +157,7 @@ func (l *Loader) addTurtle(ctx context.Context, graph, body string) error {
 // call sites, because an update is the only kind of request in this package
 // that can remove something.
 func (l *Loader) update(ctx context.Context, sparql string) error {
-	_, err := l.do(ctx, http.MethodPost, l.repoURL()+"/statements", "application/sparql-update", "", sparql)
+	_, err := l.do(ctx, http.MethodPost, l.updateURL(), "application/sparql-update", "", sparql)
 	return err
 }
 
