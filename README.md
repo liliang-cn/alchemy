@@ -19,6 +19,19 @@ checking one afterwards is not.
 - **Nothing is extracted without a vocabulary to check it against**, and the
   corpus is what tells you the vocabulary is missing something.
 
+## Using it from Go
+
+```sh
+go get github.com/liliang-cn/alchemy             # the service and pkg/recall
+go get github.com/liliang-cn/alchemy/connectors  # the six stores
+go get github.com/liliang-cn/alchemy/mcp         # the MCP server
+```
+
+Three modules and not one, so that a buyer who wants Neo4j is not made to pull
+pgvector, Qdrant, CortexDB, Dgraph and a SPARQL client as the price of the
+argument that alchemy stores nothing. The core module's dependency list is the
+checkable form of that argument.
+
 ## Running it
 
 ```sh
