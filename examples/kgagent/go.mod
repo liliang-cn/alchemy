@@ -17,8 +17,8 @@ replace github.com/liliang-cn/alchemy/connectors => ../../connectors
 
 require (
 	github.com/liliang-cn/agent-go/v3 v3.12.1
-	github.com/liliang-cn/alchemy v0.2.0
-	github.com/liliang-cn/alchemy/connectors v0.2.0
+	github.com/liliang-cn/alchemy v0.3.0
+	github.com/liliang-cn/alchemy/connectors v0.3.0
 )
 
 require (

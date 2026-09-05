@@ -15,8 +15,8 @@ replace github.com/liliang-cn/alchemy => ..
 replace github.com/liliang-cn/alchemy/connectors => ../connectors
 
 require (
-	github.com/liliang-cn/alchemy v0.2.0
-	github.com/liliang-cn/alchemy/connectors v0.2.0
+	github.com/liliang-cn/alchemy v0.3.0
+	github.com/liliang-cn/alchemy/connectors v0.3.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 )
 
