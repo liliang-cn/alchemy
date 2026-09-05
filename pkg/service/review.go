@@ -212,6 +212,13 @@ func (s *Server) resolve(id string, r *jobRun) error {
 		return nil
 	}
 
+	// Everything above has decided that this job is no longer held: no
+	// conflict is open and, in review mode, no question is. That is the first
+	// moment §5c's last stage is allowed to run — "vectors are recomputed for
+	// whatever text survives review" — and until it did, a job that was held
+	// and then answered finished with chunks and no vectors at all.
+	out = s.embedSurvivors(r, out)
+
 	r.setResult(out, rules)
 	if err := s.store.Resolve(ctx, id, alchemy.JobSucceeded); err != nil {
 		return err
