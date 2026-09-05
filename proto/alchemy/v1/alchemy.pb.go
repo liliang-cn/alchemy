@@ -2288,9 +2288,26 @@ func (x *Guess) GetProvenance() *Provenance {
 }
 
 type Claim struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Statement     string                 `protobuf:"bytes,1,opt,name=statement,proto3" json:"statement,omitempty"`
-	Provenance    *Provenance            `protobuf:"bytes,2,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Statement  string                 `protobuf:"bytes,1,opt,name=statement,proto3" json:"statement,omitempty"`
+	Provenance *Provenance            `protobuf:"bytes,2,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	// The record this side of the disagreement was read from, in fields.
+	//
+	// The same shape Violation.about is, on each side rather than on the
+	// conflict, because a conflict names two records and the join is per side.
+	// What needs it is the knowledge contract's `_contradicts` — the ids of the
+	// records a record cannot both-be-true with, written on both of them,
+	// because two sources disagreeing is information rather than an error. A
+	// store could otherwise reach those ids only by parsing `subject` back into
+	// fields, which is the private copy of the verifier's output format that Ref
+	// exists to abolish.
+	//
+	// Two claims about one record carry one ref twice, and that is the answer
+	// rather than a defect: an entity given two values for one attribute is one
+	// node in the graph, and equal refs are how a reader tells that case from
+	// the reversal and the cardinality clash, where the graph really does hold
+	// both records. Unset where the producer can name no record.
+	About         *Ref `protobuf:"bytes,3,opt,name=about,proto3" json:"about,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2335,6 +2352,13 @@ func (x *Claim) GetStatement() string {
 func (x *Claim) GetProvenance() *Provenance {
 	if x != nil {
 		return x.Provenance
+	}
+	return nil
+}
+
+func (x *Claim) GetAbout() *Ref {
+	if x != nil {
+		return x.About
 	}
 	return nil
 }
@@ -4932,12 +4956,13 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x126\n" +
 	"\n" +
 	"provenance\x18\x05 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
-	"provenance\"]\n" +
+	"provenance\"\x84\x01\n" +
 	"\x05Claim\x12\x1c\n" +
 	"\tstatement\x18\x01 \x01(\tR\tstatement\x126\n" +
 	"\n" +
 	"provenance\x18\x02 \x01(\v2\x16.alchemy.v1.ProvenanceR\n" +
-	"provenance\"\xba\x01\n" +
+	"provenance\x12%\n" +
+	"\x05about\x18\x03 \x01(\v2\x0f.alchemy.v1.RefR\x05about\"\xba\x01\n" +
 	"\bConflict\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.alchemy.v1.ConflictKindR\x04kind\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x16\n" +
@@ -5347,101 +5372,102 @@ var file_alchemy_v1_alchemy_proto_depIdxs = []int32{
 	43,  // 23: alchemy.v1.Violation.about:type_name -> alchemy.v1.Ref
 	24,  // 24: alchemy.v1.Guess.provenance:type_name -> alchemy.v1.Provenance
 	24,  // 25: alchemy.v1.Claim.provenance:type_name -> alchemy.v1.Provenance
-	4,   // 26: alchemy.v1.Conflict.kind:type_name -> alchemy.v1.ConflictKind
-	31,  // 27: alchemy.v1.Conflict.left:type_name -> alchemy.v1.Claim
-	31,  // 28: alchemy.v1.Conflict.right:type_name -> alchemy.v1.Claim
-	5,   // 29: alchemy.v1.Duplicate.signal:type_name -> alchemy.v1.DuplicateSignal
-	34,  // 30: alchemy.v1.Duplicate.left:type_name -> alchemy.v1.DuplicateSide
-	34,  // 31: alchemy.v1.Duplicate.right:type_name -> alchemy.v1.DuplicateSide
-	24,  // 32: alchemy.v1.DuplicateSide.provenance:type_name -> alchemy.v1.Provenance
-	25,  // 33: alchemy.v1.Result.entities:type_name -> alchemy.v1.Entity
-	26,  // 34: alchemy.v1.Result.relations:type_name -> alchemy.v1.Relation
-	27,  // 35: alchemy.v1.Result.chunks:type_name -> alchemy.v1.Chunk
-	28,  // 36: alchemy.v1.Result.vectors:type_name -> alchemy.v1.Vector
-	32,  // 37: alchemy.v1.Result.conflicts:type_name -> alchemy.v1.Conflict
-	29,  // 38: alchemy.v1.Result.violations:type_name -> alchemy.v1.Violation
-	30,  // 39: alchemy.v1.Result.guesses:type_name -> alchemy.v1.Guess
-	35,  // 40: alchemy.v1.Result.counts:type_name -> alchemy.v1.Counts
-	36,  // 41: alchemy.v1.Result.model_calls:type_name -> alchemy.v1.ModelCall
-	37,  // 42: alchemy.v1.Result.unread:type_name -> alchemy.v1.Unread
-	15,  // 43: alchemy.v1.Result.rules:type_name -> alchemy.v1.ReviewRule
-	33,  // 44: alchemy.v1.Result.duplicates:type_name -> alchemy.v1.Duplicate
-	40,  // 45: alchemy.v1.Result.rule_sets:type_name -> alchemy.v1.RuleSet
-	55,  // 46: alchemy.v1.Result.supersessions:type_name -> alchemy.v1.Supersession
-	56,  // 47: alchemy.v1.Result.proposals:type_name -> alchemy.v1.Proposal
-	39,  // 48: alchemy.v1.RuleSet.rules:type_name -> alchemy.v1.StandingRule
-	25,  // 49: alchemy.v1.ResultPage.entities:type_name -> alchemy.v1.Entity
-	26,  // 50: alchemy.v1.ResultPage.relations:type_name -> alchemy.v1.Relation
-	27,  // 51: alchemy.v1.ResultPage.chunks:type_name -> alchemy.v1.Chunk
-	28,  // 52: alchemy.v1.ResultPage.vectors:type_name -> alchemy.v1.Vector
-	32,  // 53: alchemy.v1.ResultPage.conflicts:type_name -> alchemy.v1.Conflict
-	29,  // 54: alchemy.v1.ResultPage.violations:type_name -> alchemy.v1.Violation
-	30,  // 55: alchemy.v1.ResultPage.guesses:type_name -> alchemy.v1.Guess
-	33,  // 56: alchemy.v1.ResultPage.duplicates:type_name -> alchemy.v1.Duplicate
-	35,  // 57: alchemy.v1.ResultPage.counts:type_name -> alchemy.v1.Counts
-	36,  // 58: alchemy.v1.ResultPage.model_calls:type_name -> alchemy.v1.ModelCall
-	37,  // 59: alchemy.v1.ResultPage.unread:type_name -> alchemy.v1.Unread
-	15,  // 60: alchemy.v1.ResultPage.rules:type_name -> alchemy.v1.ReviewRule
-	40,  // 61: alchemy.v1.ResultPage.rule_sets:type_name -> alchemy.v1.RuleSet
-	55,  // 62: alchemy.v1.ResultPage.supersessions:type_name -> alchemy.v1.Supersession
-	56,  // 63: alchemy.v1.ResultPage.proposals:type_name -> alchemy.v1.Proposal
-	59,  // 64: alchemy.v1.JobEvent.at:type_name -> google.protobuf.Timestamp
-	0,   // 65: alchemy.v1.JobEvent.state:type_name -> alchemy.v1.JobState
-	35,  // 66: alchemy.v1.JobEvent.counts:type_name -> alchemy.v1.Counts
-	32,  // 67: alchemy.v1.JobEvent.conflict:type_name -> alchemy.v1.Conflict
-	36,  // 68: alchemy.v1.JobEvent.model_calls_by_stage:type_name -> alchemy.v1.ModelCall
-	8,   // 69: alchemy.v1.Ref.kind:type_name -> alchemy.v1.RefKind
-	24,  // 70: alchemy.v1.Ref.provenance:type_name -> alchemy.v1.Provenance
-	6,   // 71: alchemy.v1.ReviewItem.kind:type_name -> alchemy.v1.ReviewKind
-	43,  // 72: alchemy.v1.ReviewItem.targets:type_name -> alchemy.v1.Ref
-	15,  // 73: alchemy.v1.ReviewItem.suppressed_by:type_name -> alchemy.v1.ReviewRule
-	24,  // 74: alchemy.v1.ReviewItem.provenance:type_name -> alchemy.v1.Provenance
-	0,   // 75: alchemy.v1.Findings.state:type_name -> alchemy.v1.JobState
-	44,  // 76: alchemy.v1.Findings.items:type_name -> alchemy.v1.ReviewItem
-	57,  // 77: alchemy.v1.DecideRequest.decisions:type_name -> alchemy.v1.ReviewDecision
-	0,   // 78: alchemy.v1.DecideResponse.state:type_name -> alchemy.v1.JobState
-	50,  // 79: alchemy.v1.DecideResponse.rejected:type_name -> alchemy.v1.DecisionRejection
-	25,  // 80: alchemy.v1.AssertRequest.entities:type_name -> alchemy.v1.Entity
-	26,  // 81: alchemy.v1.AssertRequest.relations:type_name -> alchemy.v1.Relation
-	54,  // 82: alchemy.v1.AssertRequest.supersedes:type_name -> alchemy.v1.Supersedes
-	56,  // 83: alchemy.v1.ExtendOntologyRequest.accept:type_name -> alchemy.v1.Proposal
-	43,  // 84: alchemy.v1.Supersession.by:type_name -> alchemy.v1.Ref
-	24,  // 85: alchemy.v1.Supersession.provenance:type_name -> alchemy.v1.Provenance
-	10,  // 86: alchemy.v1.Proposal.kind:type_name -> alchemy.v1.ProposalKind
-	2,   // 87: alchemy.v1.Proposal.producers:type_name -> alchemy.v1.Producer
-	43,  // 88: alchemy.v1.Proposal.example:type_name -> alchemy.v1.Ref
-	7,   // 89: alchemy.v1.ReviewDecision.verb:type_name -> alchemy.v1.ReviewVerb
-	45,  // 90: alchemy.v1.ReviewDecision.edit:type_name -> alchemy.v1.Edit
-	59,  // 91: alchemy.v1.ReviewDecision.at:type_name -> google.protobuf.Timestamp
-	16,  // 92: alchemy.v1.Alchemy.CreateJob:input_type -> alchemy.v1.CreateJobRequest
-	18,  // 93: alchemy.v1.Alchemy.GetJob:input_type -> alchemy.v1.GetJobRequest
-	21,  // 94: alchemy.v1.Alchemy.GetResult:input_type -> alchemy.v1.GetResultRequest
-	21,  // 95: alchemy.v1.Alchemy.StreamResult:input_type -> alchemy.v1.GetResultRequest
-	19,  // 96: alchemy.v1.Alchemy.DeleteJob:input_type -> alchemy.v1.DeleteJobRequest
-	22,  // 97: alchemy.v1.Alchemy.UploadSource:input_type -> alchemy.v1.SourceChunk
-	20,  // 98: alchemy.v1.Alchemy.WatchJob:input_type -> alchemy.v1.WatchJobRequest
-	57,  // 99: alchemy.v1.Alchemy.Review:input_type -> alchemy.v1.ReviewDecision
-	46,  // 100: alchemy.v1.Alchemy.ListFindings:input_type -> alchemy.v1.ListFindingsRequest
-	48,  // 101: alchemy.v1.Alchemy.Decide:input_type -> alchemy.v1.DecideRequest
-	52,  // 102: alchemy.v1.Alchemy.ExtendOntology:input_type -> alchemy.v1.ExtendOntologyRequest
-	51,  // 103: alchemy.v1.Alchemy.Assert:input_type -> alchemy.v1.AssertRequest
-	17,  // 104: alchemy.v1.Alchemy.CreateJob:output_type -> alchemy.v1.Job
-	17,  // 105: alchemy.v1.Alchemy.GetJob:output_type -> alchemy.v1.Job
-	38,  // 106: alchemy.v1.Alchemy.GetResult:output_type -> alchemy.v1.Result
-	41,  // 107: alchemy.v1.Alchemy.StreamResult:output_type -> alchemy.v1.ResultPage
-	61,  // 108: alchemy.v1.Alchemy.DeleteJob:output_type -> google.protobuf.Empty
-	23,  // 109: alchemy.v1.Alchemy.UploadSource:output_type -> alchemy.v1.Source
-	42,  // 110: alchemy.v1.Alchemy.WatchJob:output_type -> alchemy.v1.JobEvent
-	44,  // 111: alchemy.v1.Alchemy.Review:output_type -> alchemy.v1.ReviewItem
-	47,  // 112: alchemy.v1.Alchemy.ListFindings:output_type -> alchemy.v1.Findings
-	49,  // 113: alchemy.v1.Alchemy.Decide:output_type -> alchemy.v1.DecideResponse
-	53,  // 114: alchemy.v1.Alchemy.ExtendOntology:output_type -> alchemy.v1.ExtendOntologyResponse
-	38,  // 115: alchemy.v1.Alchemy.Assert:output_type -> alchemy.v1.Result
-	104, // [104:116] is the sub-list for method output_type
-	92,  // [92:104] is the sub-list for method input_type
-	92,  // [92:92] is the sub-list for extension type_name
-	92,  // [92:92] is the sub-list for extension extendee
-	0,   // [0:92] is the sub-list for field type_name
+	43,  // 26: alchemy.v1.Claim.about:type_name -> alchemy.v1.Ref
+	4,   // 27: alchemy.v1.Conflict.kind:type_name -> alchemy.v1.ConflictKind
+	31,  // 28: alchemy.v1.Conflict.left:type_name -> alchemy.v1.Claim
+	31,  // 29: alchemy.v1.Conflict.right:type_name -> alchemy.v1.Claim
+	5,   // 30: alchemy.v1.Duplicate.signal:type_name -> alchemy.v1.DuplicateSignal
+	34,  // 31: alchemy.v1.Duplicate.left:type_name -> alchemy.v1.DuplicateSide
+	34,  // 32: alchemy.v1.Duplicate.right:type_name -> alchemy.v1.DuplicateSide
+	24,  // 33: alchemy.v1.DuplicateSide.provenance:type_name -> alchemy.v1.Provenance
+	25,  // 34: alchemy.v1.Result.entities:type_name -> alchemy.v1.Entity
+	26,  // 35: alchemy.v1.Result.relations:type_name -> alchemy.v1.Relation
+	27,  // 36: alchemy.v1.Result.chunks:type_name -> alchemy.v1.Chunk
+	28,  // 37: alchemy.v1.Result.vectors:type_name -> alchemy.v1.Vector
+	32,  // 38: alchemy.v1.Result.conflicts:type_name -> alchemy.v1.Conflict
+	29,  // 39: alchemy.v1.Result.violations:type_name -> alchemy.v1.Violation
+	30,  // 40: alchemy.v1.Result.guesses:type_name -> alchemy.v1.Guess
+	35,  // 41: alchemy.v1.Result.counts:type_name -> alchemy.v1.Counts
+	36,  // 42: alchemy.v1.Result.model_calls:type_name -> alchemy.v1.ModelCall
+	37,  // 43: alchemy.v1.Result.unread:type_name -> alchemy.v1.Unread
+	15,  // 44: alchemy.v1.Result.rules:type_name -> alchemy.v1.ReviewRule
+	33,  // 45: alchemy.v1.Result.duplicates:type_name -> alchemy.v1.Duplicate
+	40,  // 46: alchemy.v1.Result.rule_sets:type_name -> alchemy.v1.RuleSet
+	55,  // 47: alchemy.v1.Result.supersessions:type_name -> alchemy.v1.Supersession
+	56,  // 48: alchemy.v1.Result.proposals:type_name -> alchemy.v1.Proposal
+	39,  // 49: alchemy.v1.RuleSet.rules:type_name -> alchemy.v1.StandingRule
+	25,  // 50: alchemy.v1.ResultPage.entities:type_name -> alchemy.v1.Entity
+	26,  // 51: alchemy.v1.ResultPage.relations:type_name -> alchemy.v1.Relation
+	27,  // 52: alchemy.v1.ResultPage.chunks:type_name -> alchemy.v1.Chunk
+	28,  // 53: alchemy.v1.ResultPage.vectors:type_name -> alchemy.v1.Vector
+	32,  // 54: alchemy.v1.ResultPage.conflicts:type_name -> alchemy.v1.Conflict
+	29,  // 55: alchemy.v1.ResultPage.violations:type_name -> alchemy.v1.Violation
+	30,  // 56: alchemy.v1.ResultPage.guesses:type_name -> alchemy.v1.Guess
+	33,  // 57: alchemy.v1.ResultPage.duplicates:type_name -> alchemy.v1.Duplicate
+	35,  // 58: alchemy.v1.ResultPage.counts:type_name -> alchemy.v1.Counts
+	36,  // 59: alchemy.v1.ResultPage.model_calls:type_name -> alchemy.v1.ModelCall
+	37,  // 60: alchemy.v1.ResultPage.unread:type_name -> alchemy.v1.Unread
+	15,  // 61: alchemy.v1.ResultPage.rules:type_name -> alchemy.v1.ReviewRule
+	40,  // 62: alchemy.v1.ResultPage.rule_sets:type_name -> alchemy.v1.RuleSet
+	55,  // 63: alchemy.v1.ResultPage.supersessions:type_name -> alchemy.v1.Supersession
+	56,  // 64: alchemy.v1.ResultPage.proposals:type_name -> alchemy.v1.Proposal
+	59,  // 65: alchemy.v1.JobEvent.at:type_name -> google.protobuf.Timestamp
+	0,   // 66: alchemy.v1.JobEvent.state:type_name -> alchemy.v1.JobState
+	35,  // 67: alchemy.v1.JobEvent.counts:type_name -> alchemy.v1.Counts
+	32,  // 68: alchemy.v1.JobEvent.conflict:type_name -> alchemy.v1.Conflict
+	36,  // 69: alchemy.v1.JobEvent.model_calls_by_stage:type_name -> alchemy.v1.ModelCall
+	8,   // 70: alchemy.v1.Ref.kind:type_name -> alchemy.v1.RefKind
+	24,  // 71: alchemy.v1.Ref.provenance:type_name -> alchemy.v1.Provenance
+	6,   // 72: alchemy.v1.ReviewItem.kind:type_name -> alchemy.v1.ReviewKind
+	43,  // 73: alchemy.v1.ReviewItem.targets:type_name -> alchemy.v1.Ref
+	15,  // 74: alchemy.v1.ReviewItem.suppressed_by:type_name -> alchemy.v1.ReviewRule
+	24,  // 75: alchemy.v1.ReviewItem.provenance:type_name -> alchemy.v1.Provenance
+	0,   // 76: alchemy.v1.Findings.state:type_name -> alchemy.v1.JobState
+	44,  // 77: alchemy.v1.Findings.items:type_name -> alchemy.v1.ReviewItem
+	57,  // 78: alchemy.v1.DecideRequest.decisions:type_name -> alchemy.v1.ReviewDecision
+	0,   // 79: alchemy.v1.DecideResponse.state:type_name -> alchemy.v1.JobState
+	50,  // 80: alchemy.v1.DecideResponse.rejected:type_name -> alchemy.v1.DecisionRejection
+	25,  // 81: alchemy.v1.AssertRequest.entities:type_name -> alchemy.v1.Entity
+	26,  // 82: alchemy.v1.AssertRequest.relations:type_name -> alchemy.v1.Relation
+	54,  // 83: alchemy.v1.AssertRequest.supersedes:type_name -> alchemy.v1.Supersedes
+	56,  // 84: alchemy.v1.ExtendOntologyRequest.accept:type_name -> alchemy.v1.Proposal
+	43,  // 85: alchemy.v1.Supersession.by:type_name -> alchemy.v1.Ref
+	24,  // 86: alchemy.v1.Supersession.provenance:type_name -> alchemy.v1.Provenance
+	10,  // 87: alchemy.v1.Proposal.kind:type_name -> alchemy.v1.ProposalKind
+	2,   // 88: alchemy.v1.Proposal.producers:type_name -> alchemy.v1.Producer
+	43,  // 89: alchemy.v1.Proposal.example:type_name -> alchemy.v1.Ref
+	7,   // 90: alchemy.v1.ReviewDecision.verb:type_name -> alchemy.v1.ReviewVerb
+	45,  // 91: alchemy.v1.ReviewDecision.edit:type_name -> alchemy.v1.Edit
+	59,  // 92: alchemy.v1.ReviewDecision.at:type_name -> google.protobuf.Timestamp
+	16,  // 93: alchemy.v1.Alchemy.CreateJob:input_type -> alchemy.v1.CreateJobRequest
+	18,  // 94: alchemy.v1.Alchemy.GetJob:input_type -> alchemy.v1.GetJobRequest
+	21,  // 95: alchemy.v1.Alchemy.GetResult:input_type -> alchemy.v1.GetResultRequest
+	21,  // 96: alchemy.v1.Alchemy.StreamResult:input_type -> alchemy.v1.GetResultRequest
+	19,  // 97: alchemy.v1.Alchemy.DeleteJob:input_type -> alchemy.v1.DeleteJobRequest
+	22,  // 98: alchemy.v1.Alchemy.UploadSource:input_type -> alchemy.v1.SourceChunk
+	20,  // 99: alchemy.v1.Alchemy.WatchJob:input_type -> alchemy.v1.WatchJobRequest
+	57,  // 100: alchemy.v1.Alchemy.Review:input_type -> alchemy.v1.ReviewDecision
+	46,  // 101: alchemy.v1.Alchemy.ListFindings:input_type -> alchemy.v1.ListFindingsRequest
+	48,  // 102: alchemy.v1.Alchemy.Decide:input_type -> alchemy.v1.DecideRequest
+	52,  // 103: alchemy.v1.Alchemy.ExtendOntology:input_type -> alchemy.v1.ExtendOntologyRequest
+	51,  // 104: alchemy.v1.Alchemy.Assert:input_type -> alchemy.v1.AssertRequest
+	17,  // 105: alchemy.v1.Alchemy.CreateJob:output_type -> alchemy.v1.Job
+	17,  // 106: alchemy.v1.Alchemy.GetJob:output_type -> alchemy.v1.Job
+	38,  // 107: alchemy.v1.Alchemy.GetResult:output_type -> alchemy.v1.Result
+	41,  // 108: alchemy.v1.Alchemy.StreamResult:output_type -> alchemy.v1.ResultPage
+	61,  // 109: alchemy.v1.Alchemy.DeleteJob:output_type -> google.protobuf.Empty
+	23,  // 110: alchemy.v1.Alchemy.UploadSource:output_type -> alchemy.v1.Source
+	42,  // 111: alchemy.v1.Alchemy.WatchJob:output_type -> alchemy.v1.JobEvent
+	44,  // 112: alchemy.v1.Alchemy.Review:output_type -> alchemy.v1.ReviewItem
+	47,  // 113: alchemy.v1.Alchemy.ListFindings:output_type -> alchemy.v1.Findings
+	49,  // 114: alchemy.v1.Alchemy.Decide:output_type -> alchemy.v1.DecideResponse
+	53,  // 115: alchemy.v1.Alchemy.ExtendOntology:output_type -> alchemy.v1.ExtendOntologyResponse
+	38,  // 116: alchemy.v1.Alchemy.Assert:output_type -> alchemy.v1.Result
+	105, // [105:117] is the sub-list for method output_type
+	93,  // [93:105] is the sub-list for method input_type
+	93,  // [93:93] is the sub-list for extension type_name
+	93,  // [93:93] is the sub-list for extension extendee
+	0,   // [0:93] is the sub-list for field type_name
 }
 
 func init() { file_alchemy_v1_alchemy_proto_init() }

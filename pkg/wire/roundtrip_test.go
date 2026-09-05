@@ -111,25 +111,45 @@ func everything() alchemy.Result {
 			{Kind: alchemy.ViolationMissingID, Detail: "d7", Subject: "s7", Provenance: prov(14, alchemy.ProducerTabular)},
 			{Kind: alchemy.ViolationDuplicateID, Detail: "d8", Subject: "s8", Provenance: prov(15, alchemy.ProducerDDL)},
 		},
+		// Every claim names the record it was read from, and no two of the
+		// twelve name the same one, so a converter that copied Left.About into
+		// Right — or dropped it, as the pre-round-trip converters dropped
+		// Provenance.By — fails here rather than in a store that silently stops
+		// writing `_contradicts`. The one exception is deliberate and is the
+		// other case the converter has to get right: c5's two sides name no
+		// record at all.
 		Conflicts: []alchemy.Conflict{
 			{Kind: alchemy.ConflictEntityAttributes, Subject: "c1", Detail: "cd1",
-				Left:  alchemy.Claim{Statement: "l1", Provenance: prov(16, alchemy.ProducerDDL)},
-				Right: alchemy.Claim{Statement: "r1", Provenance: prov(17, alchemy.ProducerLLMExtract)}},
+				Left: alchemy.Claim{Statement: "l1", About: alchemy.Ref{Kind: alchemy.RefEntity, ID: "e1", Type: "Person"},
+					Provenance: prov(16, alchemy.ProducerDDL)},
+				Right: alchemy.Claim{Statement: "r1", About: alchemy.Ref{Kind: alchemy.RefEntity, ID: "e2", Type: "Org"},
+					Provenance: prov(17, alchemy.ProducerLLMExtract)}},
 			{Kind: alchemy.ConflictEntityType, Subject: "c2", Detail: "cd2",
-				Left:  alchemy.Claim{Statement: "l2", Provenance: prov(18, alchemy.ProducerTabular)},
-				Right: alchemy.Claim{Statement: "r2", Provenance: prov(19, alchemy.ProducerHuman)}},
+				Left: alchemy.Claim{Statement: "l2", About: alchemy.Ref{Kind: alchemy.RefEntity, ID: "e3", Type: "Product"},
+					Provenance: prov(18, alchemy.ProducerTabular)},
+				Right: alchemy.Claim{Statement: "r2", About: alchemy.Ref{Kind: alchemy.RefEntity, ID: "e3", Type: "Component"},
+					Provenance: prov(19, alchemy.ProducerHuman)}},
 			{Kind: alchemy.ConflictRelationDirection, Subject: "c3", Detail: "cd3",
-				Left:  alchemy.Claim{Statement: "l3", Provenance: prov(20, alchemy.ProducerGraphImport)},
-				Right: alchemy.Claim{Statement: "r3", Provenance: prov(21, alchemy.ProducerDDL)}},
+				Left: alchemy.Claim{Statement: "l3", About: alchemy.Ref{Kind: alchemy.RefRelation, From: "e1", To: "e2", Type: "WORKS_AT", Key: "k3"},
+					Provenance: prov(20, alchemy.ProducerGraphImport)},
+				Right: alchemy.Claim{Statement: "r3", About: alchemy.Ref{Kind: alchemy.RefRelation, From: "e2", To: "e1", Type: "WORKS_AT", Key: "k4"},
+					Provenance: prov(21, alchemy.ProducerDDL)}},
 			{Kind: alchemy.ConflictContradiction, Subject: "c4", Detail: "cd4",
-				Left:  alchemy.Claim{Statement: "l4", Provenance: prov(22, alchemy.ProducerDDL)},
-				Right: alchemy.Claim{Statement: "r4", Provenance: prov(23, alchemy.ProducerLLMExtract)}},
+				Left: alchemy.Claim{Statement: "l4", About: alchemy.Ref{Kind: alchemy.RefRelation, From: "e2", To: "e3", Type: "SHIPS", Key: "k5"},
+					Provenance: prov(22, alchemy.ProducerDDL)},
+				Right: alchemy.Claim{Statement: "r4", About: alchemy.Ref{Kind: alchemy.RefRelation, From: "e3", To: "e2", Type: "SHIPS", Key: "k6"},
+					Provenance: prov(23, alchemy.ProducerLLMExtract)}},
+			// A side that names no record, which is the case AboutToProto turns
+			// into no message at all: an empty Ref on the wire says "the entity
+			// with no id", which is joinable and false.
 			{Kind: alchemy.ConflictRelationAttributes, Subject: "c5", Detail: "cd5",
 				Left:  alchemy.Claim{Statement: "l5", Provenance: prov(24, alchemy.ProducerTabular)},
 				Right: alchemy.Claim{Statement: "r5", Provenance: prov(25, alchemy.ProducerTabular)}},
 			{Kind: alchemy.ConflictCardinality, Subject: "c6", Detail: "cd6",
-				Left:  alchemy.Claim{Statement: "l6", Provenance: prov(26, alchemy.ProducerHuman)},
-				Right: alchemy.Claim{Statement: "r6", Provenance: prov(27, alchemy.ProducerGraphImport)}},
+				Left: alchemy.Claim{Statement: "l6", About: alchemy.Ref{Kind: alchemy.RefRelation, From: "e1", To: "e4", Type: "MEMBER_OF", Key: "k7"},
+					Provenance: prov(26, alchemy.ProducerHuman)},
+				Right: alchemy.Claim{Statement: "r6", About: alchemy.Ref{Kind: alchemy.RefRelation, From: "e5", To: "e4", Type: "MEMBER_OF", Key: "k8"},
+					Provenance: prov(27, alchemy.ProducerGraphImport)}},
 		},
 		Duplicates: []alchemy.Duplicate{
 			{Signal: alchemy.DuplicateNameAffix, Subject: "u1", Detail: "ud1",

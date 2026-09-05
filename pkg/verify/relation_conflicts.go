@@ -46,13 +46,25 @@ type edgeKey struct {
 	key string
 }
 
+// claimant is the earliest record seen in one cell of a group: where it came
+// from, and which record it was.
+//
+// The Ref is remembered rather than rebuilt at the moment a conflict is
+// emitted, because by then that record is gone — this scan keeps one entry per
+// cell and not one per record, which is §8.1's whole point. Four strings beside
+// a provenance already kept, on four cells per edge however many million
+// records arrive.
+type claimant struct {
+	prov alchemy.Provenance
+	ref  alchemy.Ref
+}
+
 // relationGroup is everything remembered about one edge. first[dir][class]
-// holds the provenance of the earliest record seen running that way from a
-// deterministic or an inferred producer — four entries however many million
-// records arrive, which is the identity-keyed index §8.1 asks for in place of a
-// pairwise scan.
+// holds the earliest record seen running that way from a deterministic or an
+// inferred producer — four entries however many million records arrive, which
+// is the identity-keyed index §8.1 asks for in place of a pairwise scan.
 type relationGroup struct {
-	first [2][2]*alchemy.Provenance
+	first [2][2]*claimant
 
 	// One edge is one question of each kind. A hundred chunks repeating the
 	// same reversal is still one thing a person has to decide, and a queue that
@@ -88,6 +100,7 @@ type attrPair struct {
 type valued struct {
 	value string
 	prov  alchemy.Provenance
+	ref   alchemy.Ref
 }
 
 // parallelEdges names the {pair, type} buckets that really do hold more than
@@ -179,7 +192,7 @@ func relationConflicts(relations []alchemy.Relation, rs *rules) []alchemy.Confli
 			g.reportedContradiction = true
 			// The deterministic claim goes on the left: a reviewer reads left to
 			// right, and the side that read a statement belongs first.
-			left, leftDir := r.Provenance, dir
+			left, leftDir := claimant{prov: r.Provenance, ref: relationRef(r)}, dir
 			right, rightDir := *partner, direction(opposite)
 			if !det {
 				left, leftDir, right, rightDir = right, rightDir, left, leftDir
@@ -188,9 +201,13 @@ func relationConflicts(relations []alchemy.Relation, rs *rules) []alchemy.Confli
 				Kind:    alchemy.ConflictContradiction,
 				Subject: subjectOf(key),
 				Detail: fmt.Sprintf("%s is asserted by %s and reversed by %s; the deterministic side usually wins, and the time it does not is the one worth reading",
-					subjectOf(key), where(left), where(right)),
-				Left:  claim(edgeOf(key, leftDir), left),
-				Right: claim(edgeOf(key, rightDir), right),
+					subjectOf(key), where(left.prov), where(right.prov)),
+				// Two Refs that differ, because a reversal really is two edges
+				// and the graph holds both. Each side names the edge its own
+				// record drew, so a store can write the contract's
+				// `_contradicts` on each pointing at the other.
+				Left:  claim(edgeOf(key, leftDir), left.prov, left.ref),
+				Right: claim(edgeOf(key, rightDir), right.prov, right.ref),
 			})
 		}
 		if partner := g.first[opposite][class(det)]; partner != nil && !g.reportedDirection && rs.runsOneWay(r.Type) {
@@ -199,14 +216,13 @@ func relationConflicts(relations []alchemy.Relation, rs *rules) []alchemy.Confli
 				Kind:    alchemy.ConflictRelationDirection,
 				Subject: subjectOf(key),
 				Detail: fmt.Sprintf("%s runs one way per %s and the other per %s; neither side has more standing than the other, so nothing in the data settles it",
-					subjectOf(key), where(*partner), where(r.Provenance)),
-				Left:  claim(edgeOf(key, direction(opposite)), *partner),
-				Right: claim(edgeOf(key, dir), r.Provenance),
+					subjectOf(key), where(partner.prov), where(r.Provenance)),
+				Left:  claim(edgeOf(key, direction(opposite)), partner.prov, partner.ref),
+				Right: claim(edgeOf(key, dir), r.Provenance, relationRef(r)),
 			})
 		}
 		if g.first[dir][class(det)] == nil {
-			p := r.Provenance
-			g.first[dir][class(det)] = &p
+			g.first[dir][class(det)] = &claimant{prov: r.Provenance, ref: relationRef(r)}
 		}
 
 		out = append(out, attributeConflicts(g, key, dir, det, r)...)
@@ -247,7 +263,8 @@ func attributeConflicts(g *relationGroup, key edgeKey, dir direction, det bool, 
 		if partner := pair.first[theirs]; partner != nil && !pair.reportedContradiction && partner.value != a.value {
 			pair.reportedContradiction = true
 			e := edgeOf(key, dir)
-			left, right := valued{value: a.value, prov: r.Provenance}, valued{value: partner.value, prov: partner.prov}
+			left, right := valued{value: a.value, prov: r.Provenance, ref: relationRef(r)},
+				valued{value: partner.value, prov: partner.prov, ref: partner.ref}
 			if !det {
 				left, right = right, left // the side that read a statement goes first.
 			}
@@ -256,13 +273,16 @@ func attributeConflicts(g *relationGroup, key edgeKey, dir direction, det bool, 
 				Subject: e + "." + a.name,
 				Detail: fmt.Sprintf("%s: %s says %s = %s, %s says %s; a model disagreeing with a statement is the case worth a person's time",
 					e, where(left.prov), a.name, left.value, where(right.prov), right.value),
-				Left:  claim(edgeAttrStatement(e, a.name, left.value), left.prov),
-				Right: claim(edgeAttrStatement(e, a.name, right.value), right.prov),
+				// Both sides name one edge, and the equal Refs are the finding:
+				// the disagreement is inside a record, so there is no second
+				// record to point a `_contradicts` at. See alchemy.Claim.About.
+				Left:  claim(edgeAttrStatement(e, a.name, left.value), left.prov, left.ref),
+				Right: claim(edgeAttrStatement(e, a.name, right.value), right.prov, right.ref),
 			})
 		}
 
 		if pair.first[mine] == nil {
-			pair.first[mine] = &slot{value: a.value, prov: r.Provenance}
+			pair.first[mine] = &slot{value: a.value, prov: r.Provenance, ref: relationRef(r)}
 			continue
 		}
 		first := pair.first[mine]
@@ -278,8 +298,8 @@ func attributeConflicts(g *relationGroup, key edgeKey, dir direction, det bool, 
 			Subject: e + "." + a.name,
 			Detail: fmt.Sprintf("%s: %s says %s = %s, %s says %s; neither source has more standing than the other, so nothing in the data settles it",
 				e, where(first.prov), a.name, first.value, where(r.Provenance), a.value),
-			Left:  claim(edgeAttrStatement(e, a.name, first.value), first.prov),
-			Right: claim(edgeAttrStatement(e, a.name, a.value), r.Provenance),
+			Left:  claim(edgeAttrStatement(e, a.name, first.value), first.prov, first.ref),
+			Right: claim(edgeAttrStatement(e, a.name, a.value), r.Provenance, relationRef(r)),
 		})
 	}
 	return out

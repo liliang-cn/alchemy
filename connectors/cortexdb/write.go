@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
@@ -171,10 +172,18 @@ func (l *Loader) writeEntities(ctx context.Context, p *plan, chunks map[int]bool
 		// instead of it. §5b's keys say who made this record; this one says what
 		// kind of thing establishes it, in the vocabulary the other producers
 		// writing into this store also use.
-		grade, state, why := contractGrade(e.Provenance, p.refusal(refOfEntity(e)))
+		ref := refOfEntity(e)
+		grade, state, why := contractGrade(e.Provenance, p.refusal(ref))
 		contractMeta(grade, state, why, l.opts.ReservedPrefix, meta)
+		id := entityNodeID(l.opts.RunID, e.ID)
+		// And the records this one cannot both-be-true with, if any. It is
+		// almost always none for a node: alchemy's entity conflicts are two
+		// claims about one id, and one id is one node here. See contract.go.
+		if err := contradictsMeta(p.contradicts(ref, id), l.opts.ReservedPrefix, meta); err != nil {
+			return fmt.Errorf("entity %s: %w", e.ID, err)
+		}
 		in := cdb.ToolEntityInput{
-			ID: entityNodeID(l.opts.RunID, e.ID), Name: e.Name, Type: e.Type, Metadata: meta,
+			ID: id, Name: e.Name, Type: e.Type, Metadata: meta,
 		}
 		if e.Provenance.Chunk >= 0 && chunks[e.Provenance.Chunk] {
 			in.ChunkIDs = []string{chunkNodeID(l.opts.RunID, e.Provenance.Chunk)}
@@ -227,15 +236,34 @@ func (l *Loader) writeRelations(ctx context.Context, p *plan, chunks map[int]boo
 	tools := l.cortex.GraphRAGTools()
 	byDoc := map[string][]cdb.ToolRelationInput{}
 	order := []string{}
+	// The ids this load told a reader to go and look for, and the ids the store
+	// says it actually used. They are compared after the last batch; see
+	// edgeRecordID for why a copy of another package's identity is allowed to
+	// exist here only under a check.
+	claimed := map[string]bool{}
+	used := map[string]bool{}
 	for _, g := range p.groups {
 		in := cdb.ToolRelationInput{From: g.from, To: g.to, Type: g.typ, Metadata: map[string]string{}}
 		pre := l.opts.ReservedPrefix
 		provs := make([]alchemy.Provenance, 0, len(g.members))
 		seenChunk := map[string]bool{}
 		var grade, state, why string
+		// The edge this group becomes, named the way CortexDB names it, so that
+		// a `_contradicts` on the other side can point at it and this one can
+		// leave itself out of its own.
+		self := edgeRecordID(g)
+		disagrees := map[string]bool{}
 		for _, m := range g.members {
 			r := p.res.Relations[m]
 			provs = append(provs, r.Provenance)
+			// Every member's disagreements, because CortexDB's identity makes
+			// the group one record and a reader of that record is owed what
+			// any of the claims in it contradicts. A set, because two members
+			// disagreeing with the same edge is one disagreement to a reader
+			// of the one row they became.
+			for _, id := range p.contradicts(refOfRelation(r), self) {
+				disagrees[id] = true
+			}
 			// The contract's grade for the edge CortexDB will make of these,
 			// folded member by member beside `inferred` below and by the same
 			// rule: the group is only as established as its least established
@@ -268,6 +296,23 @@ func (l *Loader) writeRelations(ctx context.Context, p *plan, chunks map[int]boo
 		// loses nothing even though only one of them can fill the flat fields.
 		in.Metadata[pre+keyProvenance] = string(blob)
 		contractMeta(grade, state, why, pre, in.Metadata)
+		if len(disagrees) > 0 {
+			ids := make([]string, 0, len(disagrees))
+			for id := range disagrees {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			if err := contradictsMeta(ids, pre, in.Metadata); err != nil {
+				return fmt.Errorf("relation %s-[%s]->%s: %w", g.from, g.typ, g.to, err)
+			}
+			// This edge is now named by the other side's array and names the
+			// other side in its own, so both ids have to be ids the store
+			// really used.
+			claimed[self] = true
+			for _, id := range ids {
+				claimed[id] = true
+			}
+		}
 		// Shelf moment first; a single member's own At (ProducerHuman) is copied
 		// in below and overrides it. A fused edge has several members and no one
 		// time, so it keeps the shelf moment.
@@ -313,7 +358,30 @@ func (l *Loader) writeRelations(ctx context.Context, p *plan, chunks map[int]boo
 				return fmt.Errorf("cortexdb: the store refused %d edge(s) of %s: %v",
 					len(resp.Rejected), doc, resp.Rejected)
 			}
+			for _, id := range resp.EdgeIDs {
+				used[id] = true
+			}
 			rep.Relations += resp.Written
+		}
+	}
+
+	// The one place this connector names a record by a rule that is CortexDB's
+	// rather than its own, asked rather than assumed — the same guard
+	// writeEntities puts on the ids it asked for, for the same reason: the rule
+	// is the store's to give and a copy of it would go stale in silence. Here
+	// the silence would be worse than a wrong grade, because a `_contradicts`
+	// pointing at an id nothing has is a reader following a link to nowhere and
+	// concluding the disagreement was withdrawn.
+	//
+	// Checked only for the ids actually written into a `_contradicts`. A store
+	// that renames its edges breaks this feature and nothing else, and failing
+	// every load that never used the key would be this connector refusing work
+	// over a promise it had not made.
+	for id := range claimed {
+		if !used[id] {
+			return fmt.Errorf("%w: wrote _contradicts naming %q and the store reports no such edge; "+
+				"CortexDB's edge identity is no longer (from, to, type, document) rendered as this "+
+				"connector renders it, so the join would resolve to nothing", ErrEdgeUnknown, id)
 		}
 	}
 	return nil

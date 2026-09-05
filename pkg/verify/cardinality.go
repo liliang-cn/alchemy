@@ -123,8 +123,12 @@ func atEnd(ends *map[endKey]*standing, k endKey, identity string, r alchemy.Rela
 		Subject: directedEdge(r),
 		Detail: fmt.Sprintf("%s is at the %s end of %s per %s and of %s per %s; the ontology declares at most one, and the later record may be a correction or may be the mistake, so nothing in the data settles it",
 			k.node, k.end, directedEdge(held.first), where(held.first.Provenance), directedEdge(r), where(r.Provenance)),
-		Left:  claim(directedEdge(held.first), held.first.Provenance),
-		Right: claim(directedEdge(r), r.Provenance),
+		// The two Refs are two different edges, which is what makes this kind
+		// and the direction family the ones a store can write `_contradicts`
+		// for: nothing here is being merged or removed, the graph holds both,
+		// and the ontology is the only thing saying they cannot both stand.
+		Left:  claim(directedEdge(held.first), held.first.Provenance, relationRef(held.first)),
+		Right: claim(directedEdge(r), r.Provenance, relationRef(r)),
 	}}
 }
 

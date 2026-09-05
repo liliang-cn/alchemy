@@ -171,21 +171,28 @@ type Conflict struct {
 	Kind ConflictKind `json:"kind"`
 	// Subject is what the two sources disagree about, rendered for a person.
 	//
-	// It stays prose, and the decision is deliberate rather than an oversight —
-	// Violation grew an About because a sink has to join a finding to a row it
-	// wrote, and a conflict is the one finding no sink ever holds. §7.3 is why:
-	// a job with an unanswered conflict does not finish, GetResult refuses it,
-	// and nothing writes it anywhere. By the time a conflict does reach a store
-	// it has been answered, and what it is then is a note saying this graph was
-	// questioned and by whom — read, not joined.
+	// It stays prose, and it stays prose for a reason that survived Claim.About
+	// arriving beside it. It is what a review item is filed under, what a
+	// standing rule is matched on, and what pkg/review looks a record up by;
+	// a subject that changed shape would retire every decision ever stamped.
 	//
 	// It is also not one record. A conflict names two claims about a subject
 	// that is sometimes neither an entity nor an edge but an attribute of one
-	// ("n1.region"), and a structured form would have to invent a third shape
-	// for that. pkg/review does need to reach the records, and does it by
-	// building the same strings from the graph and looking the subject up —
-	// which cannot drift silently, because a subject that no record renders
-	// simply finds nothing.
+	// ("n1.region"), and a structured form of THE SUBJECT would have to invent
+	// a third shape for that. Claim.About does not: it names the record each
+	// SIDE was read from, which is always an entity or an edge or nothing, and
+	// the two sides of an attribute disagreement simply name the same one.
+	//
+	// What did not survive is the argument this comment used to make for
+	// leaving it there alone — that "a conflict is the one finding no sink ever
+	// holds", because §7.3 refuses a job with an unanswered one. §7.3 refuses
+	// the UNANSWERED ones. An answered conflict is delivered, its two records
+	// are written, and a store that is asked to say which record disagrees with
+	// which — the knowledge contract's `_contradicts`, on both, because the
+	// disagreement is information — could only answer by parsing the subject
+	// back into fields. That is the private copy of another package's output
+	// format Ref exists to abolish, and it is why About is on the Claim rather
+	// than on the Conflict: the join is per side.
 	Subject string `json:"subject"`
 	// Detail states the disagreement in words.
 	Detail string `json:"detail"`
@@ -198,7 +205,36 @@ type Conflict struct {
 // Claim is one side of a Conflict.
 type Claim struct {
 	// Statement renders the claim for a person reading the queue.
-	Statement  string     `json:"statement"`
+	Statement string `json:"statement"`
+	// About is the record this side was read from, in fields.
+	//
+	// It is the same shape Violation.About is, for the same §5b reason and one
+	// more. The §5b reason: a finding that can only say which record it is
+	// about by rendering a sentence is a finding no consumer can act on, and
+	// "excludable" is the word that fails. The extra one is the knowledge
+	// contract's `_contradicts` — the ids of the records a record cannot
+	// both-be-true with, written on BOTH of them, because two sources
+	// disagreeing is intelligence rather than an error. A store can only write
+	// that if the finding names two records; until it did, the only route was
+	// to parse Subject, which is what Ref exists to abolish.
+	//
+	// Two claims about ONE record carry one Ref twice, and that is the answer
+	// rather than a defect. An entity given two values for one attribute is one
+	// node in the graph — the merge already happened, or the store will only
+	// ever hold one — and a consumer comparing the two Refs learns exactly
+	// that: this disagreement is inside a record, not between two of them, and
+	// there is no other record to point `_contradicts` at. The kinds where the
+	// two Refs genuinely differ are the ones where the graph really does hold
+	// both: a direction reversal, and a cardinality clash, which is two
+	// well-formed edges the ontology says cannot both stand.
+	//
+	// Zero where the producer cannot name a record, exactly as on a Violation
+	// about a file. It is `omitzero` for the reason Provenance.At is a string:
+	// sink.Digest hashes a Claim through encoding/json, so a field that always
+	// rendered would change the content address of every result ever produced.
+	// A conflict whose sides name no record renders the two bytes it always
+	// rendered.
+	About      Ref        `json:"about,omitzero"`
 	Provenance Provenance `json:"provenance"`
 }
 

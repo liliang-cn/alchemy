@@ -39,6 +39,12 @@ var (
 	// entity nodes somewhere other than where this run asked for them. See
 	// Loader.Load.
 	ErrRekeyed = errors.New("cortexdb: the store's active ontology re-keyed this run's entities")
+	// ErrEdgeUnknown is returned when a `_contradicts` this load wrote names an
+	// edge id the store did not report using. An edge's identity is CortexDB's
+	// and this connector predicts it in order to write the knowledge contract's
+	// key; the prediction is checked rather than trusted. See
+	// Loader.writeRelations and plan.edgeRecordID.
+	ErrEdgeUnknown = errors.New("cortexdb: _contradicts names an edge the store did not write")
 )
 
 // Options configures one Loader.

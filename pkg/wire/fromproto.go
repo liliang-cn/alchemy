@@ -134,7 +134,10 @@ func GuessFromProto(g *alchemyv1.Guess) alchemy.Guess {
 }
 
 func ClaimFromProto(c *alchemyv1.Claim) alchemy.Claim {
-	return alchemy.Claim{Statement: c.GetStatement(), Provenance: ProvenanceFromProto(c.GetProvenance())}
+	return alchemy.Claim{
+		Statement: c.GetStatement(), About: AboutFromProto(c.GetAbout()),
+		Provenance: ProvenanceFromProto(c.GetProvenance()),
+	}
 }
 
 func ConflictFromProto(c *alchemyv1.Conflict) alchemy.Conflict {

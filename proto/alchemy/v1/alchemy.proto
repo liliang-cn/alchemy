@@ -633,6 +633,23 @@ message Guess {
 message Claim {
   string statement = 1;
   Provenance provenance = 2;
+  // The record this side of the disagreement was read from, in fields.
+  //
+  // The same shape Violation.about is, on each side rather than on the
+  // conflict, because a conflict names two records and the join is per side.
+  // What needs it is the knowledge contract's `_contradicts` — the ids of the
+  // records a record cannot both-be-true with, written on both of them,
+  // because two sources disagreeing is information rather than an error. A
+  // store could otherwise reach those ids only by parsing `subject` back into
+  // fields, which is the private copy of the verifier's output format that Ref
+  // exists to abolish.
+  //
+  // Two claims about one record carry one ref twice, and that is the answer
+  // rather than a defect: an entity given two values for one attribute is one
+  // node in the graph, and equal refs are how a reader tells that case from
+  // the reversal and the cardinality clash, where the graph really does hold
+  // both records. Unset where the producer can name no record.
+  Ref about = 3;
 }
 
 // Conflict is two sources both claiming to be right, with nothing in the data

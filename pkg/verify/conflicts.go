@@ -46,6 +46,16 @@ func conflicts(entities []alchemy.Entity, relations []alchemy.Relation, rs *rule
 type slot struct {
 	value string
 	prov  alchemy.Provenance
+	// ref names the record the remembered claim was read from, so that the
+	// Claim built at the moment a conflict is emitted can carry it (see
+	// alchemy.Claim.About). It is remembered rather than rebuilt because by
+	// then the record itself is gone: this scan keeps one entry per key, not
+	// one per record, which is §8.1's whole point.
+	//
+	// Four strings beside the provenance already here, on the same one entry
+	// per key — not per record — so the volume argument the provenance already
+	// answered answers this too.
+	ref alchemy.Ref
 	// others is nil until a second distinct value shows up, which is the normal
 	// case, so a clean graph carries one map per group and no more.
 	others map[string]bool
@@ -80,9 +90,10 @@ func entityConflicts(entities []alchemy.Entity) []alchemy.Conflict {
 	groups := make(map[string]*entityGroup, len(entities))
 
 	for _, e := range entities {
+		ref := entityRef(e)
 		g, seen := groups[e.ID]
 		if !seen {
-			g = &entityGroup{typ: slot{value: e.Type, prov: e.Provenance}}
+			g = &entityGroup{typ: slot{value: e.Type, prov: e.Provenance, ref: ref}}
 			groups[e.ID] = g
 		} else if g.typ.disagrees(e.Type) {
 			out = append(out, alchemy.Conflict{
@@ -90,8 +101,12 @@ func entityConflicts(entities []alchemy.Entity) []alchemy.Conflict {
 				Subject: e.ID,
 				Detail: fmt.Sprintf("entity %q is typed %q by %s and %q by %s; the ontology allows both, so only a person can say which this is",
 					e.ID, g.typ.value, where(g.typ.prov), e.Type, where(e.Provenance)),
-				Left:  claim(typeStatement(e.ID, g.typ.value), g.typ.prov),
-				Right: claim(typeStatement(e.ID, e.Type), e.Provenance),
+				// The two Refs differ in exactly the field the disagreement is
+				// about, which is why an entity's Ref carries its type at all:
+				// two records both calling themselves n1 while typing it
+				// differently are the whole of this kind.
+				Left:  claim(typeStatement(e.ID, g.typ.value), g.typ.prov, g.typ.ref),
+				Right: claim(typeStatement(e.ID, e.Type), e.Provenance, ref),
 			})
 		}
 
@@ -101,7 +116,7 @@ func entityConflicts(entities []alchemy.Entity) []alchemy.Conflict {
 				if g.attrs == nil {
 					g.attrs = make(map[string]*slot, len(e.Attributes)+1)
 				}
-				g.attrs[a.name] = &slot{value: a.value, prov: e.Provenance}
+				g.attrs[a.name] = &slot{value: a.value, prov: e.Provenance, ref: ref}
 				continue
 			}
 			if !s.disagrees(a.value) {
@@ -112,8 +127,12 @@ func entityConflicts(entities []alchemy.Entity) []alchemy.Conflict {
 				Subject: e.ID + "." + a.name,
 				Detail: fmt.Sprintf("entity %q has %s = %s per %s and %s per %s; nothing in the data says which source read it right",
 					e.ID, a.name, s.value, where(s.prov), a.value, where(e.Provenance)),
-				Left:  claim(attrStatement(e.ID, a.name, s.value), s.prov),
-				Right: claim(attrStatement(e.ID, a.name, a.value), e.Provenance),
+				// Both sides name one node, and equal Refs are the finding: an
+				// attribute disagreement is inside a record, so there is no
+				// second record to point a `_contradicts` at. See
+				// alchemy.Claim.About.
+				Left:  claim(attrStatement(e.ID, a.name, s.value), s.prov, s.ref),
+				Right: claim(attrStatement(e.ID, a.name, a.value), e.Provenance, ref),
 			})
 		}
 	}
@@ -177,8 +196,16 @@ func render(v any) string {
 	return fmt.Sprintf("%v", v)
 }
 
-func claim(statement string, p alchemy.Provenance) alchemy.Claim {
-	return alchemy.Claim{Statement: statement, Provenance: p}
+// claim assembles one side of a conflict: the sentence a reviewer reads, the
+// provenance that says where it came from, and the record it was read from.
+//
+// The Ref is a parameter rather than derived from the statement, and that is
+// the whole design: a consumer that had to recover the record by parsing the
+// sentence would hold a private copy of the format above, which is the drift
+// alchemy.Ref exists to abolish. It is zero for a side that names no record,
+// exactly as Violation.About is for a finding about a file.
+func claim(statement string, p alchemy.Provenance, about alchemy.Ref) alchemy.Claim {
+	return alchemy.Claim{Statement: statement, About: about, Provenance: p}
 }
 
 // where names a side of a conflict the way the person deciding it thinks about

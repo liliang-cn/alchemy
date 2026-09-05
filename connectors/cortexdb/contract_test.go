@@ -3,6 +3,8 @@ package cortexdb
 import (
 	"context"
 	"encoding/json"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,10 +43,12 @@ func TestEveryLiteralOfTheKnowledgeContractIsWrittenAsTheSpecWroteIt(t *testing.
 // graded is one result per reachable row of the spec's alchemy mapping table,
 // so that one load exercises the whole of what this connector can establish.
 //
-// Three of the spec's seven rows are not here and their absence is the finding
-// rather than an omission: a rejected record never reaches a sink, a held
-// result is refused before the first write, and a Conflict names its two sides
-// in prose. See contract.go.
+// Two of the spec's rows are not here and their absence is the finding rather
+// than an omission: a rejected record never reaches a sink, and a held result
+// is refused before the first write. The `_contradicts` row is not here either,
+// for a different and smaller reason — this fixture has no conflict in it, so
+// there is no disagreement to record; contradicting() is the one that does.
+// See contract.go.
 func graded() alchemy.Result {
 	ddl := alchemy.Provenance{Source: "schema.sql", Chunk: -1, Producer: alchemy.ProducerDDL, Ontology: "sds@3"}
 	tabular := alchemy.Provenance{Source: "people.csv", Chunk: -1, Producer: alchemy.ProducerTabular, Ontology: "sds@3"}
@@ -196,7 +200,13 @@ func TestARefusedRecordCarriesTheOntologysOwnWords(t *testing.T) {
 // the survivors with who looked, and neither the Provenance nor the Result
 // carries which of accept/edit/always it was. Writing "accept" there would be
 // this connector inventing the one thing the contract says is never
-// normalised. _contradicts is absent for its own reason; see contract.go.
+// normalised.
+//
+// _contradicts is absent here for a plainer reason and is checked anyway: this
+// result contains no conflict, so no record disagrees with another, and the key
+// says nothing rather than "[]". "This record disagrees with nothing" and "this
+// record's disagreements are the empty list" are not the same claim, and the
+// second is one pkg/cortexdb.ValidateContract rejects.
 func TestAKeyThisConnectorCannotFillIsAbsentRatherThanGuessed(t *testing.T) {
 	l := openLocal(t, Options{RunID: "run-A"})
 	if _, err := l.Load(context.Background(), graded()); err != nil {
@@ -260,6 +270,215 @@ func TestTheContractKeysDoNotLeakIntoWhatTheSourceSaid(t *testing.T) {
 			t.Errorf("Describe reports %q as an attribute of the source: %v", k, d.Attributes)
 		}
 	}
+}
+
+// contradicting is the row this connector could not write until a Conflict's
+// sides carried Refs: two records the graph holds, that cannot both be true,
+// neither of them being removed.
+//
+// A direction reversal is the plainest shape of it and the one argus produces
+// by the hour — two outlets narrating the same event with the arrow the other
+// way round. The reviewed side is what makes it loadable at all: §7.3 refuses a
+// result with an unanswered conflict before the first write, so what reaches a
+// store is always a question somebody answered, which is exactly the case the
+// contract says both records survive.
+func contradicting() alchemy.Result {
+	reuters := alchemy.Provenance{
+		Source: "reuters.html", Chunk: 0, Producer: alchemy.ProducerLLMExtract,
+		Model: "gemini-3.6-flash-high", Ontology: "world@3", Chunking: "heading", Confidence: 0.77,
+	}
+	ap := alchemy.Provenance{
+		Source: "apnews.html", Chunk: 0, Producer: alchemy.ProducerLLMExtract,
+		Model: "gemini-3.6-flash-high", Ontology: "world@3", Chunking: "heading", Confidence: 0.64,
+		ReviewedBy: "ada@example.com",
+	}
+	one := alchemy.Relation{From: "p:ada", To: "org:northgate", Type: "LEADS", Provenance: reuters}
+	two := alchemy.Relation{From: "org:northgate", To: "p:ada", Type: "LEADS", Provenance: ap}
+	ref := func(r alchemy.Relation) alchemy.Ref {
+		return alchemy.Ref{Kind: alchemy.RefRelation, From: r.From, To: r.To, Type: r.Type, Key: r.Key}
+	}
+	return alchemy.Result{
+		Entities: []alchemy.Entity{
+			{ID: "p:ada", Type: "Person", Name: "Ada", Provenance: reuters},
+			{ID: "org:northgate", Type: "Organization", Name: "Northgate", Provenance: reuters},
+		},
+		Relations: []alchemy.Relation{one, two},
+		Conflicts: []alchemy.Conflict{{
+			Kind:    alchemy.ConflictRelationDirection,
+			Subject: "org:northgate -[LEADS]- p:ada",
+			Detail:  "one outlet has Ada leading Northgate and the other has it the other way round",
+			Left:    alchemy.Claim{Statement: "Ada leads Northgate", About: ref(one), Provenance: reuters},
+			Right:   alchemy.Claim{Statement: "Northgate leads Ada", About: ref(two), Provenance: ap},
+		}},
+	}
+}
+
+// edgeRecords is every alchemy edge this load wrote, by the id CortexDB gave
+// it, so an assertion about `_contradicts` is checked against ids the STORE
+// chose rather than against ids this test rebuilt the same wrong way the
+// connector might have.
+func edgeRecords(t *testing.T, l *Loader) map[string]map[string]any {
+	t.Helper()
+	out := map[string]map[string]any{}
+	rows, err := l.db().SQL().QueryContext(context.Background(),
+		"SELECT id, COALESCE(properties,'{}') FROM graph_edges "+
+			"WHERE from_node_id LIKE 'entity:alchemy:%' AND to_node_id LIKE 'entity:alchemy:%'")
+	if err != nil {
+		t.Fatalf("query edges: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		out[id] = decodeProps(t, raw)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	return out
+}
+
+// The row itself: whoever detects a disagreement writes it on BOTH records, as
+// a JSON array of the ids of the other side. The disagreement is information,
+// not an error, and both records stay.
+func TestBothSidesOfADisagreementNameTheOther(t *testing.T) {
+	l := openLocal(t, Options{RunID: "run-C"})
+	if _, err := l.Load(context.Background(), contradicting()); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	edges := edgeRecords(t, l)
+	var marked []string
+	for id, props := range edges {
+		if _, ok := props["_contradicts"]; ok {
+			marked = append(marked, id)
+		}
+	}
+	if len(marked) != 2 {
+		t.Fatalf("%d of %d edges carry _contradicts, want both sides of the one conflict: %v",
+			len(marked), len(edges), edges)
+	}
+	sort.Strings(marked)
+	for i, id := range marked {
+		other := marked[1-i]
+		ids := contradictsOf(t, edges[id]["_contradicts"])
+		if len(ids) != 1 || ids[0] != other {
+			t.Errorf("edge %s: _contradicts = %v, want exactly [%s] — the id of the record it "+
+				"disagrees with, as the store knows it", id, ids, other)
+		}
+	}
+}
+
+// The contract's own validation of this key, applied where the record is
+// written rather than where it is read: pkg/cortexdb.ValidateContract parses
+// _contradicts as a JSON array of ids and rejects an empty one. A connector
+// that wrote a comma-joined list, or a bare id, or `[""]` would put a record in
+// a shared brain that every conformant reader refuses.
+func TestTheContradictsKeyIsTheJSONArrayTheContractValidates(t *testing.T) {
+	l := openLocal(t, Options{RunID: "run-CJ"})
+	if _, err := l.Load(context.Background(), contradicting()); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	found := 0
+	for id, props := range edgeRecords(t, l) {
+		raw, ok := props["_contradicts"]
+		if !ok {
+			continue
+		}
+		found++
+		s, isString := raw.(string)
+		if !isString {
+			t.Errorf("edge %s: _contradicts is %T; the contract's keys are metadata strings", id, raw)
+			continue
+		}
+		var ids []string
+		if err := json.Unmarshal([]byte(s), &ids); err != nil {
+			t.Errorf("edge %s: _contradicts %q is not a JSON array of ids: %v", id, s, err)
+			continue
+		}
+		if len(ids) == 0 {
+			t.Errorf("edge %s: _contradicts is an empty array; a record that disagrees with "+
+				"nothing carries no key at all", id)
+		}
+		for _, other := range ids {
+			if strings.TrimSpace(other) == "" {
+				t.Errorf("edge %s: _contradicts contains an empty id: %q", id, s)
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("no record carries _contradicts; the fixture is not exercising the key")
+	}
+}
+
+// Every record the load wrote still passes everything else the contract asks
+// of it. `_contradicts` is an addition and must not cost a grade, a reason or
+// a time — the four rows this connector could already fill.
+func TestARecordThatContradictsAnotherStillCarriesTheRestOfTheContract(t *testing.T) {
+	l := openLocal(t, Options{RunID: "run-CR"})
+	if _, err := l.Load(context.Background(), contradicting()); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, props := range everyRecord(t, l) {
+		grade, _ := props["_grade"].(string)
+		if grade == "" {
+			t.Errorf("a record carries no _grade: %v", props)
+		}
+		if at, _ := props["_at"].(string); at == "" {
+			t.Errorf("a record carries no _at: %v", props)
+		}
+		if src, _ := props["_source"].(string); src == "" {
+			t.Errorf("a record carries no _source: %v", props)
+		}
+		if (grade == gradeRefused || grade == gradeHeld) && props["_why"] == nil {
+			t.Errorf("%s record with no _why: %v", grade, props)
+		}
+	}
+}
+
+// The other half of truthfulness, kept: a disagreement INSIDE one record is not
+// a `_contradicts`, because there is no other record to name.
+//
+// alchemy.Claim.About says so in the type — two claims about one node carry one
+// Ref twice — and this is the store's side of it. An entity given two values
+// for one attribute is one node in the graph; writing its own id into its own
+// `_contradicts` would answer "which record disagrees with this one" with the
+// record itself, which every reader would then follow back to where it started.
+func TestARecordDoesNotContradictItself(t *testing.T) {
+	res := contradicting()
+	inside := res.Conflicts[0]
+	inside.Kind = alchemy.ConflictEntityAttributes
+	inside.Subject = "org:northgate.founded"
+	inside.Detail = "two outlets give the founding year differently"
+	self := alchemy.Ref{Kind: alchemy.RefEntity, ID: "org:northgate", Type: "Organization"}
+	inside.Left = alchemy.Claim{Statement: "founded 1997", About: self, Provenance: res.Relations[0].Provenance}
+	inside.Right = alchemy.Claim{Statement: "founded 1998", About: self, Provenance: res.Relations[1].Provenance}
+	res.Conflicts = []alchemy.Conflict{inside}
+
+	l := openLocal(t, Options{RunID: "run-CS"})
+	if _, err := l.Load(context.Background(), res); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, props := range everyRecord(t, l) {
+		if v, ok := props["_contradicts"]; ok {
+			t.Errorf("_contradicts = %#v on a conflict whose two sides name one record", v)
+		}
+	}
+}
+
+func contradictsOf(t *testing.T, raw any) []string {
+	t.Helper()
+	s, ok := raw.(string)
+	if !ok {
+		t.Fatalf("_contradicts is %T, want the contract's JSON array in a metadata string", raw)
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(s), &ids); err != nil {
+		t.Fatalf("_contradicts %q is not a JSON array: %v", s, err)
+	}
+	return ids
 }
 
 // everyRecord is every node and edge this load wrote, as CortexDB holds them.

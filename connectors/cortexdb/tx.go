@@ -184,6 +184,12 @@ func (t *tx) Commit(ctx context.Context, s sink.Summary) (sink.Report, error) {
 			return sink.Report{}, err
 		}
 	}
+	// The conflicts, before the first record is written. They arrive here and
+	// not in Findings because a load never carries an OPEN one — §7.3 refuses
+	// the result whole — so what travels is a question somebody answered, and
+	// the contract's answer to an answered disagreement is that both records
+	// stay and each says which the other is (`_contradicts`, plan.disagree).
+	t.p.disagree(s.Conflicts)
 	t.rep.SkippedRelations, t.rep.FusedRelations = t.p.skipped, t.p.fused
 	if err := t.l.writeDocuments(ctx, t.p, t.rep); err != nil {
 		return sink.Report{}, err

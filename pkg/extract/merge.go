@@ -151,13 +151,21 @@ func (m *merger) add(e alchemy.Entity) {
 // attributeConflict describes one disagreement in the words of the person who
 // has to settle it: which thing, which attribute, and what each chunk said.
 func attributeConflict(kept, incoming alchemy.Entity, attr string, keptVal, incomingVal any) alchemy.Conflict {
+	// One Ref, on both sides, and it names the node that survives this merge.
+	// That is the truthful answer and not a shortcut: after add returns there
+	// is one entity under this ID, the incoming record's own identity is gone,
+	// and a Ref naming it would be a join that resolves to nothing. Two equal
+	// Refs say what happened — this disagreement is inside a record — which is
+	// what a store reads to know there is no second record to point the
+	// knowledge contract's `_contradicts` at. See alchemy.Claim.About.
+	about := alchemy.Ref{Kind: alchemy.RefEntity, ID: kept.ID, Type: kept.Type}
 	return alchemy.Conflict{
 		Kind:    alchemy.ConflictEntityAttributes,
 		Subject: kept.ID,
 		Detail: fmt.Sprintf("two chunks name %q but state different values for attribute %q",
 			kept.Name, attr),
-		Left:  alchemy.Claim{Statement: claimText(kept, attr, keptVal), Provenance: kept.Provenance},
-		Right: alchemy.Claim{Statement: claimText(incoming, attr, incomingVal), Provenance: incoming.Provenance},
+		Left:  alchemy.Claim{Statement: claimText(kept, attr, keptVal), About: about, Provenance: kept.Provenance},
+		Right: alchemy.Claim{Statement: claimText(incoming, attr, incomingVal), About: about, Provenance: incoming.Provenance},
 	}
 }
 

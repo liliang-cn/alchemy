@@ -135,19 +135,31 @@ func signatureFK(fk foreignKey) string {
 }
 
 func dupConflict(source string, d duplicate) alchemy.Conflict {
+	// Both sides name the one entity this file will produce, because dedupe
+	// keeps the first declaration and the later one never becomes a record. A
+	// Ref for the loser would be a join that resolves to nothing; two equal
+	// Refs say the true thing — the disagreement is inside a record — which is
+	// how a store knows there is no second record for the knowledge contract's
+	// `_contradicts`. See alchemy.Claim.About.
+	about := alchemy.Ref{
+		Kind: alchemy.RefEntity,
+		ID:   entityID(d.first.schema, d.first.name),
+		Type: EntityType,
+	}
 	return alchemy.Conflict{
 		Kind:    alchemy.ConflictEntityAttributes,
 		Subject: entityID(d.first.schema, d.first.name),
 		Detail: fmt.Sprintf("%s is declared twice in %s with different columns; nothing in the DDL says which is current",
 			refOf(d.first.schema, d.first.name), source),
-		Left:  claimFor(source, d.first),
-		Right: claimFor(source, d.later),
+		Left:  claimFor(source, d.first, about),
+		Right: claimFor(source, d.later, about),
 	}
 }
 
-func claimFor(source string, t *table) alchemy.Claim {
+func claimFor(source string, t *table, about alchemy.Ref) alchemy.Claim {
 	return alchemy.Claim{
 		Statement:  fmt.Sprintf("line %d: %s", t.line, signature(t)),
+		About:      about,
 		Provenance: prov(source),
 	}
 }

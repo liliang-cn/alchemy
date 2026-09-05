@@ -106,6 +106,35 @@ type plan struct {
 	// window in which this is knowable: the grade goes on a node the same call
 	// writes.
 	refused map[alchemy.Ref]alchemy.Violation
+
+	// disagrees pairs the records a conflict says cannot both be true, both
+	// ways, in alchemy's vocabulary rather than this store's. It is the join
+	// alchemy.Claim.About made possible: until each side of a Conflict named
+	// its record in fields, the only route to these pairs was parsing
+	// Conflict.Subject.
+	//
+	// A set per record rather than a list, because one pair can be reported
+	// twice — pkg/verify files a reversal as a contradiction when one side is
+	// deterministic and as a direction conflict when neither is, and a store
+	// naming the same record twice in one `_contradicts` array is a reader
+	// counting one disagreement as two.
+	//
+	// It arrives at Commit, in sink.Summary, which is where a conflict travels
+	// (a load never carries an OPEN one; §7.3 refuses first). That is before
+	// the first entity is written, so nothing here has to be patched in
+	// afterwards.
+	disagrees map[alchemy.Ref]map[alchemy.Ref]bool
+	// byRef finds the edge groups a relation Ref names. A Ref carries no
+	// provenance by design and CortexDB's edge identity includes the document,
+	// so one Ref can name two edges — the same relation read out of two files
+	// — and both of them are records the other side disagrees with.
+	//
+	// nil unless this result actually contains a usable conflict, which almost
+	// none do. It is one entry per distinct edge, and §8.4's import has four
+	// hundred thousand records; a load with nothing to join would be paying for
+	// the index in the case the plan's own comment refuses to pay for anything.
+	// Built once, at Commit, where the conflicts arrive.
+	byRef map[alchemy.Ref][]int
 }
 
 // refuse files the findings a write grades records by.
@@ -127,6 +156,126 @@ func (p *plan) refuse(vs []alchemy.Violation) {
 		}
 		p.refused[v.About] = v
 	}
+}
+
+// disagree files the conflicts a write puts `_contradicts` on.
+//
+// Three kinds of side are skipped, and each skip is the honest answer rather
+// than a gap:
+//
+// A side that names no record. It is the Conflict version of a violation about
+// a file — alchemy.Claim.About is zero where the producer could not name one —
+// and inventing a Ref would be a join that resolves to nothing.
+//
+// A conflict whose two sides name the SAME record. That is most of them: an
+// entity given two values for one attribute is one node in the graph, and the
+// disagreement is inside it. There is no other record to point at, and writing
+// the record's own id would answer "which record disagrees with this one" with
+// the record itself. What the contract wants there is a `held`, which is the
+// row above this one and still out of reach (see contract.go).
+//
+// A pair already filed. See the field.
+func (p *plan) disagree(cs []alchemy.Conflict) {
+	for _, c := range cs {
+		l, r := c.Left.About, c.Right.About
+		if l == (alchemy.Ref{}) || r == (alchemy.Ref{}) || l == r {
+			continue
+		}
+		p.pair(l, r)
+		p.pair(r, l)
+	}
+	if len(p.disagrees) == 0 {
+		return
+	}
+	// Only now is the edge index worth building; see the field.
+	p.byRef = make(map[alchemy.Ref][]int, len(p.res.Relations))
+	for at := range p.groups {
+		for _, m := range p.groups[at].members {
+			ref := refOfRelation(p.res.Relations[m])
+			if !containsInt(p.byRef[ref], at) {
+				p.byRef[ref] = append(p.byRef[ref], at)
+			}
+		}
+	}
+}
+
+func (p *plan) pair(of, with alchemy.Ref) {
+	if p.disagrees == nil {
+		p.disagrees = map[alchemy.Ref]map[alchemy.Ref]bool{}
+	}
+	if p.disagrees[of] == nil {
+		p.disagrees[of] = map[alchemy.Ref]bool{}
+	}
+	p.disagrees[of][with] = true
+}
+
+// records names the CortexDB rows one Ref points at, or nothing for a Ref this
+// load is not writing — a conflict can name a record another run put in the
+// store, and this connector has no id for that.
+//
+// An entity's id is this connector's own, asserted rather than derived, and
+// writeEntities refuses a load in which the store used a different one
+// (ErrRekeyed). An edge's is CortexDB's, and edgeRecordID says what is done
+// about that.
+func (p *plan) records(ref alchemy.Ref) []string {
+	switch ref.Kind {
+	case alchemy.RefEntity:
+		if _, have := p.ids[ref.ID]; !have {
+			return nil
+		}
+		return []string{entityNodeID(p.opts.RunID, ref.ID)}
+	case alchemy.RefRelation:
+		out := make([]string, 0, len(p.byRef[ref]))
+		for _, g := range p.byRef[ref] {
+			out = append(out, edgeRecordID(p.groups[g]))
+		}
+		return out
+	}
+	return nil
+}
+
+// contradicts is the ids of the records one record disagrees with, sorted, with
+// the record itself removed.
+//
+// Self-removal is not the same check disagree already made. That one compares
+// alchemy Refs; this one compares the ids CortexDB holds, and the two differ in
+// a case that really happens: ConflictEntityType is two records that agree on
+// an id and disagree on a type, so its two Refs differ and its two rows are one
+// node. Both checks are needed and neither implies the other.
+func (p *plan) contradicts(ref alchemy.Ref, self string) []string {
+	seen := map[string]bool{self: true}
+	var out []string
+	for other := range p.disagrees[ref] {
+		for _, id := range p.records(other) {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	// Sorted so that one load writes one array however the map iterated, which
+	// is what lets a re-load of the same result converge instead of rewriting
+	// the property with the same ids in a new order.
+	sort.Strings(out)
+	return out
+}
+
+// edgeRecordID is CortexDB's name for the edge a group becomes.
+//
+// It is a copy of the store's own relationEdgeID, and a copy is exactly what
+// plan.go's edgeGroup comment says the identity RULE must not be — so it is not
+// left to be believed. Every id this connector writes into a `_contradicts` is
+// checked against the ids the store reports back from the write it came from,
+// and a load whose prediction missed fails rather than filing a join that
+// resolves to nothing. That is the guard writeEntities already puts on entity
+// ids (ErrRekeyed), asked of the one identity this store keeps to itself.
+//
+// The document is always present here: documentID never returns the empty
+// string, so the store's other branch — the caller with no document, whose
+// edges collapse onto one id — is unreachable from this connector.
+func edgeRecordID(g edgeGroup) string {
+	return "edge:relation:" + g.from + ":" + g.to + ":" + g.typ + ":doc:" + g.doc
 }
 
 // refusal returns the finding that names one record, or nil for a record the
@@ -401,6 +550,15 @@ func (p *plan) checkParallelEdges() error {
 func contains(xs []string, s string) bool {
 	for _, x := range xs {
 		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+func containsInt(xs []int, n int) bool {
+	for _, x := range xs {
+		if x == n {
 			return true
 		}
 	}

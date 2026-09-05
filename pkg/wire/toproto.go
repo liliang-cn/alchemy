@@ -155,8 +155,19 @@ func GuessToProto(g alchemy.Guess) *alchemyv1.Guess {
 	}
 }
 
+// ClaimToProto carries one side of a conflict, including the record that side
+// was read from.
+//
+// About goes through AboutToProto for the reason a violation's does: a side
+// that names no record must arrive as no message and not as an empty Ref, which
+// would say "the entity with no id" — false, and joinable, which is the worse
+// of the two ways to be wrong. A store reading `_contradicts` off these is the
+// consumer that would act on it.
 func ClaimToProto(c alchemy.Claim) *alchemyv1.Claim {
-	return &alchemyv1.Claim{Statement: c.Statement, Provenance: ProvenanceToProto(c.Provenance)}
+	return &alchemyv1.Claim{
+		Statement: c.Statement, About: AboutToProto(c.About),
+		Provenance: ProvenanceToProto(c.Provenance),
+	}
 }
 
 func ConflictToProto(c alchemy.Conflict) *alchemyv1.Conflict {

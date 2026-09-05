@@ -85,3 +85,89 @@ func TestTheDigestOfAKnownResultIsAFixedValue(t *testing.T) {
 			"language is now computing a different answer from the documented one.", got, want)
 	}
 }
+
+// TestAConflictThatNamesNoRecordHashesAsItAlwaysDid is the same pin aimed at
+// the one line the entity fixture above does not reach.
+//
+// A conflict is hashed as "F" plus canonical(Left) and canonical(Right), and
+// canonical is json.Marshal — so alchemy.Claim is a struct whose every field
+// renders into the content address of every result that carries a conflict.
+// Claim grew About for the knowledge contract's `_contradicts`, and a field
+// that always rendered would have re-addressed every corpus ever loaded, which
+// is the orphaning alchemy.Fingerprint's comment declined and the exact hazard
+// Provenance.At is a string to avoid.
+//
+// `omitzero` is the entire defence, and a defence nothing exercises is a
+// defence that lasts until somebody tidies the tag away. So the constant below
+// was computed the same way the one above was — outside Go, from Digest's own
+// comment, with the two claims written out by hand as
+//
+//	{"statement":…,"provenance":{"source":"a.sql","chunk":-1,"producer":"ddl"}}
+//
+// which is what a Claim with no About marshals to and what one marshalled to
+// before the field existed. If this fails and the test above passes, the field
+// is rendering when it should be absent and every stored digest of a result
+// with a conflict in it has just moved.
+func TestAConflictThatNamesNoRecordHashesAsItAlwaysDid(t *testing.T) {
+	prov := alchemy.Provenance{Source: "a.sql", Chunk: -1, Producer: alchemy.ProducerDDL}
+	res := alchemy.Result{
+		Conflicts: []alchemy.Conflict{{
+			Kind:    alchemy.ConflictEntityType,
+			Subject: "n:alpha",
+			Detail:  "two sources type it differently",
+			Left:    alchemy.Claim{Statement: `n:alpha is of type "Node"`, Provenance: prov},
+			Right:   alchemy.Claim{Statement: `n:alpha is of type "Cluster"`, Provenance: prov},
+		}},
+		Counts: alchemy.Counts{Conflicts: 1},
+	}
+
+	const want = "5b8dac49c2b642542bd12c12600083e99ea0888a664c61e0db8e6f065be45352"
+	if got := sink.Digest(res); got != want {
+		t.Fatalf("Digest of the pinned conflict = %s, want %s\n"+
+			"A Claim that names no record must marshal to exactly what it marshalled to before "+
+			"Claim.About existed. Check the `omitzero` on that field: without it every result "+
+			"ever loaded that carried a conflict now has a different content address.", got, want)
+	}
+}
+
+// And the other half of the same guarantee: a conflict that DOES name its two
+// records is a different result, because a store writes something different
+// for it — `_contradicts` on both records rather than on neither.
+//
+// It is the same argument Digest's comment makes about a supersession, in the
+// same position: two results can agree about every entity, edge, chunk and
+// count and disagree only about what the store would hold, and a digest that
+// could not tell would let the second replay as the first.
+func TestAConflictThatNamesItsRecordsIsADifferentResult(t *testing.T) {
+	prov := alchemy.Provenance{Source: "a.sql", Chunk: -1, Producer: alchemy.ProducerDDL}
+	bare := func() alchemy.Result {
+		return alchemy.Result{
+			Conflicts: []alchemy.Conflict{{
+				Kind:    alchemy.ConflictRelationDirection,
+				Subject: "n:alpha -[CONNECTS]- n:beta",
+				Detail:  "one source runs it each way",
+				Left:    alchemy.Claim{Statement: "alpha connects beta", Provenance: prov},
+				Right:   alchemy.Claim{Statement: "beta connects alpha", Provenance: prov},
+			}},
+		}
+	}
+	joined := bare()
+	joined.Conflicts[0].Left.About = alchemy.Ref{Kind: alchemy.RefRelation, From: "n:alpha", To: "n:beta", Type: "CONNECTS"}
+	joined.Conflicts[0].Right.About = alchemy.Ref{Kind: alchemy.RefRelation, From: "n:beta", To: "n:alpha", Type: "CONNECTS"}
+
+	if sink.Digest(bare()) == sink.Digest(joined) {
+		t.Fatal("a conflict that names its two records has the same address as one that names " +
+			"neither; the two loads differ by a `_contradicts` on each side and a store " +
+			"holding the first would refuse the second as a replay")
+	}
+	// And the sides are not interchangeable: left and right are the incumbent
+	// and the dissenter, and a Ref written into the wrong one points every
+	// reader at the record that did not say it.
+	swapped := joined
+	swapped.Conflicts = []alchemy.Conflict{joined.Conflicts[0]}
+	swapped.Conflicts[0].Left.About, swapped.Conflicts[0].Right.About =
+		joined.Conflicts[0].Right.About, joined.Conflicts[0].Left.About
+	if sink.Digest(joined) == sink.Digest(swapped) {
+		t.Fatal("swapping the two sides' Refs did not change the address")
+	}
+}

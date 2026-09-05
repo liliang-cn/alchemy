@@ -1,6 +1,11 @@
 package cortexdb
 
-import "github.com/liliang-cn/alchemy/pkg/alchemy"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
+)
 
 // The knowledge contract, and the part of it this connector can tell the truth
 // about.
@@ -78,14 +83,27 @@ const (
 // Writing "accept" would be this connector inventing the one field the contract
 // says is never normalised.
 //
-// `_contradicts` — the spec asks for the ids of the other side, on both
-// records. A Conflict names its two sides as Claim{Statement, Provenance}: no
-// Ref, no id, by a decision findings.go states outright, because "a conflict is
-// the one finding no sink ever holds" — §7.3 means an open one never reaches a
-// store and an answered one is a note about the run. Recovering the ids would
-// mean parsing Conflict.Subject, which is the private copy of another package's
-// output format that Ref exists to abolish. The fix is the one Violation
-// already had: an About on each side of a Conflict, in pkg/alchemy.
+// `_contradicts` — WRITTEN, and it is the one row of the spec's second table
+// that has moved. It was unreachable for a stated reason: a Conflict named its
+// two sides as Claim{Statement, Provenance} — no Ref, no id — so the only route
+// to the ids was parsing Conflict.Subject, which is the private copy of another
+// package's output format that Ref exists to abolish. alchemy.Claim now carries
+// an About, the same shape Violation already had, and plan.disagree turns the
+// pairs into what a write puts on both records.
+//
+// What it does NOT write is as much of the row as what it does. A conflict
+// whose two sides name one record gets nothing, because there is no other
+// record to name — and that is most conflicts, since an entity or an edge given
+// two values for one attribute is one row in this store however many sources
+// stated it. Two rows is the reversal and the cardinality clash: the graph
+// holds both, neither is being removed, and the disagreement between them is
+// the information the contract says to keep. A record naming another this load
+// is not writing gets nothing either; an id for a row in some other run is one
+// this connector would be inventing.
+//
+// The `held` row above is what the first case is really asking for and it is
+// still out of reach, so a disagreement inside one record leaves this store
+// saying nothing about it rather than saying the wrong thing twice.
 
 // contractGrade answers the contract's one narrow question about one record —
 // by what kind of thing is this record's truth established — from the
@@ -151,6 +169,32 @@ func contractMeta(grade, state, why, prefix string, into map[string]string) {
 	if why != "" {
 		into[prefix+keyWhy] = why
 	}
+}
+
+// contradictsMeta writes the ids of the records this one cannot both-be-true
+// with, on the record, as the contract's JSON array.
+//
+// A JSON array in a string, which is the encoding attributeMeta and the alias
+// list already use for a value this store's metadata cannot hold natively, and
+// which is also what the contract specifies for this key by name: a
+// comma-joined list would be shorter and would lose an id with a comma in it,
+// and CortexDB's own ids are full of punctuation.
+//
+// Absent rather than "[]" for a record that disagrees with nothing, for the
+// reason provenanceMeta gives about every optional field: "this record
+// disagrees with nothing" and "this record's disagreements are the empty list"
+// are not the same claim, and pkg/cortexdb.ValidateContract reads an empty
+// array as a problem rather than as silence.
+func contradictsMeta(ids []string, prefix string, into map[string]string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("render %s: %w", prefix+keyContradicts, err)
+	}
+	into[prefix+keyContradicts] = string(b)
+	return nil
 }
 
 // established orders the grades this connector writes from least to most
