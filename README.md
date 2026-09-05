@@ -1,93 +1,63 @@
 # alchemy
 
-Turns sources — PDFs, schemas, tables, existing graphs — into a knowledge graph
-where **every record can say where it came from**: which file, which chunk of it,
-which producer, under which ontology, and whether it was *stated* by something
-that already asserted it or *inferred* by a model reading prose.
+Turns files into a knowledge graph an LLM agent can query, where every record
+says which file, which chunk and which producer it came from — and whether it
+was stated by a source or inferred by a model.
 
-That is the whole product. Extracting a graph with an LLM is easy and common;
-checking one afterwards is not.
-
-- **Provenance on every entity and every edge**, not on the batch. Two documents
-  that assert the same edge stay two records with two sources.
-- **The graph reports its own quality.** Ontology violations, duplicate
-  candidates nobody ruled on, guesses the mapper made, and sources it could not
-  read are delivered *with* the result rather than swallowed.
-- **A conflict stops the job.** Two sources that disagree leave it at
-  `NEEDS_REVIEW` and `GetResult` refuses, because a graph that silently picked a
-  winner is worse than no graph.
-- **Nothing is extracted without a vocabulary to check it against**, and the
-  corpus is what tells you the vocabulary is missing something.
-
-## Using it from Go
+## Install
 
 ```sh
-go get github.com/liliang-cn/alchemy             # the service and pkg/recall
+go get github.com/liliang-cn/alchemy             # service + pkg/recall
 go get github.com/liliang-cn/alchemy/connectors  # the six stores
-go get github.com/liliang-cn/alchemy/mcp         # the MCP server
+go get github.com/liliang-cn/alchemy/mcp         # MCP server
 ```
 
-Three modules and not one, so that a buyer who wants Neo4j is not made to pull
-pgvector, Qdrant, CortexDB, Dgraph and a SPARQL client as the price of the
-argument that alchemy stores nothing. The core module's dependency list is the
-checkable form of that argument.
+## Use
 
-## Running it
+Files in, graph out as JSON; the service stores nothing. gRPC is `UploadSource`
+→ `CreateJob` → `WatchJob` → `GetResult`; `ListFindings` and `Decide` review it,
+`Assert` adds a fact, `/ui` draws it.
 
 ```sh
-make build   # or: go build ./cmd/alchemy
-./alchemy -addr 127.0.0.1:7431 \
-          -http-addr 127.0.0.1:7432 \
-          -token-file /etc/alchemy/token \
-          -rules /etc/alchemy/always.json
+go build ./cmd/alchemy
+./alchemy -addr 127.0.0.1:7431 -http-addr 127.0.0.1:7432 -token-file /etc/alchemy/token
 ```
 
-`-http-addr` is optional; empty means no gateway. There is deliberately no
-`-token` flag — a secret on the command line is a secret in `ps`.
+Write the result into a store you run, and read it back. `neo4j` `pgvector`
+`qdrant` `cortexdb` `dgraph` `rdf` all implement `sink.Sink` and `recall.Reader`.
 
-gRPC is the interface. `UploadSource` streams a file in, `CreateJob` starts the
-run, `WatchJob` streams progress and cost, `GetResult` (or `StreamResult`, for a
-graph too big for one message) hands it back. `ListFindings`/`Decide` are the
-review path, `ExtendOntology` adds a type a corpus turned out to need, and
-`Assert` puts in a fact a person knows and no document states, stamped with who
-said it and when. The gateway is generated from the same service definition and
-refuses `Review` with 501 rather than pretend a bidirectional stream has an
-honest shape over HTTP.
+```go
+l, _ := neo4j.Open(ctx, uri, user, pass, neo4j.Options{RunID: "nightly-01"})
+sink.Load(ctx, l, result, sink.Options{Load: "nightly-01"})
+var r recall.Reader = l                      // the same eight questions, any store
+r.Find(ctx, "nightly-01", "ravel", 10)
+```
 
-## It returns a graph; it does not store one
-
-alchemy holds no database. The companion module `connectors/` writes a result into
-a store you already run — **Neo4j, pgvector, Qdrant, CortexDB, Dgraph, or any
-SPARQL endpoint** — and reads all six back through `pkg/recall`, eight
-primitives an agent can build a context pack from:
-
-    Find · Claims · Cite · Unanswered · Contributions · Types · OfType · Describe
-
-They were not designed up front. Each of the last four was added after an agent
-answered a question wrongly in a way none of the others could have caught: a join
-the graph had made silently, a citation refused for the store's most trustworthy
-records, an enumeration attempted by trying the alphabet, an entity whose own
-fields no reader could return. The measurement is written down beside each
-method.
-
-`pkg/agenttool` renders those eight as tools a model can choose between, and
-`mcp/` serves that set over Model Context Protocol — so any MCP client can ask a
-loaded graph these questions directly:
+Serve one loaded graph to any MCP client:
 
 ```sh
-alchemy-mcp -store neo4j -uri neo4j://host:7687 -load nightly-2026-09-01
+go build -o alchemy-mcp ./mcp/cmd/alchemy-mcp
+claude mcp add --scope local alchemy /path/to/alchemy-mcp \
+  -store neo4j -uri neo4j://host:7687 -load nightly-01
 ```
 
-`examples/kgagent` is the same tools inside a ReAct loop, and doubles as the
-instrument the defects were found with. Its tests need no server and no model:
-every case in them is a wrong answer that reached production.
+| Tool | Answers |
+|---|---|
+| `graph_find` | entities whose name contains this text |
+| `graph_types` | every entity type and how many carry it |
+| `graph_of_type` | every entity of one type |
+| `graph_describe` | one entity whole: fields, aliases, provenance |
+| `graph_claims` | every claim one hop out, with who said it |
+| `graph_contributors` | which sources had a hand in one node |
+| `graph_cite` | the text a claim was extracted from |
+| `graph_open_questions` | identity questions nobody has answered |
 
-`DESIGN.md` is the specification and the argument, including what is deliberately
-*not* built. Every measurable sentence in its status section is a check in
-`internal/claims` that `go test ./...` runs, so the next number to go stale fails
-instead of ageing.
+## Environment
 
-```sh
-go test ./...                    # the root module needs no database
-cd connectors && go test ./...   # skips loudly without ALCHEMY_TEST_* servers
-```
+Service: `ALCHEMY_TOKEN_FILE` `ALCHEMY_ADDR` `ALCHEMY_HTTP_ADDR` `ALCHEMY_RULES`.
+MCP: `ALCHEMY_MCP_USER` `ALCHEMY_MCP_PASSWORD` `ALCHEMY_MCP_DSN` `ALCHEMY_MCP_TOKEN`.
+Credentials never come from a flag.
+
+## License
+
+MIT
