@@ -6,11 +6,16 @@ module github.com/liliang-cn/alchemy/connectors
 
 go 1.25.0
 
+// The replace directives are for working in this repository only. A consumer's
+// build IGNORES a replace in a dependency's go.mod, so what they actually get is
+// the require above — which is why that version has to be one that exists. It
+// used to be v0.0.0, and every external build of this module failed on a version
+// nobody could fetch, with nothing about the error pointing here.
 replace github.com/liliang-cn/alchemy => ..
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/liliang-cn/alchemy v0.0.0
+	github.com/liliang-cn/alchemy v0.2.0
 	github.com/liliang-cn/cortexdb/v2 v2.90.0
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 )

@@ -1,6 +1,6 @@
 {
   "claim": "DESIGN.md §9: every source kind imported from one real corpus, no job held, no conflicts",
-  "how": "ALCHEMY_TOKEN=... go run ./cmd/measure 192.168.123.65:43221 \u003cfixtures-dir\u003e -- the fixtures are a customer's published schema, documentation, code graph and company profile, plus an ontology and an inventory CSV written for the evaluation",
+  "how": "ALCHEMY_TOKEN=... go run ./cmd/measure <host>:<port> <fixtures-dir> -- the fixtures are a customer's published schema, documentation, code graph and company profile, plus an ontology and an inventory CSV written for the evaluation",
   "measured_at": "2026-08-30",
   "provenance": "measured",
   "values": {

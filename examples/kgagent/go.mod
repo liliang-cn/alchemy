@@ -7,14 +7,18 @@ module github.com/liliang-cn/alchemy/examples/kgagent
 
 go 1.25.0
 
+// The replace directives are for working in this repository only. A consumer's
+// build IGNORES a replace in a dependency's go.mod, so what they actually get is
+// the require above — which is why that version has to be one that exists. It
+// used to be v0.0.0, and every external build of this module failed on a version
+// nobody could fetch, with nothing about the error pointing here.
 replace github.com/liliang-cn/alchemy => ../..
-
 replace github.com/liliang-cn/alchemy/connectors => ../../connectors
 
 require (
 	github.com/liliang-cn/agent-go/v3 v3.12.1
-	github.com/liliang-cn/alchemy v0.0.0
-	github.com/liliang-cn/alchemy/connectors v0.0.0
+	github.com/liliang-cn/alchemy v0.2.0
+	github.com/liliang-cn/alchemy/connectors v0.2.0
 )
 
 require (

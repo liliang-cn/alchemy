@@ -909,9 +909,11 @@ wrong half, because the other one has already been acted on. `Contributions` is
 that hole. It reports and does not judge: a primitive that answered "risky"
 would be doing the judging §2.1 reserves for a person.
 
-**What the read side is checked against.** Four Halcyon sources through the
-pipeline, into Neo4j, out through `recall.Reader`, into a ReAct agent on two
-unrelated runtimes — one Go, one Rust — five questions, three runs each. The
+**What the read side is checked against.** Four sources from one company's
+published material — a schema, its documentation, a code graph and a company
+profile — through the pipeline, into Neo4j, out through `recall.Reader`, into a
+ReAct agent on two unrelated runtimes — one Go, one Rust — five questions, three
+runs each. The
 answers were identical in content on both sides: the same people, the same
 citations, the same stated-versus-inferred split, the same refusal where the
 graph does not say. Where the graph is the constraint the runtime is invisible,
