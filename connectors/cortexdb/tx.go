@@ -138,8 +138,18 @@ func (t *tx) Chunks(ctx context.Context, batch []sink.Chunk) error {
 	return err
 }
 
+// Findings is where the knowledge contract's one reachable refusal arrives.
+//
+// The envelope sends them "after the records they are about, so a store that
+// links a violation to its subject finds the subject already there" — and this
+// store writes its graph at Commit, which is after that again. So a violation
+// naming a record in fields (Violation.About) is in hand before the node it
+// grades is written, and `_grade=refused` with the ontology's own reason beside
+// it is a fact this connector holds rather than one it would have to infer. See
+// contract.go for the three rows of the spec's table that are not.
 func (t *tx) Findings(_ context.Context, f sink.Findings) error {
 	t.findings = f
+	t.p.refuse(f.Violations)
 	return nil
 }
 

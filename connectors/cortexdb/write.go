@@ -134,6 +134,13 @@ func (l *Loader) writeEntities(ctx context.Context, p *plan, chunks map[int]bool
 	for _, i := range p.entities {
 		e := p.res.Entities[i]
 		meta := provenanceMeta(e.Provenance, l.opts.ReservedPrefix)
+		// The contract requires _at. provenanceMeta wrote it only when the
+		// producer had one (ProducerHuman); everything else gets the moment
+		// this load put it on the shelf — see plan.at for why alchemy itself
+		// stamps no clock on an extraction.
+		if meta[l.opts.ReservedPrefix+keyAt] == "" {
+			meta[l.opts.ReservedPrefix+keyAt] = p.at
+		}
 		meta[l.opts.ReservedPrefix+keyRun] = l.opts.RunID
 		meta[l.opts.ReservedPrefix+keyEntityID] = e.ID
 		// The type alchemy's ontology declared, kept verbatim beside the
@@ -159,6 +166,13 @@ func (l *Loader) writeEntities(ctx context.Context, p *plan, chunks map[int]bool
 		if err := attributeMeta(e.Attributes, l.opts.ReservedPrefix, meta); err != nil {
 			return fmt.Errorf("entity %s: %w", e.ID, err)
 		}
+		// The knowledge contract's answer to "how is this true", written last so
+		// that it is read beside the provenance it is computed from rather than
+		// instead of it. §5b's keys say who made this record; this one says what
+		// kind of thing establishes it, in the vocabulary the other producers
+		// writing into this store also use.
+		grade, state, why := contractGrade(e.Provenance, p.refusal(refOfEntity(e)))
+		contractMeta(grade, state, why, l.opts.ReservedPrefix, meta)
 		in := cdb.ToolEntityInput{
 			ID: entityNodeID(l.opts.RunID, e.ID), Name: e.Name, Type: e.Type, Metadata: meta,
 		}
@@ -218,9 +232,16 @@ func (l *Loader) writeRelations(ctx context.Context, p *plan, chunks map[int]boo
 		pre := l.opts.ReservedPrefix
 		provs := make([]alchemy.Provenance, 0, len(g.members))
 		seenChunk := map[string]bool{}
+		var grade, state, why string
 		for _, m := range g.members {
 			r := p.res.Relations[m]
 			provs = append(provs, r.Provenance)
+			// The contract's grade for the edge CortexDB will make of these,
+			// folded member by member beside `inferred` below and by the same
+			// rule: the group is only as established as its least established
+			// claim. contract.go argues why, and why the several claims stay
+			// recoverable from the `_provenance` array either way.
+			grade, state, why = weakest(grade, state, why, r.Provenance, p.refusal(refOfRelation(r)))
 			// CortexDB's own three fields, filled from alchemy's. `inferred` is
 			// true if any member was inferred: a merged edge that one
 			// deterministic source also stated is still an edge a model
@@ -246,6 +267,11 @@ func (l *Loader) writeRelations(ctx context.Context, p *plan, chunks map[int]boo
 		// The whole of every member's provenance, always, so that a fused group
 		// loses nothing even though only one of them can fill the flat fields.
 		in.Metadata[pre+keyProvenance] = string(blob)
+		contractMeta(grade, state, why, pre, in.Metadata)
+		// Shelf moment first; a single member's own At (ProducerHuman) is copied
+		// in below and overrides it. A fused edge has several members and no one
+		// time, so it keeps the shelf moment.
+		in.Metadata[pre+keyAt] = p.at
 		if len(g.keys) > 0 {
 			in.Metadata[pre+keyEdgeKey] = joinKeys(g.keys)
 		}

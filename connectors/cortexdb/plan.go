@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	check "github.com/liliang-cn/alchemy/pkg/preflight"
@@ -59,6 +60,13 @@ type plan struct {
 	res    alchemy.Result
 	opts   Options
 	digest string
+	// at is when this load put its records on the shelf, RFC 3339, taken once
+	// so every record of one load says the same moment. It fills the contract's
+	// _at for records alchemy gave no time of their own — every extraction,
+	// because Result is content-addressed and a clock on it would change every
+	// address ever produced (alchemy.Provenance.At). A producer's own At, when
+	// it has one (ProducerHuman), wins over this.
+	at string
 
 	entities []int
 	groups   []edgeGroup
@@ -90,6 +98,45 @@ type plan struct {
 	// sources is every distinct Provenance.Source and Chunk.Source in the
 	// result, in the order first seen. Each becomes one CortexDB document.
 	sources []string
+	// refused indexes the ontology's findings by the record each is about, so
+	// that a write can grade a record the vocabulary rejected without parsing a
+	// Violation.Subject back into its parts — the join Ref exists to make
+	// possible and pkg/verify already built. It is filled from sink.Findings,
+	// which arrive after every record and before Commit, which is the only
+	// window in which this is knowable: the grade goes on a node the same call
+	// writes.
+	refused map[alchemy.Ref]alchemy.Violation
+}
+
+// refuse files the findings a write grades records by.
+//
+// A violation whose About is zero is skipped rather than guessed at: a
+// malformed row and an unnamed column are about a FILE, and findings.go says
+// so — inventing a Ref for them would be a join that resolves to nothing. The
+// first finding about a record wins, in the result's own order, because
+// pkg/verify walks entities before relations and reports the undeclared type
+// before the endpoint rule: the first is the one a reviewer is shown first and
+// the one whose fix removes the rest.
+func (p *plan) refuse(vs []alchemy.Violation) {
+	for _, v := range vs {
+		if v.About == (alchemy.Ref{}) {
+			continue
+		}
+		if _, seen := p.refused[v.About]; seen {
+			continue
+		}
+		p.refused[v.About] = v
+	}
+}
+
+// refusal returns the finding that names one record, or nil for a record the
+// ontology had nothing to say about.
+func (p *plan) refusal(ref alchemy.Ref) *alchemy.Violation {
+	v, ok := p.refused[ref]
+	if !ok {
+		return nil
+	}
+	return &v
 }
 
 // source records that this run touched a file, once. It is called from
@@ -223,9 +270,11 @@ func (p *plan) addChunks(batch []sink.Chunk) error {
 
 func newPlan(o Options, digest string) *plan {
 	return &plan{
+		at:   time.Now().UTC().Format(time.RFC3339),
 		opts: o, digest: digest,
 		vectorFor: map[int]int{}, sourceSeen: map[string]struct{}{},
 		ids: map[string]int{}, relIndex: map[string]int{}, chunkAt: map[int]int{},
+		refused: map[alchemy.Ref]alchemy.Violation{},
 	}
 }
 
