@@ -12,8 +12,8 @@ replace github.com/liliang-cn/alchemy => ../..
 replace github.com/liliang-cn/alchemy/connectors => ../../connectors
 
 require (
-	github.com/liliang-cn/alchemy v0.3.0
-	github.com/liliang-cn/alchemy/connectors v0.3.0
+	github.com/liliang-cn/alchemy v0.4.0
+	github.com/liliang-cn/alchemy/connectors v0.4.0
 	github.com/liliang-cn/cortexdb/v2 v2.93.0
 )
 
