@@ -31,6 +31,43 @@ type Runner interface {
 	Run(ctx context.Context, jobID string, spec JobSpec, events chan<- Event, in Inbox) (alchemy.Result, error)
 }
 
+// Finisher is the half of the work that can only happen after a person has
+// answered, and it is optional.
+//
+// It exists because of the ordering §5c argues for. Vectors "are recomputed
+// for whatever text survives review", so a job that stops for a person stops
+// one stage short: pipeline.HeldError.Pending is documented as "complete
+// except for the vectors, which §5c will not spend until the text they
+// describe has survived". Somebody has to spend them once the decisions are
+// in, and it cannot be this package — §6 gives the service endpoint
+// descriptions, not models, and building one here would put a provider behind
+// the wire layer. The Runner holds the factory, so the Runner is asked.
+//
+// It is a second interface rather than a method on Runner because Runner is
+// what every caller's worker implements — Athanor's is a fake and this
+// package's tests are functions — and widening it would break each of them for
+// a capability most of them do not have. So the service type-asserts, and a
+// Runner that does not satisfy this keeps the behaviour it had before this
+// existed.
+//
+// What that Runner gets, stated so nobody has to discover it: the decided
+// graph is delivered, the job succeeds, and it has no vectors. That is not
+// silent. Every chunk with no vector is named in Result.Unread with the reason
+// — the same shape pkg/embed uses for a batch its endpoint lost — so
+// Counts.Vectors is 0, Counts.ChunksUnread is the number of chunks, and a
+// caller reading either learns that the graph cannot cite the text its facts
+// came from. §5's rule is that source material nothing could read is named
+// rather than quietly omitted; a vector nothing could compute is the same rule
+// one stage later.
+//
+// Embed returns the graph it was given, changed only by what it bought. A
+// failure returns that graph with an error rather than nothing: the decisions
+// on it were made by a person, and throwing their work away because an
+// endpoint was unreachable would cost more than the vectors did.
+type Finisher interface {
+	Embed(ctx context.Context, spec JobSpec, res alchemy.Result) (alchemy.Result, error)
+}
+
 // Inbox is the runner's end of the bidirectional review stream.
 //
 // It is a snapshot rather than a channel because a decision is not an event to

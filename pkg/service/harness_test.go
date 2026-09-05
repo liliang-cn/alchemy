@@ -32,6 +32,12 @@ type harness struct {
 	// store overrides the default in-memory job store, for the tests that need
 	// a particular capacity or clock.
 	store job.Store
+	// runner is built into the server instead of the harness itself, for the
+	// tests that need a Runner which also implements service.Finisher. The
+	// harness deliberately does not: a Runner that cannot embed is the
+	// fallback §5c's ordering leaves behind, and it is the case every other
+	// test in this package is quietly exercising.
+	runner service.Runner
 	// maxResultBytes overrides the size at which GetResult refuses (§8.4).
 	maxResultBytes int
 	pageSize       int
@@ -82,8 +88,12 @@ func start(t *testing.T, h harness) (*service.Server, *grpc.ClientConn) {
 	if h.spool == "" {
 		h.spool = t.TempDir()
 	}
+	var runner service.Runner = h
+	if h.runner != nil {
+		runner = h.runner
+	}
 	srv, err := service.New(service.Config{
-		Runner:         h,
+		Runner:         runner,
 		Store:          h.store,
 		Token:          testToken,
 		Spool:          h.spool,

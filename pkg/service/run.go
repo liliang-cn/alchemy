@@ -43,6 +43,9 @@ type jobRun struct {
 	// §5c holds the *pending* result, which is exactly what a reviewer is
 	// deciding about.
 	ready bool
+	// embedded says the vectors this job's release owed have been bought. It
+	// is a claim rather than a report — see claimEmbed.
+	embedded bool
 }
 
 func (r *jobRun) setCancel(c context.CancelFunc) {
@@ -70,6 +73,29 @@ func (r *jobRun) pending() (alchemy.Result, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.result, r.ready
+}
+
+// claimEmbed takes the right to spend this job's vectors, once.
+//
+// resolve runs on every decision and is reached from two RPCs at once — the
+// Review stream and Decide — so two reviewers answering the last two questions
+// together would both see an unheld job with no vectors and both pay for the
+// same embedding. §8.2 draws exactly this line: "paying twice for the
+// identical call after a crash is a bug", and paying twice because two people
+// clicked at the same moment is the same bug with a friendlier cause.
+//
+// It is not released on failure. An embedding that failed is reported on the
+// result (see embedSurvivors) and the job finishes; a claim handed back would
+// buy a second attempt on the next decision, on a job that has none left to
+// make.
+func (r *jobRun) claimEmbed() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.embedded {
+		return false
+	}
+	r.embedded = true
+	return true
 }
 
 func (r *jobRun) recorded() []review.Rule {
