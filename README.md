@@ -52,6 +52,22 @@ claude mcp add --scope local alchemy /path/to/alchemy-mcp \
 | `graph_cite` | the text a claim was extracted from |
 | `graph_open_questions` | identity questions nobody has answered |
 
+## Writing a connector
+
+Implement `sink.Sink` to write and `recall.Reader` to read, then prove it:
+
+```go
+func TestConformance(t *testing.T) {
+	sinkconform.Run(t, func(t *testing.T) sink.Sink { return NewMyStore(t) })
+}
+```
+
+| Package | What it gives you |
+|---|---|
+| `connectors/sinkconform` | ten cases every store passes — what a load *is* |
+| `connectors/refusable` | the corpus no store may write |
+| `connectors/contributions` | the read-side fold every store must agree on |
+
 ## Environment
 
 Service: `ALCHEMY_TOKEN_FILE` `ALCHEMY_ADDR` `ALCHEMY_HTTP_ADDR` `ALCHEMY_RULES`.

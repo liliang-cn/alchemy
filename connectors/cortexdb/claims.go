@@ -9,7 +9,7 @@ import (
 	"github.com/liliang-cn/alchemy/pkg/recall"
 	cgraph "github.com/liliang-cn/cortexdb/v2/pkg/graph"
 
-	"github.com/liliang-cn/alchemy/connectors/internal/contributions"
+	"github.com/liliang-cn/alchemy/connectors/contributions"
 )
 
 // adjacent reads the edges touching one entity of one load, in both

@@ -10,7 +10,7 @@ import (
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/recall"
 
-	"github.com/liliang-cn/alchemy/connectors/internal/contributions"
+	"github.com/liliang-cn/alchemy/connectors/contributions"
 )
 
 // Reading an edge and its facets back, and the one thing about the shape that

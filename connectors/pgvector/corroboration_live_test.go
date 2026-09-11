@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/liliang-cn/alchemy/connectors/internal/sinkconform"
+	"github.com/liliang-cn/alchemy/connectors/sinkconform"
 )
 
 // The graph this product exists to produce, loaded through the connector's own

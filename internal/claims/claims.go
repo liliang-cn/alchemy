@@ -311,14 +311,29 @@ func keys(m map[string]float64) []string {
 
 // StoreConnectors is the stores the companion module holds: the directories
 // directly under connectors/ that carry non-test Go source, minus the shared
-// internal ones.
+// ones.
 //
 // It counts directories rather than packages because that is what the sentence
-// in DESIGN.md §9 counts -- "five stores" -- and a helper added under
-// connectors/internal is not a store. Reading the tree rather than a list keeps
-// the number honest in the one direction that matters: a sixth connector cannot
-// be added without the sentence being corrected.
+// in DESIGN.md §9 counts -- "six stores" -- and a package shared BY the stores
+// is not one of them. Reading the tree rather than a list keeps the number
+// honest in the one direction that matters: a seventh connector cannot be added
+// without the sentence being corrected.
+//
+// The shared ones used to be under connectors/internal, which made this
+// function a one-line check. They are exported now, because a third party
+// writing a connector needs the conformance suite and the refusal corpus to
+// find out whether theirs is right -- and `internal` is exactly the word that
+// says "you may not". So the exclusions are a list again, and the cost of that
+// is stated here: a shared package added later and not named below is counted
+// as a store, and the gate fails with a number nobody can explain.
 func StoreConnectors(root string) ([]string, error) {
+	// The packages every store shares rather than one of the stores.
+	shared := map[string]bool{
+		"sinkconform":   true, // the write-side conformance suite
+		"refusable":     true, // the corpus no store may write
+		"contributions": true, // the read-side fold every store must agree on
+		"internal":      true, // kept so a genuinely private helper still works
+	}
 	base := filepath.Join(root, "connectors")
 	ents, err := os.ReadDir(base)
 	if err != nil {
@@ -326,7 +341,7 @@ func StoreConnectors(root string) ([]string, error) {
 	}
 	var out []string
 	for _, e := range ents {
-		if !e.IsDir() || e.Name() == "internal" || strings.HasPrefix(e.Name(), ".") {
+		if !e.IsDir() || shared[e.Name()] || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		files, err := os.ReadDir(filepath.Join(base, e.Name()))

@@ -1,17 +1,36 @@
-// Package sinkconform is the suite every connector's sink.Sink passes.
+// Package sinkconform is the suite every sink.Sink passes, including yours.
 //
-// DESIGN.md §9 already argues for this shape one level down — "a conformance
-// suite the in-memory stores pass as evidence the second implementation is
-// faithful" — and an interface extracted from four existing implementations
-// needs it more, not less. The four were written apart and agreed about the
-// envelope and disagreed about everything under it; a suite that only the
-// connector's own author runs would let the agreement decay back into four
-// answers without anybody noticing.
+// WRITING A CONNECTOR. Implement sink.Sink and sink.Tx over your store, then
+// add one test:
 //
-// It tests only what §4.1 puts above the line. Nothing here knows how a store
-// checks for an existing load, what it batches, what it indexes, or what it
-// reserves — a test that did would be the interface reaching below the line
-// through its test suite, which is how a boundary is lost.
+//	func TestConformance(t *testing.T) {
+//		sinkconform.Run(t, func(t *testing.T) sink.Sink {
+//			return NewMyStore(t)           // a store nobody else is using
+//		})
+//	}
+//
+// The factory is called once per case and must hand back a store the case can
+// have to itself: several cases load under the same name on purpose, and two
+// cases sharing one namespace would meet each other's graphs. How you isolate
+// them is yours — a fresh database, a private prefix, a temporary directory.
+//
+// WHY THE SUITE RATHER THAN THE INTERFACE'S DOC COMMENTS. The six connectors
+// in this module were written apart. They agreed about the envelope and
+// disagreed about everything under it: each invented its own edge identity, its
+// own handling of two records under one ID, its own content address. Every one
+// of those was defensible alone, and that is what made it a defect — nothing
+// said which was right. Four of the ten cases below are about identity, and no
+// amount of reading sink.Tx's comments would have told you what they decide.
+//
+// It tests only what DESIGN.md §4.1 puts above the line. Nothing here knows how
+// a store checks for an existing load, what it batches, what it indexes, or
+// what it reserves. A test that did would be the interface reaching below the
+// line through its test suite, which is how a boundary is lost — so passing
+// this suite says your store agrees about what a load IS, and says nothing
+// about how you built it.
+//
+// See also refusable, the corpus no store may write, and contributions, the
+// read-side fold every store's recall.Reader.Contributions must agree on.
 package sinkconform
 
 import (

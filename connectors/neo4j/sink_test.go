@@ -3,7 +3,7 @@ package neo4j
 import (
 	"testing"
 
-	"github.com/liliang-cn/alchemy/connectors/internal/sinkconform"
+	"github.com/liliang-cn/alchemy/connectors/sinkconform"
 	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 

@@ -9,7 +9,7 @@ import (
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/recall"
 
-	"github.com/liliang-cn/alchemy/connectors/internal/contributions"
+	"github.com/liliang-cn/alchemy/connectors/contributions"
 )
 
 // Loader is a recall.Reader.

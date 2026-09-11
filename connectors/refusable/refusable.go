@@ -1,17 +1,20 @@
-// Package refusable is the corpus of results no store may write, shared by the
-// four connectors' tests.
+// Package refusable is the corpus of results no store may write.
 //
-// It exists because the four were written without sight of each other and each
-// arrived at a different subset of the same refusals: all four refused a held
-// job, three refused two entities under one ID, one refused two chunks under
-// one index, and none refused one chunk embedded twice. Every one of those
-// gaps is a silent overwrite — a record written where two were counted — and
-// the connector that had it could not know, because nothing said the invariant
-// existed.
+// It is the other half of sinkconform: that suite says what a correct load
+// does, and this says what must never reach a store at all. A connector proves
+// it asks by walking Cases(dim) and refusing every one.
 //
-// pkg/preflight is where the rule now lives. This is the evidence that each
-// connector actually asks: the same corpus, refused by all four, so a store
-// that quietly stopped asking fails a test rather than a customer's import.
+// It exists because the connectors here were written without sight of each
+// other and each arrived at a different subset of the same refusals: all of
+// them refused a held job, most refused two entities under one ID, one refused
+// two chunks under one index, and none refused one chunk embedded twice. Every
+// one of those gaps is a silent overwrite — a record written where two were
+// counted — and the connector that had it could not know, because nothing said
+// the invariant existed.
+//
+// pkg/preflight is where the rule lives; this is the evidence that a store
+// actually asks. A store that quietly stops asking fails a test rather than a
+// customer's import.
 package refusable
 
 import "github.com/liliang-cn/alchemy/pkg/alchemy"

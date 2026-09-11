@@ -3,7 +3,7 @@ package cortexdb
 import (
 	"testing"
 
-	"github.com/liliang-cn/alchemy/connectors/internal/refusable"
+	"github.com/liliang-cn/alchemy/connectors/refusable"
 	check "github.com/liliang-cn/alchemy/pkg/preflight"
 )
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/liliang-cn/alchemy/pkg/recall"
 
-	"github.com/liliang-cn/alchemy/connectors/internal/contributions"
+	"github.com/liliang-cn/alchemy/connectors/contributions"
 )
 
 // Contributions reports every source that had a hand in one node.

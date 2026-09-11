@@ -11,7 +11,7 @@ import (
 // not depend on arrival order, that it covers everything a store writes, that
 // two different results differ. Every one of them would still pass if the
 // encoding changed, because both sides of the comparison would change
-// together. So would connectors/internal/sinkconform, which asks four stores
+// together. So would connectors/sinkconform, which asks six stores
 // to agree with each other — four stores computing the same wrong address
 // agree perfectly.
 //

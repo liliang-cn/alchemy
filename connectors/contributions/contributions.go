@@ -1,21 +1,21 @@
 // Package contributions folds the mentions a store found into the answer
-// recall.Reader.Contributions returns.
+// recall.Reader.Contributions returns. Call Assemble rather than writing the
+// fold yourself.
 //
-// The queries stay each connector's own, because only a property graph has an
-// opinion about excluding bookkeeping edges by name and only a triple store has
-// one about an inclusion list over predicates. What is here is the part that is
-// a rule rather than a query: what counts as ONE mention, what order the
-// mentions come in, and which names reach Names. Those three decide whether two
-// reads of one node produce the same document, and they have to be the same
-// decision in every store or a buyer comparing two backends is comparing
-// shuffles.
+// FINDING the mentions stays your connector's own work, because only a property
+// graph has an opinion about excluding bookkeeping edges by name and only a
+// triple store has one about an inclusion list over predicates. What is here is
+// the part that is a rule rather than a query: what counts as ONE mention, what
+// order the mentions come in, and which name reaches a Contributor.
 //
-// Writing them once is the read side of the lesson pkg/sink is the write side
-// of. Four connectors each invented edge identity, provenance handling and a
-// content address, and every one of the four was defensible on its own; what
-// made it a defect was that nothing said which was right. A dedup key copied
-// into three files is three answers to one question the moment one of them is
-// edited.
+// Those three decide whether two reads of one node produce the same document,
+// and they have to be the same decision in every store — otherwise somebody
+// comparing two backends is comparing shuffles and will report it as a bug in
+// whichever one they trusted less.
+//
+// A dedup key copied into three files is three answers to one question the
+// moment one of them is edited. That is why this is one function and not a
+// paragraph in six doc comments.
 package contributions
 
 import (
