@@ -916,13 +916,31 @@ a page that did not say it was a page, "all" read as a sentinel, a chunk-less
 record refused as a broken citation, a claim rendered with names the caller
 could not walk from, a node two sources had silently been merged into.
 
-It earned itself on the first run. `Find` promises an order — by name, then by
+It earned itself twice on the first run. `Find` promises an order — by name, then by
 id, so that a limit cuts the same place twice — and the RDF connector's query
 ordered the inner subquery that chooses the page and not the outer one that
 returns it. SPARQL does not promise a join preserves a subquery's order;
 GraphDB happened to, Oxigraph does not, so for as long as there was one SPARQL
 store the page came out sorted by accident. Two stores and a shared suite
 turned it into a failing test.
+
+The second was a hole the fixture had to stop avoiding. A result carries chunks
+so that a citation can be resolved, and whether it also carries embeddings is a
+separate decision — an import meant for citation and review has no reason to pay
+for them. CortexDB keeps chunk text in a vector row, so it kept none of it, and
+`Cite` answered "this citation does not resolve" about text the connector had
+been handed. The write side was already honest: the loss was counted and named
+in `sink.Loss`. The read side was not, and the reader is months later and a
+different process.
+
+Neither of that store's two obvious homes will take a row with no vector — an
+embedding and a graph node both refuse one — and inventing a zero vector would
+put a point at the origin into somebody's similarity search. So the text goes
+into a document, which holds arbitrary content and is indexed as nothing, and
+`Cite` falls back to it. The records still carry no chunk id, deliberately:
+CortexDB's own `fact_provenance` resolves a chunk id against the embedding store
+and reports one it cannot find as missing, so handing it an id that lives in a
+document would turn its one honest alarm into a false one.
 
 **What the read side is checked against.** Four sources from one company's
 published material — a schema, its documentation, a code graph and a company

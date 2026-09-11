@@ -90,7 +90,34 @@ func (l *Loader) writeChunks(ctx context.Context, p *plan, from int, rep *Report
 		c := p.res.Chunks[i]
 		vi, ok := p.vectorFor[c.Index]
 		if !ok {
+			// No embedding, so no vector row — and the text still has to land
+			// somewhere, because recall.Cite is the whole reason the text is
+			// carried at all.
+			//
+			// Neither of CortexDB's two obvious homes will take it: Upsert
+			// refuses an embedding with no vector ("invalid embedding: missing
+			// vector") and UpsertNode refuses a node with none ("invalid node:
+			// missing vector"), both measured against a live store. Inventing
+			// a zero vector would put a point at the origin into somebody's
+			// similarity search, which is worse than losing the text.
+			//
+			// A document takes it. It is already how this connector files a
+			// source, it holds arbitrary Content, and nothing indexes it as a
+			// vector — so the text is retrievable and the embedding store is
+			// untouched. citeDocument reads it back.
+			if err := l.writeChunkText(ctx, c); err != nil {
+				return nil, err
+			}
 			rep.ChunksWithoutVectors++
+			// NOT added to `written`, which is what decides whether a record
+			// gets a chunk id. CortexDB's own fact_provenance resolves a chunk
+			// id against the embedding store and reports one it cannot find as
+			// Missing — "a citation pointing at deleted text is exactly the
+			// thing worth surfacing" — so handing it an id that lives in a
+			// document would turn its one honest alarm into a false one. Its
+			// answer stays "a document and no chunks", which is true in
+			// CortexDB's own terms; recall.Cite is the caller that knows about
+			// the fallback.
 			continue
 		}
 		meta := map[string]string{
@@ -404,4 +431,43 @@ func joinKeys(keys []string) string {
 		out += "," + k
 	}
 	return out
+}
+
+// writeChunkText files one chunk's text as a document, for the chunks that
+// have no embedding to carry it.
+//
+// The id is the chunk's own, so Cite can ask for it by name rather than
+// searching, and the metadata carries what recall.Citation needs — the source
+// and the offsets — because a citation without them is a quotation rather than
+// evidence.
+//
+// Idempotent the way every other write here is: a load run twice must converge.
+// CreateDocument on an id that exists is an error rather than an update, so an
+// existing document is left alone — its content is derived from the same result
+// under the same digest, which Begin has already checked.
+func (l *Loader) writeChunkText(ctx context.Context, c alchemy.Chunk) error {
+	store := l.cortex.Vector()
+	id := chunkNodeID(l.opts.RunID, c.Index)
+	if doc, err := store.GetDocument(ctx, id); err == nil && doc != nil {
+		return nil
+	}
+	pre := l.opts.ReservedPrefix
+	meta := map[string]any{
+		"graph_kind": "chunk",
+		pre + keyRun: l.opts.RunID, pre + keySource: c.Source,
+		pre + "start": c.Start, pre + "end": c.End, pre + "index": c.Index,
+	}
+	if c.Strategy != "" {
+		meta[pre+keyChunking] = c.Strategy
+	}
+	if c.Heading != "" {
+		meta[pre+"heading"] = c.Heading
+	}
+	if err := store.CreateDocument(ctx, &core.Document{
+		ID: id, Title: c.Source, SourceURL: c.Source, Content: c.Text,
+		Author: author, Version: 1, Metadata: meta,
+	}); err != nil {
+		return fmt.Errorf("cortexdb: write the text of chunk %d: %w", c.Index, err)
+	}
+	return nil
 }

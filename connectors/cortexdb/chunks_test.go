@@ -93,11 +93,20 @@ func TestVectorsArePassedThroughRatherThanRecomputed(t *testing.T) {
 	}
 }
 
-// A chunk with no vector has nowhere to go: CortexDB keeps chunk text in a
-// vector row, and the only vector this connector could supply is one it made up.
-// Making one up is the recomputation the whole file refuses, so the text stays
-// out — and the number is reported, because a citation that silently stopped
-// resolving is worse than one that never existed.
+// A chunk with no vector cannot go where chunks go: CortexDB keeps chunk text
+// in a vector row, and the only vector this connector could supply is one it
+// made up. Making one up is the recomputation the whole file refuses — and it
+// would put a point at the origin into somebody's similarity search.
+//
+// So the text goes into a document instead (writeChunkText), and the two halves
+// of that decision are asserted here: no embedding row is created, and the
+// record still carries no chunk id. The second half is the one that is easy to
+// get wrong. CortexDB's own fact_provenance resolves a chunk id against the
+// embedding store and reports one it cannot find as Missing; handing it an id
+// that lives in a document would turn its one honest alarm into a false one.
+// Its answer stays "a document and no chunks", which is true in its own terms,
+// while recall.Cite — the caller that knows about the fallback — resolves the
+// text. recallconform asserts that half.
 func TestChunksWithoutVectorsAreReportedNotInvented(t *testing.T) {
 	l := openLocal(t, Options{RunID: "run-C3"})
 	res := fixture()

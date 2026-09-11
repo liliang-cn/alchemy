@@ -48,8 +48,12 @@ package recallconform
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/recall"
@@ -69,13 +73,35 @@ func Run(t *testing.T, newStore func(t *testing.T) Store) {
 	for _, c := range cases() {
 		t.Run(c.name, func(t *testing.T) {
 			s := newStore(t)
-			load := "rc-" + c.name
+			// A fresh load name per run, not one derived from the case.
+			//
+			// A stable name is unique only where the factory hands back a store
+			// nobody else has — a private database, a private prefix — and not
+			// every store can offer one: a server that holds a single dataset
+			// makes the second run meet its own first load and be refused with
+			// "already written from a different result", which is the connector
+			// doing exactly what it promises. Every load in production has a
+			// name of its own, so the suite gives itself one too.
+			load := "rc-" + c.name + "-" + stamp()
 			if _, err := sink.Load(context.Background(), s, fixture(), sink.Options{Load: load}); err != nil {
 				t.Fatalf("loading the fixture: %v", err)
 			}
 			c.check(t, s, load)
 		})
 	}
+}
+
+// stamp is eight random hex characters, enough that two runs against one store
+// do not collide and short enough to read in a failure message.
+func stamp() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// A clock is a poor unique name and a good fallback: this only runs
+		// when the OS refuses entropy, and a test that stopped there would be
+		// failing for a reason that is not the store's.
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+	return hex.EncodeToString(b[:])
 }
 
 type testCase struct {
@@ -130,19 +156,20 @@ func fixture() alchemy.Result {
 			Index: 20, Text: "Maurice Ravel works for Halcyon.", Source: "profile.pdf",
 			Strategy: "heading", Heading: "People", Start: 400, End: 432,
 		}},
-		// The chunk carries a vector, and it has to. One of the six stores here
-		// keeps chunk text in a row whose vector is a required column, so a
-		// chunk with no embedding is counted into its report and not written —
-		// and Cite then answers "this citation does not resolve", about a chunk
-		// the result contained. This suite found that by not supplying one.
+		// NO VECTOR, deliberately.
 		//
-		// The vector is here rather than the divergence being asserted, because
-		// what a store does with a vector-less result is sinkconform's question
-		// (see "a_result_with_no_vectors_loads") and this suite's question is
-		// whether the eight primitives agree. A connector author whose store
-		// needs the embedding should say so in its Report, the way that one
-		// does.
-		Vectors: []alchemy.Vector{{Chunk: 20, Values: []float32{1, 0, 0, 0}, Model: "e-1"}},
+		// A result carries chunks so that a citation can be resolved, and
+		// whether it also carries embeddings is a separate decision — an import
+		// meant for citation and review has no reason to pay for them. So a
+		// store that can only keep chunk text next to an embedding keeps none
+		// of it here, and Cite then answers "this citation does not resolve"
+		// about text the result contained and the connector was handed.
+		//
+		// That is what this suite found on its first run, and the fixture
+		// asserts it rather than avoiding it: one store filed the text as a
+		// document instead, because neither of its two obvious homes will take
+		// a row with no vector and inventing one would put a point at the
+		// origin into somebody's similarity search.
 		Duplicates: []alchemy.Duplicate{{
 			Signal: alchemy.DuplicateNameAffix, Subject: "c1 ~ c2",
 			Detail: "Halcyon and Halcyon Systems differ only by a trailing word",

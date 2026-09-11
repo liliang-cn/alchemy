@@ -169,6 +169,15 @@ func (l *Loader) Cite(ctx context.Context, load, source string, index int) (reca
 			Start: atoi(c.Metadata[pre+"start"]), End: atoi(c.Metadata[pre+"end"]),
 		}, nil
 	}
+	// Not in the embedding store, which is where a chunk lives when alchemy
+	// embedded it. A result loaded without embeddings has its text in a
+	// document instead — see writeChunkText — and this is the other half of
+	// that. Without it every citation in such a load answered ErrNoCitation:
+	// "this does not resolve, do not treat it as evidence", about text the
+	// result carried and this connector was handed.
+	if cit, ok, err := l.citeDocument(ctx, load, source, index); err != nil || ok {
+		return cit, err
+	}
 	return recall.Citation{}, fmt.Errorf("%w: %s does not resolve in load %q",
 		recall.ErrNoCitation, recall.Mark(source, index), load)
 }
@@ -250,4 +259,47 @@ func containsAny(needle string, fields ...string) bool {
 		}
 	}
 	return false
+}
+
+// citeDocument reads a chunk whose text was filed as a document.
+//
+// The source is checked here as it is above, and for the same reason: a chunk
+// index is unique across a job, so the id alone would resolve and a caller who
+// passed the wrong file with the right number would be handed the other file's
+// text with nothing about the answer looking wrong.
+func (l *Loader) citeDocument(ctx context.Context, load, source string, index int) (recall.Citation, bool, error) {
+	doc, err := l.cortex.Vector().GetDocument(ctx, chunkNodeID(load, index))
+	if err != nil || doc == nil {
+		// An absent document is the ordinary answer, not a failure: this is the
+		// fallback, and most loads never take it.
+		return recall.Citation{}, false, nil
+	}
+	pre := l.opts.ReservedPrefix
+	if str(doc.Metadata[pre+keySource]) != source {
+		return recall.Citation{}, false, nil
+	}
+	return recall.Citation{
+		Source: source, Index: index, Text: doc.Content,
+		Start: num(doc.Metadata[pre+"start"]), End: num(doc.Metadata[pre+"end"]),
+	}, true, nil
+}
+
+// str and num read back what writeChunkText put in a document's metadata.
+//
+// A document's Metadata is map[string]any and survives a round trip through
+// JSON, so an int goes in and a float64 comes out. Reading it as an int
+// directly yields zero -- and zero is a legal offset, so a citation would come
+// back pointing at the start of the file with nothing about it looking wrong.
+func str(v any) string { s, _ := v.(string); return s }
+
+func num(v any) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	}
+	return 0
 }
