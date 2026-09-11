@@ -123,10 +123,20 @@ func (l *Loader) findSPARQL(load, name string, limit int) (string, error) {
 	// Ordered by name then id, so a limit cuts the same place twice: a pack
 	// built twice from one unchanged load must come out the same, or an
 	// agent's cache and a diff between two runs are comparing shuffles.
+	//
+	// ORDERED TWICE, and the outer one is not redundant. The inner ORDER BY is
+	// what decides WHICH rows the LIMIT keeps; it does not decide what order
+	// they come back in, because SPARQL does not promise that a join preserves
+	// a subquery's order and this query joins the page against a COUNT. GraphDB
+	// happened to preserve it and Oxigraph does not, so for as long as there
+	// was one SPARQL store to test against, the page came out sorted by
+	// accident. recallconform found it on the second store: the same three
+	// entities, "Ledger" before "Halcyon".
 	return fmt.Sprintf(
 		"SELECT ?id ?type ?name ?total WHERE {\n"+
 			"{ SELECT (COUNT(*) AS ?total) WHERE {\n%[1]s} }\n"+
-			"{ SELECT ?id ?type ?name WHERE {\n%[1]s} ORDER BY ?name ?id LIMIT %[2]d }\n}",
+			"{ SELECT ?id ?type ?name WHERE {\n%[1]s} ORDER BY ?name ?id LIMIT %[2]d }\n}\n"+
+			"ORDER BY ?name ?id",
 		pattern, limit), nil
 }
 

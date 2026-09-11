@@ -57,16 +57,23 @@ claude mcp add --scope local alchemy /path/to/alchemy-mcp \
 Implement `sink.Sink` to write and `recall.Reader` to read, then prove it:
 
 ```go
-func TestConformance(t *testing.T) {
+func TestWrites(t *testing.T) {
 	sinkconform.Run(t, func(t *testing.T) sink.Sink { return NewMyStore(t) })
+}
+
+func TestReads(t *testing.T) {
+	recallconform.Run(t, func(t *testing.T) recallconform.Store { return NewMyStore(t) })
 }
 ```
 
 | Package | What it gives you |
 |---|---|
-| `connectors/sinkconform` | ten cases every store passes — what a load *is* |
+| `connectors/sinkconform` | ten cases — what a load *is* |
+| `connectors/recallconform` | twelve cases — what the eight primitives answer |
 | `connectors/refusable` | the corpus no store may write |
 | `connectors/contributions` | the read-side fold every store must agree on |
+
+Every case in both suites is a wrong answer that reached production.
 
 ## Environment
 

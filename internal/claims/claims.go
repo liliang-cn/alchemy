@@ -332,6 +332,7 @@ func StoreConnectors(root string) ([]string, error) {
 		"sinkconform":   true, // the write-side conformance suite
 		"refusable":     true, // the corpus no store may write
 		"contributions": true, // the read-side fold every store must agree on
+		"recallconform": true, // the read-side conformance suite
 		"internal":      true, // kept so a genuinely private helper still works
 	}
 	base := filepath.Join(root, "connectors")

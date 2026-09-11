@@ -909,6 +909,21 @@ wrong half, because the other one has already been acted on. `Contributions` is
 that hole. It reports and does not judge: a primitive that answered "risky"
 would be doing the judging §2.1 reserves for a person.
 
+**What a connector's read side is checked against.** `connectors/recallconform`
+is the read half of `sinkconform`: twelve cases a store's `recall.Reader`
+answers, and every one of them is a wrong answer that reached production —
+a page that did not say it was a page, "all" read as a sentinel, a chunk-less
+record refused as a broken citation, a claim rendered with names the caller
+could not walk from, a node two sources had silently been merged into.
+
+It earned itself on the first run. `Find` promises an order — by name, then by
+id, so that a limit cuts the same place twice — and the RDF connector's query
+ordered the inner subquery that chooses the page and not the outer one that
+returns it. SPARQL does not promise a join preserves a subquery's order;
+GraphDB happened to, Oxigraph does not, so for as long as there was one SPARQL
+store the page came out sorted by accident. Two stores and a shared suite
+turned it into a failing test.
+
 **What the read side is checked against.** Four sources from one company's
 published material — a schema, its documentation, a code graph and a company
 profile — through the pipeline, into Neo4j, out through `recall.Reader`, into a
