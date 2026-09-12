@@ -1391,10 +1391,24 @@ function showEdgeDetail(e) {
 }
 
 /* ---------- findings list ---------- */
+/* The queue item a finding on the graph corresponds to.
+
+   A row built from the graph carries the graph's own object, which has no
+   item id — the id lives in the queue. Without this the marker below never
+   matched a conflict row, so a reviewer working down a list of five saw the
+   two conflicts stay unmarked and answered the first one over and over. */
+function queueItemFor(subject) {
+  var items = (FINDINGS && FINDINGS.items) || [];
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].subject === subject || items[i].id === subject) { return items[i]; }
+  }
+  return null;
+}
+
 function paintFindings(res) {
   var items = [];
   (res.conflicts || []).forEach(function (c, i) {
-    items.push({ cls: "conflict", s: c.subject, d: c.detail, node: G.held ? BY_ID["conflict:" + i + ":left"] : BY_ID[c.subject], raw: c });
+    items.push({ cls: "conflict", s: c.subject, d: c.detail, node: G.held ? BY_ID["conflict:" + i + ":left"] : BY_ID[c.subject], raw: c, item: queueItemFor(c.subject) });
   });
   (res.violations || []).forEach(function (v) {
     items.push({ cls: "violation", s: v.subject, d: v.detail, node: BY_ID[v.subject], raw: v });
@@ -1416,25 +1430,26 @@ function paintFindings(res) {
       if (kind === "conflict") { return; }
       var first = (it.targets || [])[0] || {};
       items.push({ cls: kind, s: it.subject || it.id, d: it.summary || kind,
-        node: BY_ID[first.id] || null, raw: it });
+        node: BY_ID[first.id] || null, raw: it, item: it });
     });
   }
 
-  var left = items.filter(function (it) { return !(it.raw && it.raw.id && ANSWERED[it.raw.id]); }).length;
+  function rowID(it) { return (it.item && it.item.id) || (it.raw && it.raw.id) || ""; }
+  var left = items.filter(function (it) { return !ANSWERED[rowID(it)]; }).length;
   DOM("findcount").textContent = !items.length ? "(none)"
     : left === items.length ? "(" + items.length + ")" : "(" + left + " of " + items.length + " left)";
   var ul = DOM("findlist");
   ul.innerHTML = "";
   items.slice(0, 400).forEach(function (it) {
     var li = document.createElement("li");
-    var done = !!(it.raw && it.raw.id && ANSWERED[it.raw.id]);
+    var done = !!ANSWERED[rowID(it)];
     li.className = it.cls + (done ? " answered" : "");
     li.innerHTML = '<span class="s">' + esc(it.s) + '</span><span class="d">' +
       esc(done ? "answered" : (it.d || it.cls)) + "</span>";
     li.addEventListener("click", function () {
       if (it.node) { select(it.node); }
       // After select, which clears it: this row is the question being answered.
-      if (it.raw && it.raw.id && it.raw.kind) { PICKED = it.raw; paintActions(selectedRecord()); }
+      if (it.item && it.item.id) { PICKED = it.item; paintActions(selectedRecord()); }
       else {
         DOM("dtitle").textContent = it.s;
         DOM("dsub").textContent = it.cls;
