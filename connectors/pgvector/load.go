@@ -222,7 +222,7 @@ func Fingerprint(res alchemy.Result) (string, error) { return sink.Digest(res), 
 // about what the node is. The connectors were not touched by that commit, so
 // the one thing this product exists to produce, a graph merged from several
 // sources, still could not be loaded here: two documents each asserting
-// "LINSTOR controller is a Component" were refused as a broken result.
+// "the controller is a Component" were refused as a broken result.
 //
 // Asking preflight is the fix and not a refactor. A store deciding for itself
 // which graphs are writable, while the envelope it calls decides again with a

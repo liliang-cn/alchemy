@@ -95,7 +95,7 @@ func main() {
 		fmt.Printf("   the vocabulary declined one: %s — %s\n", v.Kind, v.Detail)
 	}
 
-	step(2, "Held: a DRBD resource has one Primary, and two sources name different ones")
+	step(2, "Held: a replicated volume has one Primary, and two sources name different ones")
 	if hold == nil {
 		fmt.Println("   Nothing was held. The rest of this demo is about what happens")
 		fmt.Println("   to a conflict, so it has nothing to show — the extractor did")
@@ -262,7 +262,7 @@ func doc(name, body string) pipeline.Source {
 //
 // Which is exactly the judgement a person is needed for. Nothing in either
 // document says which was written later, and nothing in the graph knows that
-// drbd-reactor moved sds-meta at 02:14 — an operator does. A pipeline that
+// the failover controller moved vol-meta at 02:14 — an operator does. A pipeline that
 // guessed would be doing the reviewer's job with less information than the
 // reviewer has.
 //
@@ -275,7 +275,7 @@ func acceptTheFailover(queue []review.Item) []review.Decision {
 			ItemID: it.ID,
 			Verb:   review.VerbAccept,
 			By:     "demo-operator",
-			Note:   "drbd-reactor demoted hp at 02:14 and dell took it; the runbook predates the failover",
+			Note:   "the failover controller demoted hp at 02:14 and dell took it; the runbook predates the failover",
 			At:     time.Now(),
 		})
 	}

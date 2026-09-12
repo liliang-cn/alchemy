@@ -12,10 +12,10 @@ package main
 // that; it is borrowed as evidence, not as an example.
 //
 // One thing is added that domain.toml has no way to say, and it is the whole
-// experiment: `promotes` is declared at_most_one_in. A DRBD resource is Primary
-// on at most one node at a time — that is not a modelling preference, it is the
-// invariant the whole system is built to keep, and it is the reason split-brain
-// is a word.
+// experiment: `promotes` is declared at_most_one_in. A replicated volume is
+// Primary on at most one node at a time — that is not a modelling preference,
+// it is the invariant the whole system is built to keep, and it is the reason
+// split-brain is a word.
 //
 // So the two documents below are not contrived to disagree. They are a runbook
 // and an incident note, each correct when it was written, describing a resource
@@ -28,18 +28,18 @@ package main
 // scripted — constrained extraction may decline to emit it, or emit it and have
 // the verifier refuse it — and the demo reports which happened.
 
-const runbook = `# sds-meta HA runbook
+const runbook = `# vol-meta HA runbook
 
-The sds-meta DRBD resource is promoted on node hp. Storage pool vg0 backs
-sds-meta.
+The vol-meta volume is promoted on node hp. Storage pool vg0 backs
+vol-meta.
 
-While hp holds it, sds-meta has state Primary.
+While hp holds it, vol-meta has state Primary.
 `
 
-const incidentNote = `# Incident 2026-08-17 — sds-meta failover
+const incidentNote = `# Incident 2026-08-17 — vol-meta failover
 
-At 02:14 node hp lost quorum and drbd-reactor demoted it. Node dell promotes
-sds-meta now, and sds-meta has state Primary on dell.
+At 02:14 node hp lost quorum and the failover controller demoted it. Node dell
+promotes vol-meta now, and vol-meta has state Primary on dell.
 
 Prometheus scrapes the metrics endpoint on dell every 15 seconds.
 `
@@ -56,15 +56,15 @@ const sdsOntology = `{
     "prose": {
       "entities": [
         {"name": "Node"},
-        {"name": "DRBDResource"},
+        {"name": "Volume"},
         {"name": "StoragePool"},
         {"name": "PromoterConfig"},
         {"name": "State"}
       ],
       "relations": [
-        {"name": "promotes",  "from": ["Node", "PromoterConfig"], "to": ["DRBDResource"], "at_most_one_in": true},
-        {"name": "backs",     "from": ["StoragePool"], "to": ["DRBDResource"]},
-        {"name": "has_state", "from": ["DRBDResource", "Node"], "to": ["State"]}
+        {"name": "promotes",  "from": ["Node", "PromoterConfig"], "to": ["Volume"], "at_most_one_in": true},
+        {"name": "backs",     "from": ["StoragePool"], "to": ["Volume"]},
+        {"name": "has_state", "from": ["Volume", "Node"], "to": ["State"]}
       ]
     }
   }
