@@ -115,3 +115,45 @@ func TestThePageCanSayEverySectionFiveNumber(t *testing.T) {
 		t.Error("the page has no dark-mode rule; it must work in both")
 	}
 }
+
+// Every verb the review queue takes has a control on the page.
+//
+// This is the test that would have caught a page with no Accept. pkg/review
+// takes four verbs; three of them name a queue item, and the page could send
+// two. That gap is not cosmetic: a duplicate pair is answered "these are two
+// things" with accept, merge.go refuses reject on a duplicate item outright,
+// and edit means merge — so with accept missing there was no way to keep two
+// records that a reviewer believes in, and the job stayed held until somebody
+// left the browser and used the RPC.
+//
+// Asserting on the markup is coarse, and it is the right coarseness for the
+// same reason the counts test gives: no Go test of a handler notices that a
+// button is gone.
+func TestThePageCanSendEveryVerbThatNamesAQueueItem(t *testing.T) {
+	f := serve(t, harness{})
+	page := pageBody(t, f, gateway.ViewPrefix)
+	for _, verb := range []string{"REVIEW_VERB_ACCEPT", "REVIEW_VERB_EDIT", "REVIEW_VERB_REJECT"} {
+		if !strings.Contains(page, verb) {
+			t.Errorf("the page never sends %s; it is a verb the queue takes and a reviewer who needs it has to leave the browser", verb)
+		}
+	}
+}
+
+// A held job's findings reach the page from the queue, not only from the graph.
+//
+// WatchJob carries counts and conflicts and nothing else, which is viewdata.go's
+// own decision and a sound one. The consequence is that a job held with
+// duplicates rather than conflicts drew an empty canvas and a findings list
+// reading "(none)", while the banner told the reviewer to click the side they
+// believe. ListFindings answers over HTTP for exactly this state, the page
+// already fetches it, and this asserts it is used for drawing and for listing
+// rather than only for resolving an item id.
+func TestAHeldJobDrawsTheQueueItCanStillBeAskedAbout(t *testing.T) {
+	f := serve(t, harness{})
+	page := pageBody(t, f, gateway.ViewPrefix)
+	for _, needed := range []string{"buildHeldPairs", "FINDINGS"} {
+		if !strings.Contains(page, needed) {
+			t.Errorf("the page has no %s; a job held by anything but a conflict has nothing to draw and nothing to list", needed)
+		}
+	}
+}

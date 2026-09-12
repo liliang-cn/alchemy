@@ -185,6 +185,8 @@
   #findlist li.violation{border-left-color:var(--bad)}
   #findlist li.conflict{border-left-color:var(--bad)}
   #findlist li.duplicate{border-left-color:var(--dup)}
+  #findlist li.answered{opacity:.5}
+  #findlist li.answered .d{font-style:italic}
   #findlist li.guess{border-left-color:var(--warn)}
   #findlist .s{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #findlist .d{color:var(--dim);font-size:11px;display:block}
@@ -361,9 +363,24 @@
   <div id="actions">
     <p class="why" id="dwhy"></p>
     <div class="row">
+      <button class="btn" id="act-keep"></button>
       <button class="btn" id="act-modify"></button>
       <button class="btn" id="act-remove"></button>
     </div>
+
+    <form class="edit" id="keepform">
+      <label for="k-by">who — required; a judgement nobody signed is refused</label>
+      <input class="txt" id="k-by" autocomplete="off" spellcheck="false">
+      <label for="k-note">why</label>
+      <textarea class="txt" id="k-note" spellcheck="false"></textarea>
+      <p class="why" id="k-scope"></p>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" type="submit" id="k-send">Send decision</button>
+        <button class="btn" type="button" id="k-cancel">Cancel</button>
+      </div>
+      <div class="err" id="k-err"></div>
+      <div class="ok" id="k-ok"></div>
+    </form>
 
     <form class="edit" id="modform">
       <label for="m-type">type</label>
@@ -742,6 +759,7 @@ function build(res) {
       EDGES.push({ a: a, b: b, type: (c.kind || "").replace(/^CONFLICT_KIND_/, "").toLowerCase(),
         kind: "conflict", detail: c });
     });
+    buildHeldPairs();
   } else {
     (res.entities || []).forEach(function (e) {
       var n = addNode(e.id, e.type, e.name || e.id, e.provenance, "entity");
@@ -768,6 +786,42 @@ function build(res) {
   EDGES.forEach(function (e) { e.a.deg++; e.b.deg++; });
   seed();
   settle(260);
+}
+
+/* The pairs a held job can still be asked about, drawn from the queue.
+
+   WatchJob carries counts and conflicts and nothing else (viewdata.go says
+   why), so a job held with duplicates rather than conflicts used to draw an
+   empty canvas: the reviewer was told to click the side they believe and
+   given nothing to click. The queue is the other half of what the service
+   knows and this page already has it — ListFindings answers over HTTP while
+   the job is held, with the item id, both targets and their provenance.
+
+   So the pair is drawn from the item rather than from the graph. Each side is
+   the target itself, not a claim about it, which is what lets itemFor match a
+   selection back to the item: a decision on a duplicate names a record, and
+   the record is one of the two the service put in the item.
+
+   Only pairs. An item with one target is a judgement about a single record
+   that the held graph has not delivered, and drawing a lone node for it would
+   invite a Modify against a record nobody can see. Those stay in the findings
+   list, where they say what they are without pretending to be a graph. */
+function buildHeldPairs() {
+  var items = (FINDINGS && FINDINGS.items) || [];
+  items.forEach(function (it, i) {
+    var targets = it.targets || [];
+    if (targets.length !== 2) { return; }
+    var kind = String(it.kind || "").replace(/^REVIEW_KIND_/, "").toLowerCase();
+    if (kind === "conflict") { return; }
+    var sides = targets.map(function (t, j) {
+      var n = addNode(t.id || (it.subject + ":" + j), t.type || "", t.id || it.subject, t.provenance, "entity");
+      n.detail = { id: t.id, type: t.type || "", name: "" };
+      n.finding = kind;
+      return n;
+    });
+    EDGES.push({ a: sides[0], b: sides[1], type: kind === "duplicate" ? "may be one node" : kind,
+      kind: kind, detail: it });
+  });
 }
 
 function addNode(id, type, label, prov, kind) {
@@ -1215,7 +1269,31 @@ function segmentDistance(px, py, ax, ay, bx, by) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+/* The queue item the reviewer picked, when they picked one by name.
+
+   itemFor matches a record to an item through the item's targets, and a record
+   can be the target of more than one: a name that two other names extend is a
+   side of both pairs built from it, so matching by target alone answers
+   whichever came first and tells the reviewer their second answer is a
+   contradiction of their first. A click in the findings list is not a search
+   for an item — it is an item — so it is remembered, and any other selection
+   forgets it. */
+var PICKED = null;
+
+/* The questions this page has already answered.
+
+   ListFindings returns the queue, not the queue minus what has been decided —
+   an item carries no field saying it was answered, and there is a reason for
+   that: a decision is a record of its own and the queue is the list of what
+   the service is willing to be asked about. But a reviewer working down a
+   list of three needs to see which ones are done, and without this they see
+   three identical rows after answering all three, and get "already has a
+   different decision" for clicking one twice. Kept here rather than asked for,
+   because this page is the only thing that knows. */
+var ANSWERED = {};
+
 function select(n) {
+  PICKED = null;
   selected = n;
   if (!n) { DOM("detail").classList.remove("on"); draw(); return; }
   showDetail(n);
@@ -1327,16 +1405,36 @@ function paintFindings(res) {
   (res.guesses || []).forEach(function (g) {
     items.push({ cls: "guess", s: g.field + " → " + g.chosen_as, d: g.reason, node: null, raw: g });
   });
+  /* A held job's graph carries its conflicts and nothing else, so everything
+     else the service is willing to be asked about would be missing from this
+     list — which is the list the page tells a reviewer is the queue. It is
+     added from the queue itself, conflicts excluded because they are already
+     above and would otherwise appear twice. */
+  if (G.held) {
+    ((FINDINGS && FINDINGS.items) || []).forEach(function (it) {
+      var kind = String(it.kind || "").replace(/^REVIEW_KIND_/, "").toLowerCase();
+      if (kind === "conflict") { return; }
+      var first = (it.targets || [])[0] || {};
+      items.push({ cls: kind, s: it.subject || it.id, d: it.summary || kind,
+        node: BY_ID[first.id] || null, raw: it });
+    });
+  }
 
-  DOM("findcount").textContent = items.length ? "(" + items.length + ")" : "(none)";
+  var left = items.filter(function (it) { return !(it.raw && it.raw.id && ANSWERED[it.raw.id]); }).length;
+  DOM("findcount").textContent = !items.length ? "(none)"
+    : left === items.length ? "(" + items.length + ")" : "(" + left + " of " + items.length + " left)";
   var ul = DOM("findlist");
   ul.innerHTML = "";
   items.slice(0, 400).forEach(function (it) {
     var li = document.createElement("li");
-    li.className = it.cls;
-    li.innerHTML = '<span class="s">' + esc(it.s) + '</span><span class="d">' + esc(it.d || it.cls) + "</span>";
+    var done = !!(it.raw && it.raw.id && ANSWERED[it.raw.id]);
+    li.className = it.cls + (done ? " answered" : "");
+    li.innerHTML = '<span class="s">' + esc(it.s) + '</span><span class="d">' +
+      esc(done ? "answered" : (it.d || it.cls)) + "</span>";
     li.addEventListener("click", function () {
       if (it.node) { select(it.node); }
+      // After select, which clears it: this row is the question being answered.
+      if (it.raw && it.raw.id && it.raw.kind) { PICKED = it.raw; paintActions(selectedRecord()); }
       else {
         DOM("dtitle").textContent = it.s;
         DOM("dsub").textContent = it.cls;
@@ -1405,7 +1503,18 @@ function loadFindings() {
   fetch("/ui/jobs/" + encodeURIComponent(jobId) + "/findings",
     { credentials: "same-origin", headers: { "Accept": "application/json" } })
     .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (doc) { FINDINGS = doc; })
+    .then(function (doc) {
+      FINDINGS = doc;
+      /* The queue arrives after the first paint, and on a held job it is not
+         decoration: it is the only source of everything but the conflicts. A
+         page that left the first paint standing would show a reviewer an
+         empty canvas and a findings list that says (none) while holding, in
+         memory, the three questions it was asked to put to them. */
+      if (G && G.held) {
+        var res = G.result || {};
+        build(res); applyQuery(); fit(); paintFindings(res);
+      }
+    })
     .catch(function () { FINDINGS = null; });
 }
 
@@ -1458,6 +1567,7 @@ function selectedRecord() {
    so a page that matched on the subject alone would offer a Modify button that
    the service refuses every time. */
 function itemFor(rec) {
+  if (PICKED) { return PICKED; }
   var items = (FINDINGS && FINDINGS.items) || [];
   for (var i = 0; i < items.length; i++) {
     var it = items[i], targets = it.targets || [];
@@ -1487,9 +1597,10 @@ function say(id, text, on) {
   el.classList.toggle("on", !!on && !!text);
 }
 function closeForms() {
+  DOM("keepform").classList.remove("on");
   DOM("modform").classList.remove("on");
   DOM("delform").classList.remove("on");
-  ["m-err", "m-ok", "d-err", "d-ok"].forEach(function (id) { say(id, "", false); });
+  ["k-err", "k-ok", "m-err", "m-ok", "d-err", "d-ok"].forEach(function (id) { say(id, "", false); });
 }
 
 /* send is every write this page makes: same-origin, cookie-carried, JSON in
@@ -1529,6 +1640,29 @@ function paintActions(rec) {
   DOM("dwhy").innerHTML = live ? DECIDE_WHY : SUPERSEDE_WHY;
   DOM("act-modify").textContent = live ? "Modify — decision" : "Correct — supersede";
   DOM("act-remove").textContent = live ? "Reject — decision" : "Retire — supersede";
+  /* Accept is a review verb and nothing else: it keeps the record and names
+     who looked. There is no supersede spelling of it — a page cannot assert
+     that a record is fine — so the button exists only while a queue does, and
+     only for a record the queue actually names. Without it a duplicate had no
+     right answer on this page at all: Reject removes a record the reviewer
+     believes in, and pkg/review refuses it on a duplicate item anyway, so the
+     only way to say "these are two things" was to leave the job held. */
+  DOM("act-keep").hidden = !(live && itemFor(rec));
+  DOM("act-keep").textContent = "Accept — decision";
+}
+
+function openKeep() {
+  var rec = selectedRecord();
+  if (!rec) { return; }
+  closeForms();
+  var item = itemFor(rec);
+  if (!item) { return; }
+  fill("k-by", WHO); fill("k-note", "");
+  DOM("k-scope").textContent =
+    "Sent as REVIEW_VERB_ACCEPT on queue item " + item.id + ". The record is kept exactly as it is and " +
+    "the answer names you — which is what the contract grades as verified. For a duplicate pair this is " +
+    "the answer that says they are two things; merging them is Modify, with into.";
+  DOM("keepform").classList.add("on");
 }
 
 function openModify() {
@@ -1633,9 +1767,22 @@ function decided(doc, okID, errID) {
       rejected.map(function (r) { return r.reason || r.item_id; }).join("; "), true);
     return;
   }
+  /* What is said here is read off the state the service just returned, not
+     off remaining_holding.
+
+     remaining_holding counts conflicts, which is §7.3's refusal and only
+     that. A job in review mode is held by its whole queue, so a job with no
+     conflicts and two unanswered duplicates has remaining_holding 0 while
+     GetResult still refuses it and /athanor/loads still answers 409 — and the
+     line this used to print was "Nothing is holding this job now", which told
+     a reviewer they were finished at the moment they had two questions left.
+     The state is the one field that knows the difference. */
+  var still = doc.state === "JOB_STATE_NEEDS_REVIEW";
+  if (PICKED && PICKED.id) { ANSWERED[PICKED.id] = true; }
   say(okID, "Applied " + (doc.applied || 0) + ". " +
     (doc.remaining_holding ? doc.remaining_holding + " conflict(s) still holding this job." :
-      "Nothing is holding this job now.") + " Reloading the graph.", true);
+      still ? "The job is still held: it asked for review, and its queue has answers outstanding." :
+        "Nothing is holding this job now.") + " Reloading the graph.", true);
   setTimeout(function () { select(null); load(); }, 900);
 }
 
@@ -1656,8 +1803,10 @@ function statedRecord(kind, ids) {
   return { entities: [{ id: val(ids[0]).trim(), type: val(ids[1]).trim(), name: val(ids[2]).trim() }] };
 }
 
+DOM("act-keep").addEventListener("click", openKeep);
 DOM("act-modify").addEventListener("click", openModify);
 DOM("act-remove").addEventListener("click", openRemove);
+DOM("k-cancel").addEventListener("click", closeForms);
 DOM("m-cancel").addEventListener("click", closeForms);
 DOM("d-cancel").addEventListener("click", closeForms);
 
@@ -1708,6 +1857,23 @@ DOM("modform").addEventListener("submit", function (ev) {
   send("/ui/assertions", payload)
     .then(function (doc) { asserted(doc, "m-ok"); })
     .catch(function (err) { say("m-err", err.message, true); });
+});
+
+DOM("keepform").addEventListener("submit", function (ev) {
+  ev.preventDefault();
+  var rec = selectedRecord();
+  if (!rec) { return; }
+  var who = signed("k-by", "k-note", "k-err");
+  if (!who) { return; }
+  var item = itemFor(rec);
+  if (!item) {
+    say("k-err", "There is no queue item naming this record, so there is no decision to make about it.", true);
+    return;
+  }
+  send(decisionsPath(), { decisions: [{ item_id: item.id, verb: "REVIEW_VERB_ACCEPT",
+    by: who.by, note: who.note }] })
+    .then(function (doc) { decided(doc, "k-ok", "k-err"); })
+    .catch(function (err) { say("k-err", err.message, true); });
 });
 
 DOM("delform").addEventListener("submit", function (ev) {
