@@ -20,15 +20,60 @@ import (
 // item with no targets changes no graph rather than changing the wrong one.
 type records struct {
 	bySubject map[string][]Ref
+	// footprint is what a decision about a node would move: every source that
+	// said something about it, and how many edges hang off it.
+	//
+	// A duplicate finding names one provenance per side — the mention the
+	// signal fired on — and a node that several documents talk about has more
+	// than one. Merging it moves all of them, so a reviewer shown one source
+	// is being asked to approve a move whose size they cannot see. That is not
+	// hypothetical: two notes that each say only "Joel" become one node, and
+	// merging it into the Joel one of them meant carries the other one's facts
+	// across with it.
+	footprint map[string]*footprint
+}
+
+// footprint is the blast radius of a decision about one node.
+type footprint struct {
+	sources []string
+	edges   int
+}
+
+func (f *footprint) saw(source string) {
+	if source == "" {
+		return
+	}
+	for _, have := range f.sources {
+		if have == source {
+			return
+		}
+	}
+	f.sources = append(f.sources, source)
+}
+
+func (idx *records) node(id string) *footprint {
+	if idx.footprint[id] == nil {
+		idx.footprint[id] = &footprint{}
+	}
+	return idx.footprint[id]
 }
 
 func index(entities []alchemy.Entity, relations []alchemy.Relation) *records {
-	idx := &records{bySubject: make(map[string][]Ref, len(entities)+len(relations))}
+	idx := &records{
+		bySubject: make(map[string][]Ref, len(entities)+len(relations)),
+		footprint: make(map[string]*footprint, len(entities)),
+	}
 	for _, e := range entities {
 		idx.add(e.ID, entityRef(e))
+		idx.node(e.ID).saw(e.Provenance.Source)
 	}
 	for _, r := range relations {
 		ref := relationRef(r)
+		for _, end := range [2]string{r.From, r.To} {
+			f := idx.node(end)
+			f.edges++
+			f.saw(r.Provenance.Source)
+		}
 		idx.add(directed(r, r.Type), ref)
 		// The undirected form is what a direction conflict is filed under,
 		// because which arrow is drawn is the question being asked.

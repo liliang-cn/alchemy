@@ -2,6 +2,7 @@ package review_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
@@ -315,6 +316,51 @@ func TestTheQueueIsTheSameEveryTime(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		if !reflect.DeepEqual(first, queueOf(res, opts)) {
 			t.Fatal("the queue is not stable across runs")
+		}
+	}
+}
+
+// A duplicate says how much a merge would move.
+//
+// The case that made this necessary: two documents that each say only "Joel"
+// become one node, a third names Joel C and Joel Z, and the finding fires on
+// one mention. A reviewer told "Joel per eng-note.pdf" merges it into Joel C
+// and carries a fact out of sales-note.pdf with it, having never been shown
+// that document's name.
+func TestADuplicateSaysWhatAnAnswerWouldMove(t *testing.T) {
+	rep := verify.Report{
+		Entities: []alchemy.Entity{
+			{ID: "person:joel", Type: "Person", Name: "Joel", Provenance: alchemy.Provenance{Source: "eng-note.pdf", Chunk: 1}},
+			{ID: "person:joel c", Type: "Person", Name: "Joel C", Provenance: alchemy.Provenance{Source: "who-is-who.pdf"}},
+			{ID: "product:drbd", Type: "Product", Provenance: alchemy.Provenance{Source: "who-is-who.pdf"}},
+			{ID: "customer:acme", Type: "Customer", Provenance: alchemy.Provenance{Source: "sales-note.pdf"}},
+		},
+		Relations: []alchemy.Relation{
+			{From: "person:joel", To: "product:drbd", Type: "contributed_to", Provenance: alchemy.Provenance{Source: "eng-note.pdf", Chunk: 1}},
+			{From: "person:joel", To: "customer:acme", Type: "advised", Provenance: alchemy.Provenance{Source: "sales-note.pdf", Chunk: 2}},
+		},
+		Duplicates: []alchemy.Duplicate{{
+			Signal:  alchemy.DuplicateNameAffix,
+			Subject: "person:joel ~ person:joel c",
+			Detail:  `Person "Joel" and Person "Joel C" differ only by the trailing "c"`,
+			Left:    alchemy.DuplicateSide{ID: "person:joel", Provenance: alchemy.Provenance{Source: "eng-note.pdf", Chunk: 1}},
+			Right:   alchemy.DuplicateSide{ID: "person:joel c", Provenance: alchemy.Provenance{Source: "who-is-who.pdf"}},
+		}},
+	}
+
+	var dup *review.Item
+	for _, it := range review.Queue(rep, alchemy.Result{}, review.Options{Reviewing: true}) {
+		if it.Kind == review.KindDuplicate {
+			copied := it
+			dup = &copied
+		}
+	}
+	if dup == nil {
+		t.Fatal("no duplicate item was queued")
+	}
+	for _, want := range []string{"eng-note.pdf", "sales-note.pdf", "2 relations"} {
+		if !strings.Contains(dup.Summary, want) {
+			t.Errorf("the summary never says %q, so a reviewer cannot see what the merge moves:\n  %s", want, dup.Summary)
 		}
 	}
 }

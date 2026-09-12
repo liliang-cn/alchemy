@@ -187,11 +187,54 @@ func duplicateItem(i int, d alchemy.Duplicate, idx *records) Item {
 		Kind:       KindDuplicate,
 		Index:      i,
 		Subject:    d.Subject,
-		Summary:    d.Detail,
+		Summary:    d.Detail + carries(idx, d.Left.ID, d.Right.ID),
 		Shape:      duplicateShape(d),
 		Provenance: d.Right.Provenance,
 		Targets:    append(left, right...),
 	}
+}
+
+// carries says what answering this would move.
+//
+// The finding's own sentence names one mention per side, which is the mention
+// the signal fired on. A node several documents talk about has more, and a
+// merge moves every edge on it — so a reviewer told "Joel per eng-note.pdf"
+// can approve carrying a fact out of sales-note.pdf without ever seeing that
+// document named. Nothing here decides anything; it says the size of the
+// question, which is the part the summary was missing.
+func carries(idx *records, ids ...string) string {
+	var parts []string
+	for _, id := range ids {
+		f := idx.footprint[id]
+		if f == nil || (len(f.sources) < 2 && f.edges == 0) {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s is named by %s and carries %s",
+			id, joinNames(f.sources), plural(f.edges, "relation")))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " — " + strings.Join(parts, "; ")
+}
+
+func joinNames(names []string) string {
+	switch len(names) {
+	case 0:
+		return "no named source"
+	case 1:
+		return names[0]
+	case 2:
+		return names[0] + " and " + names[1]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 func over(alternatives []string) string {
