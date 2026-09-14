@@ -59,12 +59,14 @@ func systemPrompt(v ontology.Vocabulary, told []string) string {
     "to_type": "<that entity's type>",
     "confidence": 0.0}
  ]}` + "\n\n")
-	// Each of these four lines pays for itself downstream. Consistent spelling
-	// is what lets one thing named in two chunks merge into one node; typed
+	// Each of these lines pays for itself downstream. Consistent spelling is
+	// what lets one thing named in two chunks merge into one node; typed
 	// relation ends are what lets an end that was never listed as an entity
 	// still resolve to the right node; omitted rather than invented confidence
-	// keeps Provenance.Confidence meaningful; and the permission to answer
-	// nothing is what keeps ChunksEmpty a fact about the documents.
+	// keeps Provenance.Confidence meaningful; the permission to answer nothing
+	// keeps ChunksEmpty a fact about the documents rather than about the
+	// vocabulary; and asking for what the vocabulary cannot say is what makes
+	// a missing word a finding instead of a silence.
 	//
 	// The first of them is a nudge and not a guarantee, for the same reason
 	// standingAnswers is: a chunk is a separate call that cannot see what the
@@ -82,10 +84,22 @@ func systemPrompt(v ontology.Vocabulary, told []string) string {
 		"  not in your entities list.\n" +
 		"- attributes and confidence are optional. Omit an attribute the chunk does not\n" +
 		"  state, and omit confidence rather than inventing a number for it; when you do\n" +
-		"  give it, it is your own confidence between 0 and 1.\n" +
-		"- If the chunk states nothing this vocabulary can express, reply\n" +
-		`  {"entities": [], "relations": []}` + ". An empty answer is a correct answer\n" +
-		"  here. An invented one is not.\n")
+		"  give it, it is your own confidence between 0 and 1.\n")
+	// The line this replaced said an unexpressible chunk was an empty chunk,
+	// and that instruction is what made every mechanism downstream of it
+	// unreachable — see TestThePromptAsksForWhatTheVocabularyCannotSay.
+	b.WriteString("- If the chunk states a relationship these types cannot express, write it in\n" +
+		"  relations anyway, using the type you would have declared for it, in capitals.\n" +
+		"  The vocabulary is checked after you, so an undeclared type is named, shown to\n" +
+		"  a person and can be added — while a fact you leave out because there was no\n" +
+		"  word for it is one nobody downstream can find. The same goes for an entity\n" +
+		"  whose type is not listed.\n" +
+		"  This is not permission to invent: report only what the chunk states, and use\n" +
+		"  a declared type whenever one fits. A type you report and a person rejects\n" +
+		"  costs them one answer; a fact you drop costs them the fact.\n" +
+		"- If the chunk states nothing at all, reply\n" +
+		`  {"entities": [], "relations": []}` + ". That is a correct answer for a chunk\n" +
+		"  with nothing in it, and only for that.\n")
 	b.WriteString(standingAnswers(told))
 	return b.String()
 }

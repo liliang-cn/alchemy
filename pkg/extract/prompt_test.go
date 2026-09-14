@@ -93,3 +93,52 @@ func TestExtractRefusesAMissingModelOrOntologyID(t *testing.T) {
 }
 
 var _ = ontology.Vocabulary{}
+
+// TestThePromptAsksForWhatTheVocabularyCannotSay is the line that made every
+// mechanism downstream of it unreachable.
+//
+// The prompt used to end an unexpressible chunk with "An empty answer is a
+// correct answer here". Under that instruction a model reading "Christoph,
+// Joel C, Lars and Philipp are on the DRBD team" against a vocabulary with no
+// membership relation returns five entities and no relations — and because it
+// emitted no relation, verify has nothing to call undeclared, proposals is
+// derived from violations and stays empty, and the propose → approve → extend
+// workflow whose entire purpose is "the corpus needed a type you do not
+// declare" can only ever fire when the model disobeys. Four people land in the
+// graph connected to nothing, the counters all read zero, and the one thing the
+// document said about them is gone with no trace.
+//
+// So the model is asked for it instead. What comes back is checked against the
+// vocabulary like everything else: it is named as a violation, proposed as a
+// type with the ends it was used between, and graded refused by a store rather
+// than dropped. An over-eager model makes review work; a silent one makes a
+// graph nobody can audit, and between those two this is the safe direction to
+// be wrong in.
+func TestThePromptAsksForWhatTheVocabularyCannotSay(t *testing.T) {
+	got := systemPrompt(testVocab(), nil)
+
+	if strings.Contains(got, "An empty answer is a correct answer") {
+		t.Error("the prompt still tells the model that a chunk it cannot express is an empty chunk, " +
+			"which is the instruction that makes a missing vocabulary word invisible")
+	}
+	for _, want := range []string{
+		// It must say what to do instead, and say it about relations, which is
+		// where the hole was demonstrated.
+		"cannot express",
+		"the type you would have declared",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not say %q, so a model has no way to report a word the vocabulary lacks:\n%s", want, got)
+		}
+	}
+	// And it must still refuse invention. The closed vocabulary is why this
+	// pipeline is worth anything; reporting a gap is not permission to fill it.
+	if !strings.Contains(got, "states") {
+		t.Error("the prompt no longer ties the report to what the chunk states, which turns a gap report into permission to invent")
+	}
+	// An empty chunk is still an empty answer — that is what keeps ChunksEmpty
+	// a fact about the documents rather than about the vocabulary.
+	if !strings.Contains(got, `{"entities": [], "relations": []}`) {
+		t.Error("the prompt no longer gives a way to answer nothing, so a chunk with nothing in it has no correct reply")
+	}
+}
