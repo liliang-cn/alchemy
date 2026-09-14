@@ -137,8 +137,10 @@ func TestThePromptAsksForWhatTheVocabularyCannotSay(t *testing.T) {
 		t.Error("the prompt no longer ties the report to what the chunk states, which turns a gap report into permission to invent")
 	}
 	// An empty chunk is still an empty answer — that is what keeps ChunksEmpty
-	// a fact about the documents rather than about the vocabulary.
-	if !strings.Contains(got, `{"entities": [], "relations": []}`) {
+	// a fact about the documents rather than about the vocabulary. The shape
+	// gained a third list when the extractor was asked what it chose between,
+	// so the empty reply names three.
+	if !strings.Contains(got, `{"entities": [], "relations": [], "guesses": []}`) {
 		t.Error("the prompt no longer gives a way to answer nothing, so a chunk with nothing in it has no correct reply")
 	}
 }
@@ -159,6 +161,33 @@ func TestThePromptAsksForAnAttributeTheTypeHasNoFieldFor(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the prompt does not say %q, so a detail with no field to go in is still dropped in silence:\n%s", want, got)
+		}
+	}
+}
+
+// TestThePromptAsksWhatTheModelHadToChooseBetween is the fourth form, and the
+// second one where everything downstream was built and unreachable.
+//
+// Guess, the review queue's KindGuess, the decision that answers one and the
+// ledger entry it writes — all of it exists, and only the tabular and
+// graph-import producers ever raise one. The prose extractor, which is the one
+// stage in this pipeline where a model *decides* something, has never reported
+// a decision it made.
+//
+// Measured: "Niels is the head of marketing" against a vocabulary offering both
+// works_as(Person, Role) and heads(Team, Person). The model invented a Team for
+// marketing and used heads. Both readings are defensible and it picked one
+// without being asked, and the run said guesses 0 — which read as "nothing was
+// guessed" and meant "nobody asked".
+func TestThePromptAsksWhatTheModelHadToChooseBetween(t *testing.T) {
+	got := systemPrompt(testVocab(), nil)
+	for _, want := range []string{
+		`"guesses"`,
+		"more than one way",
+		"alternatives",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not say %q, so a reading the model chose between is still unreported:\n%s", want, got)
 		}
 	}
 }

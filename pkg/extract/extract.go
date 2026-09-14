@@ -23,6 +23,7 @@ import (
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/cache"
 	"github.com/liliang-cn/alchemy/pkg/ontology"
+	"strings"
 )
 
 // stage is what this package reports as in alchemy.ModelCall.Stage (§7.2).
@@ -77,6 +78,14 @@ type Result struct {
 	ModelCalls []alchemy.ModelCall
 	// ChunksEmpty is chunks the model read and honestly found nothing in.
 	ChunksEmpty int
+	// Guesses is what the model chose between, per chunk.
+	//
+	// This is the one stage where a model decides something and it had never
+	// reported a decision: alchemy.Guess, the review queue's KindGuess and the
+	// verbs that answer one were all built, and only the tabular and
+	// graph-import producers ever raised one. A run saying "guesses 0" meant
+	// nobody had asked.
+	Guesses []alchemy.Guess
 }
 
 func (o Options) check() error {
@@ -146,6 +155,11 @@ type chunkOutcome struct {
 	// is written and cannot happen again after one is read.
 	entities  []alchemy.Entity
 	relations []alchemy.Relation
+	// guesses are the readings this chunk's model call chose between. They
+	// ride on the outcome rather than being merged like entities, because a
+	// guess is a statement about one call and two calls that happened to make
+	// the same choice made it twice.
+	guesses []alchemy.Guess
 	// unread is set when the call failed or the reply could not be read. When
 	// it is set, nothing else on this outcome is used.
 	unread *alchemy.Unread
@@ -175,6 +189,46 @@ func extractChunk(ctx context.Context, c alchemy.Chunk, sys string, opts Options
 	}
 	out.entities = entitiesOf(c, r, opts)
 	out.relations = relationsOf(c, r, opts)
+	out.guesses = guessesOf(c, r, opts)
+	return out
+}
+
+// guessesOf turns the model's own account of what it chose between into the
+// finding the rest of the pipeline already knows how to carry.
+//
+// The field names are translated rather than shared: alchemy.Guess was written
+// for column mapping, where "field" is a column and "chosen_as" is what it
+// became, and a model writes about/read_as/alternatives/why far more reliably
+// than it writes those. A guess with no alternatives is dropped — a reading
+// nothing competed with is not a choice, and a queue of those would bury the
+// ones that are.
+func guessesOf(c alchemy.Chunk, r reply, opts Options) []alchemy.Guess {
+	if len(r.Guesses) == 0 {
+		return nil
+	}
+	out := make([]alchemy.Guess, 0, len(r.Guesses))
+	for _, g := range r.Guesses {
+		about, read := strings.TrimSpace(g.About), strings.TrimSpace(g.ReadAs)
+		if about == "" || read == "" || len(g.Alternatives) == 0 {
+			continue
+		}
+		alts := make([]string, 0, len(g.Alternatives))
+		for _, a := range g.Alternatives {
+			if a = strings.TrimSpace(a); a != "" {
+				alts = append(alts, a)
+			}
+		}
+		if len(alts) == 0 {
+			continue
+		}
+		out = append(out, alchemy.Guess{
+			Field:        about,
+			ChosenAs:     read,
+			Alternatives: alts,
+			Reason:       strings.TrimSpace(g.Why),
+			Provenance:   provenanceFor(c, opts, 0),
+		})
+	}
 	return out
 }
 
@@ -332,9 +386,13 @@ func assemble(outcomes []chunkOutcome, opts Options) Result {
 			res.Unread = append(res.Unread, *o.unread)
 			continue
 		}
+		res.Guesses = append(res.Guesses, o.guesses...)
 		if len(o.entities) == 0 && len(o.relations) == 0 {
 			// Read, and honestly nothing in it. §5 wants this counted rather
-			// than inferred from a short entity list.
+			// than inferred from a short entity list. The guesses go above
+			// this line: a chunk the model read, found nothing usable in and
+			// told us what it weighed is still an empty chunk, and losing its
+			// account of that would be the silence this whole change ends.
 			res.ChunksEmpty++
 			continue
 		}

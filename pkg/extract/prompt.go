@@ -101,10 +101,21 @@ func systemPrompt(v ontology.Vocabulary, told []string) string {
 		"  whose type is not listed.\n" +
 		"  This is not permission to invent: report only what the chunk states, and use\n" +
 		"  a declared type whenever one fits. A type you report and a person rejects\n" +
-		"  costs them one answer; a fact you drop costs them the fact.\n" +
+		"  costs them one answer; a fact you drop costs them the fact.\n")
+	// The one stage where a model decides something, asked to say what it
+	// decided. Everything that reads this was already built — the review
+	// queue's KindGuess, the verbs that answer one, the ledger entry — and
+	// only the tabular and graph-import producers ever raised one, so a run
+	// reporting "guesses 0" meant nobody had asked rather than nothing had
+	// been guessed.
+	b.WriteString("- When a sentence can be read in more than one way under this vocabulary and\n" +
+		"  you had to pick one, put it in guesses with the alternatives you did not use.\n" +
+		"  A person reviewing this reads those first. Report a real choice and not a\n" +
+		"  formality: a reading nothing else competed with is not a guess, and a list of\n" +
+		"  those would bury the ones that are.\n" +
 		"- If the chunk states nothing at all, reply\n" +
-		`  {"entities": [], "relations": []}` + ". That is a correct answer for a chunk\n" +
-		"  with nothing in it, and only for that.\n")
+		`  {"entities": [], "relations": [], "guesses": []}` + ". That is a correct answer\n" +
+		"  for a chunk with nothing in it, and only for that.\n")
 	b.WriteString(standingAnswers(told))
 	return b.String()
 }

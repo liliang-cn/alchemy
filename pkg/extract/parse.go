@@ -13,6 +13,30 @@ import (
 type reply struct {
 	Entities  []rawEntity   `json:"entities"`
 	Relations []rawRelation `json:"relations"`
+	// Guesses is what the model had to choose between.
+	//
+	// This is the one stage in the pipeline where a model decides something,
+	// and until it was asked it never reported a decision. "Niels is the head
+	// of marketing" against a vocabulary offering both works_as(Person, Role)
+	// and heads(Team, Person) has two defensible readings; the model picked
+	// one, and the run said guesses 0 — which reads as "nothing was guessed"
+	// and meant "nobody asked". Everything downstream of this was already
+	// built: alchemy.Guess, the review queue's KindGuess, the verbs that
+	// answer one and the ledger entry it writes.
+	Guesses []rawGuess `json:"guesses"`
+}
+
+// rawGuess is one reading the model chose over another.
+//
+// Its field names are the model's rather than alchemy.Guess's: a model writes
+// "about / read_as / alternatives / why" more reliably than "field /
+// chosen_as", which read as column mapping because that is what they were for.
+// The translation is one function away and costs nothing.
+type rawGuess struct {
+	About        string   `json:"about"`
+	ReadAs       string   `json:"read_as"`
+	Alternatives []string `json:"alternatives"`
+	Why          string   `json:"why"`
 }
 
 type rawEntity struct {

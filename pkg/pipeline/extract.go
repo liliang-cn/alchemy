@@ -44,6 +44,11 @@ func (r *run) extract(ctx context.Context) error {
 		r.relations = append(r.relations, res.Relations...)
 		r.unread = append(r.unread, res.Unread...)
 		r.chunksEmpty += res.ChunksEmpty
+		// What the model chose between. The tabular and graph-import producers
+		// have raised these since there were producers; this is the stage
+		// where a model actually decides something and it had never reported
+		// one, so a prose run's "guesses 0" said nobody had asked.
+		r.guesses = append(r.guesses, res.Guesses...)
 		r.found(res.Conflicts...)
 		r.progress(stageExtract, d.name)
 		if err != nil {

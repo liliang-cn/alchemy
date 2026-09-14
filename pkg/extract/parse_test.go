@@ -104,3 +104,26 @@ func TestParseReplyAcceptsAnHonestlyEmptyReply(t *testing.T) {
 		}
 	}
 }
+
+// A reply's guesses are read like everything else it sends, and a reply with
+// none is not a reply that guessed nothing — it is one that said so.
+func TestAReplyCarriesTheReadingsItChoseBetween(t *testing.T) {
+	r, err := parseReply(`{"entities":[],"relations":[],"guesses":[
+	  {"about":"Niels is the head of marketing",
+	   "read_as":"works_as(Niels, head of marketing)",
+	   "alternatives":["heads(marketing team, Niels)"],
+	   "why":"the vocabulary has a Role type and no marketing team is named"}]}`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(r.Guesses) != 1 {
+		t.Fatalf("parsed %d guesses, want 1", len(r.Guesses))
+	}
+	g := r.Guesses[0]
+	if g.About == "" || g.ReadAs == "" {
+		t.Errorf("a guess that does not say what it was about or what it became is not a question: %+v", g)
+	}
+	if len(g.Alternatives) != 1 {
+		t.Errorf("alternatives = %v; the list is what makes a guess worth looking at first", g.Alternatives)
+	}
+}

@@ -2,11 +2,13 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/ontology"
+	"github.com/liliang-cn/alchemy/pkg/review"
 )
 
 // The two halves of "the vocabulary was missing a word", tested apart.
@@ -84,5 +86,74 @@ func TestAnUndeclaredRelationIsNamedAndProposed(t *testing.T) {
 	}
 	if !kept {
 		t.Error("the undeclared relation is not in the result, so nothing downstream can grade it refused or show it to a person")
+	}
+}
+
+// TestAReadingTheModelChoseBetweenReachesTheQueue is the fourth gap, closed at
+// both ends.
+//
+// This is the one stage in the pipeline where a model decides something, and
+// it had never reported a decision. alchemy.Guess, the review queue's
+// KindGuess, the verbs that answer one and the ledger entry it writes were all
+// built, and only the tabular and graph-import producers ever raised one — so
+// a prose run's "guesses 0" read as "nothing was guessed" and meant "nobody
+// asked".
+//
+// Measured before the fix: "Niels is the head of marketing" against a
+// vocabulary offering both works_as(Person, Role) and heads(Team, Person). The
+// model invented a Team for marketing and used heads, and the run reported no
+// guess at all.
+func TestAReadingTheModelChoseBetweenReachesTheQueue(t *testing.T) {
+	llm := &scriptLLM{name: "gemini-3.6-flash-high", replies: map[string]string{
+		"SuperAI": `{"entities":[{"type":"Cluster","name":"SuperAI"},{"type":"Node","name":"node-a"}],
+		  "relations":[{"type":"DEPLOYED_ON","from":"SuperAI","from_type":"Cluster","to":"node-a","to_type":"Node"}],
+		  "guesses":[
+		    {"about":"SuperAI runs on node-a",
+		     "read_as":"DEPLOYED_ON(SuperAI, node-a)",
+		     "alternatives":["a Cluster that merely reaches node-a"],
+		     "why":"the vocabulary has no weaker word for it"},
+		    {"about":"nothing competed with this one","read_as":"x","alternatives":[]}]}`,
+	}}
+	res, err := Run(context.Background(), Request{
+		Sources:   []Source{{Name: "architecture.md", Kind: alchemy.SourceDocument, Open: openString("# Overview\n\nSuperAI runs on node-a.\n")}},
+		Ontology:  testOntology(t),
+		Part:      ontology.PartProse,
+		Models:    alchemy.Models{LLM: llm},
+		Reviewing: true,
+	}, nil)
+	// Review mode with an unanswered question holds the job, which is what
+	// being asked means. The graph is behind the hold and so is the queue.
+	var held *HeldError
+	if !errors.As(err, &held) {
+		t.Fatalf("Run = %v, want a *HeldError: a guess nobody answered should hold a job asked to ask", err)
+	}
+	res = held.Pending
+
+	// One guess, not two: a reading nothing competed with is not a choice, and
+	// a queue of those would bury the ones that are.
+	if len(res.Guesses) != 1 {
+		t.Fatalf("the run reports %d guesses, want the one with alternatives: %+v", len(res.Guesses), res.Guesses)
+	}
+	g := res.Guesses[0]
+	if g.Field == "" || g.ChosenAs == "" || len(g.Alternatives) == 0 {
+		t.Errorf("the guess does not say what it was about, what it became, or what it was not: %+v", g)
+	}
+	if g.Provenance.Source != "architecture.md" {
+		t.Errorf("provenance source = %q; a guess that cannot name its chunk is not reviewable", g.Provenance.Source)
+	}
+	if g.Provenance.Producer != alchemy.ProducerLLMExtract {
+		t.Errorf("producer = %q, want the model that made the choice", g.Provenance.Producer)
+	}
+
+	// And it is a question somebody is asked, which is the whole point of
+	// reporting it.
+	var queued bool
+	for _, item := range held.Queue {
+		if item.Kind == review.KindGuess {
+			queued = true
+		}
+	}
+	if !queued {
+		t.Errorf("the guess reached no queue item; the reading stands with nobody having seen it. queue = %+v", held.Queue)
 	}
 }
