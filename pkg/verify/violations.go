@@ -83,6 +83,12 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 			if allowed[foldKey(name)] {
 				continue
 			}
+			// An attribute the pipeline itself writes is not something a
+			// source stated, and no vocabulary declares it. Checking it
+			// refused every record that used Assert's own `note` field.
+			if alchemy.ReservedAttribute(name) {
+				continue
+			}
 			out = append(out, alchemy.Violation{
 				Kind:    alchemy.ViolationUnknownAttribute,
 				Subject: e.ID,

@@ -336,3 +336,25 @@ type Vector struct {
 	Values []float32 `json:"values"`
 	Model  string    `json:"model"`
 }
+
+// AttributeNote is the one attribute this pipeline writes itself.
+//
+// Assert puts the asserter's reason on every record it makes, on the argument
+// that the envelope does not survive being loaded: an edge in a store months
+// later either carries why it was asserted or nobody will ever find out. That
+// is right, and it collided with the attribute check the moment that check
+// existed — a vocabulary declares the attributes a *source* may state, nobody
+// declares this one, and so using a documented field of the API refused every
+// record that used it. The product was writing a field and then refusing the
+// record for carrying it.
+//
+// So it is named, once, here: written under this name and skipped under this
+// name, which is what keeps the two from drifting apart again.
+const AttributeNote = "note"
+
+// ReservedAttribute reports whether an attribute is this pipeline's own rather
+// than something a source stated. A vocabulary neither declares these nor is
+// consulted about them.
+func ReservedAttribute(name string) bool {
+	return name == AttributeNote
+}

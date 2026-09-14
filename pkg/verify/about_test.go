@@ -355,3 +355,36 @@ func TestAnAttributeTheVocabularyDoesNotDeclareIsNamed(t *testing.T) {
 		t.Errorf("the proposal says the attribute belongs on %v, want [Cluster]", p.From)
 	}
 }
+
+// The one attribute the pipeline writes itself is not one a vocabulary
+// declares, and checking it refused every record that used it.
+//
+// Assert puts the asserter's reason on each record under "note", on the
+// argument that the envelope does not survive being loaded. The attribute
+// check then found an attribute nobody had declared — because nobody declares
+// this one — and graded the record refused. Using a documented field of the
+// API made the record it was written on unusable, which is the product writing
+// something and then refusing it for being there.
+func TestThePipelinesOwnNoteIsNotAnUndeclaredAttribute(t *testing.T) {
+	rep := Check(Input{
+		Entities: []alchemy.Entity{{
+			ID: "cluster:a", Type: "Cluster", Name: "a",
+			Attributes: map[string]any{
+				"region":              "eu",
+				alchemy.AttributeNote: "stated by liliang, who was there",
+			},
+		}},
+		Vocabulary: proseVocab(t),
+		OntologyID: "sds@1",
+	})
+	for _, v := range rep.Violations {
+		if v.Kind == alchemy.ViolationUnknownAttribute {
+			t.Errorf("the asserter's own reason was reported as an undeclared attribute: %q", v.Detail)
+		}
+	}
+	for _, p := range rep.Proposals {
+		if p.Kind == alchemy.ProposalAttribute && p.Type == alchemy.AttributeNote {
+			t.Error("the vocabulary was asked to declare an attribute the pipeline writes on every record")
+		}
+	}
+}

@@ -267,7 +267,7 @@ func noted(attributes map[string]any, note string) map[string]any {
 	if attributes == nil {
 		attributes = make(map[string]any, 1)
 	}
-	attributes["note"] = note
+	attributes[alchemy.AttributeNote] = note
 	return attributes
 }
 
