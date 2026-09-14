@@ -20,6 +20,12 @@ func fixedSpans(text string, from, to, budget, back int) []span {
 	var spans []span
 	for start := from; start < to; {
 		end := advance(text, start, to, budget)
+		// Back off the middle of a word, never before the start. A tail
+		// fragment is the same manufactured fact as a head fragment, and the
+		// next span picks the whole word up.
+		if end < to {
+			end = snapEndBackward(text, end, start+1)
+		}
 		spans = append(spans, span{start: start, end: end})
 		if end >= to {
 			break
@@ -65,5 +71,7 @@ func retreat(text string, end, quarters, floor int) int {
 	if i < floor {
 		return floor
 	}
-	return i
+	// Off the middle of a word, so the extractor is never handed a fragment
+	// to make an entity out of.
+	return snapStartToWholeWord(text, i, floor, end)
 }

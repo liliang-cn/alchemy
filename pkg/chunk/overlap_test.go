@@ -77,9 +77,19 @@ func containsWhole(chunks []alchemy.Chunk, s string) bool {
 // Overlap is not a property of the fixed baseline alone: §7.1 states it as one
 // of "two rules that hold whichever is chosen".
 func TestOverlapAppliesToTheStructuralStrategies(t *testing.T) {
-	text := "Alpha paragraph about a thing.\n\nBeta paragraph about another.\n\nGamma paragraph about a third.\n\nDelta paragraph, the last."
+	// The budget is large enough for the overlap to carry a whole word.
+	// A chunk boundary never lands inside a word (words.go), so the overlap
+	// has to be able to reach back past one: at MaxTokens 10 the default
+	// overlap is a single token — four characters — and no four characters
+	// spanning "thing." are an overlap, they are a fragment that reads as a
+	// fact. What is under test is that the structural strategies overlap at
+	// all, not that they can do it on a budget too small to hold a word.
+	text := "Alpha paragraph about a thing that somebody wrote down once.\n\n" +
+		"Beta paragraph about another thing entirely, also written down.\n\n" +
+		"Gamma paragraph about a third thing nobody has mentioned yet.\n\n" +
+		"Delta paragraph, the last one, and it is about a fourth thing."
 	for _, s := range []Strategy{Paragraph, Sentence} {
-		got, err := Split(context.Background(), "s.txt", text, Options{Strategy: s, MaxTokens: 10})
+		got, err := Split(context.Background(), "s.txt", text, Options{Strategy: s, MaxTokens: 40})
 		if err != nil {
 			t.Fatalf("%s: %v", s, err)
 		}
