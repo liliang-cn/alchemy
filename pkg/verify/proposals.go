@@ -2,6 +2,7 @@ package verify
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 )
@@ -34,6 +35,39 @@ func proposals(violations []alchemy.Violation, entities []alchemy.Entity, rs *ru
 	for _, v := range violations {
 		if v.Kind == alchemy.ViolationUnknownEntityType {
 			undeclared[v.About.Type] = true
+		}
+	}
+	// An attribute's proposal is grouped by the attribute name and carries the
+	// types it was seen on, which is the list Extend needs: an attribute is
+	// declared inside a type, so a proposal that could not say which type
+	// would be one nobody can apply. The name is parsed back out of the
+	// detail for the same reason every other field here is derived from the
+	// violation — two walks of the graph with two copies of the rule is how
+	// the finding and the proposal come to disagree about what is undeclared.
+	attrs := map[string]*attrProposal{}
+	var attrOrder []string
+	for _, v := range violations {
+		if v.Kind != alchemy.ViolationUnknownAttribute {
+			continue
+		}
+		name, on := attributeAndType(v.Detail)
+		if name == "" {
+			continue
+		}
+		a, seen := attrs[name]
+		if !seen {
+			a = &attrProposal{p: alchemy.Proposal{
+				Kind: alchemy.ProposalAttribute, Type: name, Example: v.About,
+			}, on: map[string]bool{}, srcs: map[string]bool{}}
+			attrs[name] = a
+			attrOrder = append(attrOrder, name)
+		}
+		a.p.Records++
+		if on != "" && !undeclared[on] {
+			a.on[on] = true
+		}
+		if v.Provenance.Source != "" {
+			a.srcs[v.Provenance.Source] = true
 		}
 	}
 
@@ -101,7 +135,17 @@ func proposals(violations []alchemy.Violation, entities []alchemy.Entity, rs *ru
 		}
 	}
 
-	out := make([]alchemy.Proposal, 0, len(order))
+	out := make([]alchemy.Proposal, 0, len(order)+len(attrOrder))
+	for _, name := range attrOrder {
+		a := attrs[name]
+		// From carries the types it was seen on, not the ends of an edge. An
+		// attribute proposal whose types are all themselves undeclared says
+		// nothing Extend can act on, so it goes out with an empty list and
+		// Extend refuses it by name rather than guessing a home for it.
+		a.p.From = keysOf(a.on)
+		a.p.Sources = keysOf(a.srcs)
+		out = append(out, a.p)
+	}
 	for _, key := range order {
 		a := byType[key]
 		a.p.From, a.p.To = keysOf(a.from), keysOf(a.to)
@@ -146,7 +190,53 @@ func kindOrder(k alchemy.ProposalKind) int {
 		return 0
 	case alchemy.ProposalRelation:
 		return 1
-	default:
+	case alchemy.ProposalAttribute:
+		// After the types and before the widenings. An attribute is declared
+		// inside a type, so accepting the types first means its line never
+		// refers to something further down; and unlike a widening it changes
+		// no rule that already governs records.
 		return 2
+	default:
+		return 3
 	}
+}
+
+// attrProposal accumulates one undeclared attribute across the records that
+// used it.
+type attrProposal struct {
+	p    alchemy.Proposal
+	on   map[string]bool
+	srcs map[string]bool
+}
+
+// attributeAndType reads the attribute name and the type it was seen on back
+// out of the violation's own sentence.
+//
+// Derived rather than carried, for the reason this whole file is derived: the
+// finding and the proposal must never disagree about what is undeclared, and a
+// second source for either is how they would. The sentence is written one line
+// away in violations.go and this is its only reader.
+func attributeAndType(detail string) (name, on string) {
+	const lead = `attribute "`
+	i := strings.Index(detail, lead)
+	if i < 0 {
+		return "", ""
+	}
+	rest := detail[i+len(lead):]
+	j := strings.Index(rest, `"`)
+	if j < 0 {
+		return "", ""
+	}
+	name = rest[:j]
+	const mid = ` is not declared on `
+	k := strings.Index(rest[j:], mid)
+	if k < 0 {
+		return name, ""
+	}
+	tail := rest[j+k+len(mid):]
+	l := strings.Index(tail, " by ")
+	if l < 0 {
+		return name, ""
+	}
+	return name, tail[:l]
 }

@@ -438,7 +438,8 @@ func violationKindOf(name string) (alchemy.ViolationKind, error) {
 	case alchemy.ViolationUnknownEntityType, alchemy.ViolationUnknownRelationType,
 		alchemy.ViolationRelationNotAllowed, alchemy.ViolationDanglingRelation,
 		alchemy.ViolationMalformedRow, alchemy.ViolationUnnamedColumn,
-		alchemy.ViolationMissingID, alchemy.ViolationDuplicateID:
+		alchemy.ViolationMissingID, alchemy.ViolationDuplicateID,
+		alchemy.ViolationUnknownAttribute:
 		return k, nil
 	default:
 		return "", fmt.Errorf("is about the violation %q, which nothing in this service raises", name)

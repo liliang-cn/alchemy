@@ -104,6 +104,37 @@ func (o *Ontology) Extend(part Part, accept []alchemy.Proposal, by, newID string
 				Description: origin(p, by, stamp),
 			})
 			added = append(added, p.Type)
+		case alchemy.ProposalAttribute:
+			// From carries the types the attribute was seen on, because an
+			// attribute is declared inside a type. A proposal that observed
+			// none — every type it appeared on is itself undeclared — has no
+			// home to be put in, and guessing one would declare a field on a
+			// type nobody has accepted yet.
+			if len(p.From) == 0 {
+				return nil, nil, fmt.Errorf(
+					"ontology: the proposal for the attribute %q names no type to declare it on, because "+
+						"every type it was seen on is undeclared too. Accept the entity types first, run "+
+						"again, and this proposal will carry them", p.Type)
+			}
+			var missing []string
+			for _, on := range p.From {
+				i, found := indexOfEntity(v.Entities, on)
+				if !found {
+					missing = append(missing, on)
+					continue
+				}
+				if containsFold(v.Entities[i].Attributes, p.Type) {
+					continue
+				}
+				v.Entities[i].Attributes = append(v.Entities[i].Attributes, p.Type)
+				added = append(added, on+"."+p.Type)
+			}
+			if len(missing) > 0 {
+				return nil, nil, fmt.Errorf(
+					"ontology: the attribute %q is proposed on %s, which this vocabulary does not declare; "+
+						"an attribute is declared inside a type and there is no such type here",
+					p.Type, strings.Join(missing, " and "))
+			}
 		case alchemy.ProposalRelationEnds:
 			i, found := indexOfRelation(v.Relations, p.Type)
 			if !found {
@@ -256,4 +287,26 @@ func widening(before RelationType, p alchemy.Proposal, by, stamp string) string 
 		by, stamp,
 		strings.Join(before.From, "|"), strings.Join(before.To, "|"),
 		p.Records, strings.Join(p.From, "|"), strings.Join(p.To, "|"))
+}
+
+// indexOfEntity finds a declared entity type by name, folded.
+func indexOfEntity(ents []EntityType, name string) (int, bool) {
+	for i, e := range ents {
+		if fold(e.Name) == fold(name) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// containsFold is "this list already has that name", case and space folded —
+// so accepting the same attribute twice is a no-op rather than a duplicate
+// entry in a declaration a person reads.
+func containsFold(xs []string, s string) bool {
+	for _, x := range xs {
+		if fold(x) == fold(s) {
+			return true
+		}
+	}
+	return false
 }

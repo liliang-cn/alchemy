@@ -118,6 +118,7 @@ func TestEveryClosedSetHasAWireName(t *testing.T) {
 		alchemy.ProposalEntity,
 		alchemy.ProposalRelation,
 		alchemy.ProposalRelationEnds,
+		alchemy.ProposalAttribute,
 	}
 	if got, want := len(alchemyv1.ProposalKind_name), len(kinds)+1; got != want {
 		t.Errorf("the proto declares %d proposal kinds and this test names %d", got-1, len(kinds))
@@ -153,6 +154,7 @@ func TestEveryClosedSetHasAWireName(t *testing.T) {
 		alchemy.ViolationUnnamedColumn,
 		alchemy.ViolationMissingID,
 		alchemy.ViolationDuplicateID,
+		alchemy.ViolationUnknownAttribute,
 	}
 	if got, want := len(alchemyv1.ViolationKind_name), len(violations)+1; got != want {
 		t.Errorf("the proto declares %d violation kinds and this test names %d", got-1, len(violations))

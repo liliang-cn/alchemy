@@ -84,7 +84,12 @@ func systemPrompt(v ontology.Vocabulary, told []string) string {
 		"  not in your entities list.\n" +
 		"- attributes and confidence are optional. Omit an attribute the chunk does not\n" +
 		"  state, and omit confidence rather than inventing a number for it; when you do\n" +
-		"  give it, it is your own confidence between 0 and 1.\n")
+		"  give it, it is your own confidence between 0 and 1.\n" +
+		"- If the chunk states something about a thing that its type has no attribute\n" +
+		"  for, put it in attributes anyway under the name you would have declared. The\n" +
+		"  same rule as above applies to it: an undeclared name is checked, named and\n" +
+		"  shown to a person, and a detail left out because there was no field for it is\n" +
+		"  one nobody downstream can find.\n")
 	// The line this replaced said an unexpressible chunk was an empty chunk,
 	// and that instruction is what made every mechanism downstream of it
 	// unreachable — see TestThePromptAsksForWhatTheVocabularyCannotSay.

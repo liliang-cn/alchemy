@@ -110,6 +110,7 @@ var ProposalKindToProto = map[alchemy.ProposalKind]alchemyv1.ProposalKind{
 	alchemy.ProposalEntity:       alchemyv1.ProposalKind_PROPOSAL_KIND_ENTITY,
 	alchemy.ProposalRelation:     alchemyv1.ProposalKind_PROPOSAL_KIND_RELATION,
 	alchemy.ProposalRelationEnds: alchemyv1.ProposalKind_PROPOSAL_KIND_RELATION_ENDS,
+	alchemy.ProposalAttribute:    alchemyv1.ProposalKind_PROPOSAL_KIND_ATTRIBUTE,
 }
 
 // ProposalKindFromProto is ProposalKindToProto read the other way.
@@ -124,6 +125,7 @@ var ViolationKindToProto = map[alchemy.ViolationKind]alchemyv1.ViolationKind{
 	alchemy.ViolationUnnamedColumn:       alchemyv1.ViolationKind_VIOLATION_KIND_UNNAMED_COLUMN,
 	alchemy.ViolationMissingID:           alchemyv1.ViolationKind_VIOLATION_KIND_MISSING_ID,
 	alchemy.ViolationDuplicateID:         alchemyv1.ViolationKind_VIOLATION_KIND_DUPLICATE_ID,
+	alchemy.ViolationUnknownAttribute:    alchemyv1.ViolationKind_VIOLATION_KIND_UNKNOWN_ATTRIBUTE,
 }
 
 // ViolationKindFromProto is ViolationKindToProto read the other way.

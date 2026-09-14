@@ -244,6 +244,10 @@ const (
 	ViolationKind_VIOLATION_KIND_UNNAMED_COLUMN ViolationKind = 6
 	ViolationKind_VIOLATION_KIND_MISSING_ID     ViolationKind = 7
 	ViolationKind_VIOLATION_KIND_DUPLICATE_ID   ViolationKind = 8
+	// An attribute the ontology does not declare on the type that carried it.
+	// The attribute list was shown to the model and checked by nobody, so one
+	// that arrived was written unremarked and one that never arrived was lost.
+	ViolationKind_VIOLATION_KIND_UNKNOWN_ATTRIBUTE ViolationKind = 9
 )
 
 // Enum value maps for ViolationKind.
@@ -258,6 +262,7 @@ var (
 		6: "VIOLATION_KIND_UNNAMED_COLUMN",
 		7: "VIOLATION_KIND_MISSING_ID",
 		8: "VIOLATION_KIND_DUPLICATE_ID",
+		9: "VIOLATION_KIND_UNKNOWN_ATTRIBUTE",
 	}
 	ViolationKind_value = map[string]int32{
 		"VIOLATION_KIND_UNSPECIFIED":           0,
@@ -269,6 +274,7 @@ var (
 		"VIOLATION_KIND_UNNAMED_COLUMN":        6,
 		"VIOLATION_KIND_MISSING_ID":            7,
 		"VIOLATION_KIND_DUPLICATE_ID":          8,
+		"VIOLATION_KIND_UNKNOWN_ATTRIBUTE":     9,
 	}
 )
 
@@ -678,6 +684,11 @@ const (
 	// valid, and widening one does, for every record any producer writes from
 	// then on.
 	ProposalKind_PROPOSAL_KIND_RELATION_ENDS ProposalKind = 3
+	// An attribute a source stated that the type it was seen on does not
+	// declare. `from` carries the entity types it was observed on, because an
+	// attribute is declared inside a type and a proposal that could not say
+	// which type would be one nobody can apply.
+	ProposalKind_PROPOSAL_KIND_ATTRIBUTE ProposalKind = 4
 )
 
 // Enum value maps for ProposalKind.
@@ -687,12 +698,14 @@ var (
 		1: "PROPOSAL_KIND_ENTITY",
 		2: "PROPOSAL_KIND_RELATION",
 		3: "PROPOSAL_KIND_RELATION_ENDS",
+		4: "PROPOSAL_KIND_ATTRIBUTE",
 	}
 	ProposalKind_value = map[string]int32{
 		"PROPOSAL_KIND_UNSPECIFIED":   0,
 		"PROPOSAL_KIND_ENTITY":        1,
 		"PROPOSAL_KIND_RELATION":      2,
 		"PROPOSAL_KIND_RELATION_ENDS": 3,
+		"PROPOSAL_KIND_ATTRIBUTE":     4,
 	}
 )
 
@@ -5200,7 +5213,7 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x15PRODUCER_GRAPH_IMPORT\x10\x02\x12\x14\n" +
 	"\x10PRODUCER_TABULAR\x10\x03\x12\x18\n" +
 	"\x14PRODUCER_LLM_EXTRACT\x10\x04\x12\x12\n" +
-	"\x0ePRODUCER_HUMAN\x10\x05*\xd5\x02\n" +
+	"\x0ePRODUCER_HUMAN\x10\x05*\xfb\x02\n" +
 	"\rViolationKind\x12\x1e\n" +
 	"\x1aVIOLATION_KIND_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"VIOLATION_KIND_UNKNOWN_ENTITY_TYPE\x10\x01\x12(\n" +
@@ -5210,7 +5223,8 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x1cVIOLATION_KIND_MALFORMED_ROW\x10\x05\x12!\n" +
 	"\x1dVIOLATION_KIND_UNNAMED_COLUMN\x10\x06\x12\x1d\n" +
 	"\x19VIOLATION_KIND_MISSING_ID\x10\a\x12\x1f\n" +
-	"\x1bVIOLATION_KIND_DUPLICATE_ID\x10\b*\xfe\x01\n" +
+	"\x1bVIOLATION_KIND_DUPLICATE_ID\x10\b\x12$\n" +
+	" VIOLATION_KIND_UNKNOWN_ATTRIBUTE\x10\t*\xfe\x01\n" +
 	"\fConflictKind\x12\x1d\n" +
 	"\x19CONFLICT_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCONFLICT_KIND_ENTITY_ATTRIBUTES\x10\x01\x12\x1d\n" +
@@ -5247,12 +5261,13 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"RuleOrigin\x12\x1b\n" +
 	"\x17RULE_ORIGIN_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14RULE_ORIGIN_REVIEWED\x10\x01\x12\x18\n" +
-	"\x14RULE_ORIGIN_AUTHORED\x10\x02*\x84\x01\n" +
+	"\x14RULE_ORIGIN_AUTHORED\x10\x02*\xa1\x01\n" +
 	"\fProposalKind\x12\x1d\n" +
 	"\x19PROPOSAL_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14PROPOSAL_KIND_ENTITY\x10\x01\x12\x1a\n" +
 	"\x16PROPOSAL_KIND_RELATION\x10\x02\x12\x1f\n" +
-	"\x1bPROPOSAL_KIND_RELATION_ENDS\x10\x032\xfa\b\n" +
+	"\x1bPROPOSAL_KIND_RELATION_ENDS\x10\x03\x12\x1b\n" +
+	"\x17PROPOSAL_KIND_ATTRIBUTE\x10\x042\xfa\b\n" +
 	"\aAlchemy\x12O\n" +
 	"\tCreateJob\x12\x1c.alchemy.v1.CreateJobRequest\x1a\x0f.alchemy.v1.Job\"\x13\x82\xd3\xe4\x93\x02\r:\x01*\"\b/v1/jobs\x12O\n" +
 	"\x06GetJob\x12\x19.alchemy.v1.GetJobRequest\x1a\x0f.alchemy.v1.Job\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/jobs/{job_id}\x12_\n" +

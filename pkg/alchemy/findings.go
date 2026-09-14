@@ -21,6 +21,16 @@ const (
 	ViolationRelationNotAllowed ViolationKind = "relation_not_allowed"
 	// ViolationDanglingRelation — a relation naming an entity the result does not contain.
 	ViolationDanglingRelation ViolationKind = "dangling_relation"
+	// ViolationUnknownAttribute — an attribute the ontology does not declare on
+	// the type that carried it.
+	//
+	// The third form of the same question the two above ask. A vocabulary
+	// declares City(name), a document says the office was established in 2008,
+	// and the year has nowhere to go: the attribute list was shown to the model
+	// and checked by nobody, so an attribute that arrived anyway was written
+	// unremarked and one that never arrived was lost without a word. Naming it
+	// is what lets it become a proposal and then a declaration.
+	ViolationUnknownAttribute ViolationKind = "unknown_attribute"
 )
 
 // The kinds above are ontology-shaped: a source said something the declared
@@ -377,6 +387,14 @@ const (
 	// every future extraction — including the ones a model proposes, which is
 	// the reader §2.1 is about.
 	ProposalRelationEnds ProposalKind = "relation_ends"
+	// ProposalAttribute — an attribute a source stated that the type it was
+	// seen on does not declare.
+	//
+	// Its ends field carries the entity types it was observed on rather than
+	// the ends of an edge, because that is the list Extend needs: an attribute
+	// is declared inside a type and a proposal that could not say which type
+	// would be a suggestion nobody can apply.
+	ProposalAttribute ProposalKind = "attribute"
 )
 
 // Proposal is a type a source used that the ontology does not declare, stated

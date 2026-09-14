@@ -5,6 +5,7 @@ import (
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/ontology"
+	"strings"
 )
 
 // §5b promises a wrong record is "checkable, correctable, and excludable", and
@@ -285,7 +286,72 @@ func findViolation(t *testing.T, rep Report, kind alchemy.ViolationKind) alchemy
 func proseVocab(t *testing.T) ontology.Vocabulary {
 	t.Helper()
 	return ontology.Vocabulary{
-		Entities:  []ontology.EntityType{{Name: "Cluster"}, {Name: "Node"}},
+		Entities: []ontology.EntityType{
+			{Name: "Cluster", Attributes: []string{"region"}},
+			{Name: "Node"},
+		},
 		Relations: []ontology.RelationType{{Name: "DEPLOYED_ON", From: []string{"Cluster"}, To: []string{"Node"}}},
+	}
+}
+
+// TestAnAttributeTheVocabularyDoesNotDeclareIsNamed is the third form of the
+// same disease.
+//
+// A vocabulary declares City(name); a document says "the Portland office was
+// established in 2008". The prompt asked for "<a declared attribute>", so the
+// model dropped the year — and nothing downstream could have caught it if the
+// model had sent it instead, because entity attributes were never checked
+// against the declared list at all. A type's attributes were shown to the
+// model and verified by nobody.
+//
+// Relations already had this and it worked: name the undeclared type, carry it
+// into a proposal, let a person accept it into the next version. An attribute
+// is the same question one field down.
+func TestAnAttributeTheVocabularyDoesNotDeclareIsNamed(t *testing.T) {
+	rep := Check(Input{
+		Entities: []alchemy.Entity{{
+			ID: "cluster:a", Type: "Cluster", Name: "a",
+			Attributes: map[string]any{"region": "eu", "established": 2008},
+		}},
+		Vocabulary: proseVocab(t),
+		OntologyID: "sds@1",
+	})
+	v := findViolation(t, rep, alchemy.ViolationUnknownAttribute)
+	if !strings.Contains(v.Detail, "established") {
+		t.Errorf("the violation does not name the attribute: %q", v.Detail)
+	}
+	if !strings.Contains(v.Detail, "Cluster") {
+		t.Errorf("the violation does not name the type it was seen on: %q", v.Detail)
+	}
+	if v.About.ID != "cluster:a" {
+		t.Errorf("About = %+v, want the entity that carried it", v.About)
+	}
+
+	// A declared one is not a finding. The vocabulary declares region on
+	// Cluster, and a check that flagged it too would make every clean run
+	// noisy enough to stop being read — so there is exactly one.
+	n := 0
+	for _, other := range rep.Violations {
+		if other.Kind == alchemy.ViolationUnknownAttribute {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d unknown-attribute violations, want exactly the one for \"established\"", n)
+	}
+
+	// And it reaches the workflow that can fix a vocabulary, naming the type
+	// it belongs on — without that, Extend would not know where to put it.
+	var p *alchemy.Proposal
+	for i, q := range rep.Proposals {
+		if q.Kind == alchemy.ProposalAttribute && q.Type == "established" {
+			p = &rep.Proposals[i]
+		}
+	}
+	if p == nil {
+		t.Fatalf("the undeclared attribute produced no proposal; proposals = %+v", rep.Proposals)
+	}
+	if len(p.From) != 1 || p.From[0] != "Cluster" {
+		t.Errorf("the proposal says the attribute belongs on %v, want [Cluster]", p.From)
 	}
 }

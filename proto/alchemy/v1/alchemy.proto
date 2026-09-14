@@ -253,6 +253,10 @@ enum ViolationKind {
   VIOLATION_KIND_UNNAMED_COLUMN = 6;
   VIOLATION_KIND_MISSING_ID = 7;
   VIOLATION_KIND_DUPLICATE_ID = 8;
+  // An attribute the ontology does not declare on the type that carried it.
+  // The attribute list was shown to the model and checked by nobody, so one
+  // that arrived was written unremarked and one that never arrived was lost.
+  VIOLATION_KIND_UNKNOWN_ATTRIBUTE = 9;
 }
 
 enum ConflictKind {
@@ -1131,6 +1135,11 @@ enum ProposalKind {
   // valid, and widening one does, for every record any producer writes from
   // then on.
   PROPOSAL_KIND_RELATION_ENDS = 3;
+  // An attribute a source stated that the type it was seen on does not
+  // declare. `from` carries the entity types it was observed on, because an
+  // attribute is declared inside a type and a proposal that could not say
+  // which type would be one nobody can apply.
+  PROPOSAL_KIND_ATTRIBUTE = 4;
 }
 
 // Proposal is a type a source used that the ontology does not declare, stated

@@ -142,3 +142,23 @@ func TestThePromptAsksForWhatTheVocabularyCannotSay(t *testing.T) {
 		t.Error("the prompt no longer gives a way to answer nothing, so a chunk with nothing in it has no correct reply")
 	}
 }
+
+// TestThePromptAsksForAnAttributeTheTypeHasNoFieldFor is the third form.
+//
+// The shape asked for "<a declared attribute>" and the attribute list was
+// shown to the model and checked by nobody, so a detail the chunk stated and
+// the type had no field for was dropped by an obedient model and would have
+// been written unremarked by a disobedient one. Measured: a vocabulary
+// declaring City(name) and a document saying an office was established in 2008
+// put no 2008 anywhere in the store and raised nothing.
+func TestThePromptAsksForAnAttributeTheTypeHasNoFieldFor(t *testing.T) {
+	got := systemPrompt(testVocab(), nil)
+	for _, want := range []string{
+		"has no attribute",
+		"the name you would have declared",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not say %q, so a detail with no field to go in is still dropped in silence:\n%s", want, got)
+		}
+	}
+}

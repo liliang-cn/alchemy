@@ -629,6 +629,10 @@
         },
         "provenance": {
           "$ref": "#/definitions/v1Provenance"
+        },
+        "about": {
+          "$ref": "#/definitions/v1Ref",
+          "description": "The record this side of the disagreement was read from, in fields.\n\nThe same shape Violation.about is, on each side rather than on the\nconflict, because a conflict names two records and the join is per side.\nWhat needs it is the knowledge contract's `_contradicts` — the ids of the\nrecords a record cannot both-be-true with, written on both of them,\nbecause two sources disagreeing is information rather than an error. A\nstore could otherwise reach those ids only by parsing `subject` back into\nfields, which is the private copy of the verifier's output format that Ref\nexists to abolish.\n\nTwo claims about one record carry one ref twice, and that is the answer\nrather than a defect: an entity given two values for one attribute is one\nnode in the graph, and equal refs are how a reader tells that case from\nthe reversal and the cardinality clash, where the graph really does hold\nboth records. Unset where the producer can name no record."
         }
       }
     },
@@ -1216,10 +1220,11 @@
         "PROPOSAL_KIND_UNSPECIFIED",
         "PROPOSAL_KIND_ENTITY",
         "PROPOSAL_KIND_RELATION",
-        "PROPOSAL_KIND_RELATION_ENDS"
+        "PROPOSAL_KIND_RELATION_ENDS",
+        "PROPOSAL_KIND_ATTRIBUTE"
       ],
       "default": "PROPOSAL_KIND_UNSPECIFIED",
-      "description": "ProposalKind says which of an ontology's two lists a proposal belongs in.\n\n - PROPOSAL_KIND_RELATION_ENDS: The type IS declared and was used between ends it does not allow. The\nchange is a widening of an existing rule rather than a new declaration,\nand it is a separate kind because accepting it is a different act with a\ndifferent risk: adding a type cannot make anything previously invalid\nvalid, and widening one does, for every record any producer writes from\nthen on."
+      "description": "ProposalKind says which of an ontology's two lists a proposal belongs in.\n\n - PROPOSAL_KIND_RELATION_ENDS: The type IS declared and was used between ends it does not allow. The\nchange is a widening of an existing rule rather than a new declaration,\nand it is a separate kind because accepting it is a different act with a\ndifferent risk: adding a type cannot make anything previously invalid\nvalid, and widening one does, for every record any producer writes from\nthen on.\n - PROPOSAL_KIND_ATTRIBUTE: An attribute a source stated that the type it was seen on does not\ndeclare. `from` carries the entity types it was observed on, because an\nattribute is declared inside a type and a proposal that could not say\nwhich type would be one nobody can apply."
     },
     "v1Provenance": {
       "type": "object",
@@ -1906,10 +1911,11 @@
         "VIOLATION_KIND_MALFORMED_ROW",
         "VIOLATION_KIND_UNNAMED_COLUMN",
         "VIOLATION_KIND_MISSING_ID",
-        "VIOLATION_KIND_DUPLICATE_ID"
+        "VIOLATION_KIND_DUPLICATE_ID",
+        "VIOLATION_KIND_UNKNOWN_ATTRIBUTE"
       ],
       "default": "VIOLATION_KIND_UNSPECIFIED",
-      "description": " - VIOLATION_KIND_MALFORMED_ROW: The kinds above are ontology-shaped. The four below are source-shaped — a\nfile that does not fit its own header, which is a way a table can fail and\na schema cannot."
+      "description": " - VIOLATION_KIND_MALFORMED_ROW: The kinds above are ontology-shaped. The four below are source-shaped — a\nfile that does not fit its own header, which is a way a table can fail and\na schema cannot.\n - VIOLATION_KIND_UNKNOWN_ATTRIBUTE: An attribute the ontology does not declare on the type that carried it.\nThe attribute list was shown to the model and checked by nobody, so one\nthat arrived was written unremarked and one that never arrived was lost."
     }
   },
   "securityDefinitions": {

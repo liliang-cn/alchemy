@@ -2,6 +2,7 @@ package verify
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
@@ -46,6 +47,51 @@ func violations(entities []alchemy.Entity, relations []alchemy.Relation, types m
 			Detail:     fmt.Sprintf("entity type %q is not declared by %s; it declares %s", e.Type, describe(rs.ontologyID), quoted(entityNames(rs.vocab))),
 			Provenance: e.Provenance,
 		})
+	}
+
+	// The attributes, on the types that do exist.
+	//
+	// Checked after the type walk and skipped for a type the vocabulary does
+	// not declare: an entity whose type is undeclared has no attribute list to
+	// be measured against, and reporting every field on it would bury the one
+	// finding that matters — that the type itself is not there — under one
+	// line per field.
+	for _, e := range entities {
+		if !governed || len(e.Attributes) == 0 {
+			continue
+		}
+		declaredType, ok := rs.canonicalEntity(e.Type)
+		if !ok {
+			continue
+		}
+		allowed := rs.attributesOf(declaredType)
+		if allowed == nil {
+			// A type that declares no attributes at all constrains none. The
+			// alternative — every attribute on it is a violation — would make
+			// a vocabulary that simply has not got round to them unusable, and
+			// §5's argument for a closed vocabulary is about what may be
+			// talked about, not about forbidding detail nobody has declared
+			// either way.
+			continue
+		}
+		names := make([]string, 0, len(e.Attributes))
+		for name := range e.Attributes {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			if allowed[foldKey(name)] {
+				continue
+			}
+			out = append(out, alchemy.Violation{
+				Kind:    alchemy.ViolationUnknownAttribute,
+				Subject: e.ID,
+				About:   entityRef(e),
+				Detail: fmt.Sprintf("attribute %q is not declared on %s by %s; that type declares %s",
+					name, declaredType, describe(rs.ontologyID), quoted(rs.attributeNames(declaredType))),
+				Provenance: e.Provenance,
+			})
+		}
 	}
 
 	// edge() is rendered inside each branch below rather than once per relation:

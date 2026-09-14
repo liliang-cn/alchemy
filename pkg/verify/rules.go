@@ -197,3 +197,40 @@ func (r *rules) declaredEnds(typ string) (ends, bool) {
 	}
 	return ends{}, false
 }
+
+// attributesOf is the set of attribute names one entity type declares, folded
+// for comparison, or nil when the type declares none.
+//
+// nil and empty are deliberately different here. A type that declares no
+// attributes constrains none — the vocabulary has not said anything about its
+// fields, and reading that silence as "no field is allowed" would make every
+// vocabulary that has not got round to attributes unusable. A type that
+// declares some has said what it is about, and a field outside that list is
+// the finding.
+func (r *rules) attributesOf(canonical string) map[string]bool {
+	for _, e := range r.vocab.Entities {
+		if e.Name != canonical {
+			continue
+		}
+		if len(e.Attributes) == 0 {
+			return nil
+		}
+		set := make(map[string]bool, len(e.Attributes))
+		for _, a := range e.Attributes {
+			set[foldKey(a)] = true
+		}
+		return set
+	}
+	return nil
+}
+
+// attributeNames is what a violation prints so the reader can see the list it
+// was measured against rather than be told there was one.
+func (r *rules) attributeNames(canonical string) []string {
+	for _, e := range r.vocab.Entities {
+		if e.Name == canonical {
+			return append([]string(nil), e.Attributes...)
+		}
+	}
+	return nil
+}
