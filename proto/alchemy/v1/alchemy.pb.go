@@ -1122,7 +1122,22 @@ type CreateJobRequest struct {
 	// field would have invalidated all of them, and proto3 gives no way to tell
 	// an unset string from an empty one — so the default has to be the meaning
 	// those callers already had rather than a refusal they never asked for.
-	Part          string `protobuf:"bytes,7,opt,name=part,proto3" json:"part,omitempty"`
+	Part string `protobuf:"bytes,7,opt,name=part,proto3" json:"part,omitempty"`
+	// How many model calls this job may have in flight at once.
+	//
+	// The extractor has always taken this and the wire never carried it, so the
+	// comment telling callers to set it according to their budget was addressed
+	// to nobody a service could hear: every job through this API ran at the
+	// built-in default of four, whatever the caller's endpoint could take.
+	// Sixty-seven documents of ordinary documentation took twenty-nine minutes
+	// that way, against fourteen seconds for one call of the same corpus to the
+	// same model.
+	//
+	// Zero is the default, which stays four: too low costs wall-clock, which is
+	// visible and adjustable, and too high costs a rate limit on somebody's
+	// first run, which looks like the service being broken. A caller who knows
+	// what their endpoint is sold with should say so.
+	Concurrency   int32 `protobuf:"varint,8,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1204,6 +1219,13 @@ func (x *CreateJobRequest) GetPart() string {
 		return x.Part
 	}
 	return ""
+}
+
+func (x *CreateJobRequest) GetConcurrency() int32 {
+	if x != nil {
+		return x.Concurrency
+	}
+	return 0
 }
 
 type Job struct {
@@ -4958,7 +4980,7 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.alchemy.v1.ReviewKindR\x04kind\x12.\n" +
 	"\x04from\x18\x03 \x01(\v2\x1a.alchemy.v1.ReviewDecisionR\x04from\x12\x18\n" +
 	"\abecause\x18\x04 \x01(\tR\abecause\x12.\n" +
-	"\x06origin\x18\x05 \x01(\x0e2\x16.alchemy.v1.RuleOriginR\x06origin\"\x9b\x02\n" +
+	"\x06origin\x18\x05 \x01(\x0e2\x16.alchemy.v1.RuleOriginR\x06origin\"\xbd\x02\n" +
 	"\x10CreateJobRequest\x12\x1d\n" +
 	"\n" +
 	"source_ids\x18\x01 \x03(\tR\tsourceIds\x12\x1a\n" +
@@ -4967,7 +4989,8 @@ const file_alchemy_v1_alchemy_proto_rawDesc = "" +
 	"\bchunking\x18\x04 \x01(\v2\x14.alchemy.v1.ChunkingR\bchunking\x121\n" +
 	"\x06review\x18\x05 \x01(\v2\x19.alchemy.v1.ReviewOptionsR\x06review\x12'\n" +
 	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\x12\x12\n" +
-	"\x04part\x18\a \x01(\tR\x04part\"\xe3\x01\n" +
+	"\x04part\x18\a \x01(\tR\x04part\x12 \n" +
+	"\vconcurrency\x18\b \x01(\x05R\vconcurrency\"\xe3\x01\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x14.alchemy.v1.JobStateR\x05state\x129\n" +

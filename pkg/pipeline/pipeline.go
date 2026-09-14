@@ -96,6 +96,15 @@ type Request struct {
 	// Chunking is the strategy this corpus is split by (§7.1). The zero value
 	// is chunk.Auto, which is §7.1's default.
 	Chunking chunk.Options
+	// Concurrency bounds the model calls in flight across the whole extract
+	// stage: within a document, and across documents, which are extracted
+	// together for the reason extract.go gives for keeping them apart in the
+	// first place — they are independent, and a merge across them would hide
+	// the conflict only the coordinator can see. Independent work run one item
+	// at a time is just waiting.
+	//
+	// Zero is extract's own default of four.
+	Concurrency int
 	// Reviewing is review mode (§5c). It is off by default and it does not
 	// change what holds the job: a conflict holds it either way.
 	Reviewing bool

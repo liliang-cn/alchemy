@@ -447,6 +447,21 @@ message CreateJobRequest {
   // an unset string from an empty one — so the default has to be the meaning
   // those callers already had rather than a refusal they never asked for.
   string part = 7;
+  // How many model calls this job may have in flight at once.
+  //
+  // The extractor has always taken this and the wire never carried it, so the
+  // comment telling callers to set it according to their budget was addressed
+  // to nobody a service could hear: every job through this API ran at the
+  // built-in default of four, whatever the caller's endpoint could take.
+  // Sixty-seven documents of ordinary documentation took twenty-nine minutes
+  // that way, against fourteen seconds for one call of the same corpus to the
+  // same model.
+  //
+  // Zero is the default, which stays four: too low costs wall-clock, which is
+  // visible and adjustable, and too high costs a rate limit on somebody's
+  // first run, which looks like the service being broken. A caller who knows
+  // what their endpoint is sold with should say so.
+  int32 concurrency = 8;
 }
 
 message Job {

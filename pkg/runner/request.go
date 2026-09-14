@@ -29,11 +29,12 @@ func buildRequest(jobID string, spec service.JobSpec, in service.Inbox, configur
 		// say which run produced it. It reached this function as a parameter of
 		// Run and went no further, which is why four stores each had to invent
 		// a result identity of their own; see alchemy.Result.Job.
-		Job:      jobID,
-		Sources:  sourcesOf(spec.Sources),
-		Ontology: onto,
-		Part:     partOf(spec.Part),
-		Chunking: chunkingOf(spec.Chunking),
+		Job:         jobID,
+		Sources:     sourcesOf(spec.Sources),
+		Ontology:    onto,
+		Part:        partOf(spec.Part),
+		Chunking:    chunkingOf(spec.Chunking),
+		Concurrency: spec.Concurrency,
 
 		Reviewing:     spec.Review.Reviewing,
 		MinConfidence: spec.Review.MinConfidence,

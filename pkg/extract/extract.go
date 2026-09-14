@@ -436,6 +436,12 @@ func assemble(outcomes []chunkOutcome, opts Options) Result {
 // cluster-wide lease eventually, and this is the single-node stand-in for it.
 const defaultConcurrency = 4
 
+// DefaultConcurrency is defaultConcurrency, exported for the one caller that
+// has to make the same choice one level up: pkg/pipeline spends a job's width
+// across documents as well as within them, and it cannot decide how much to
+// spend without knowing what "unset" means here.
+const DefaultConcurrency = defaultConcurrency
+
 // run calls the model for every chunk, at most Concurrency at a time.
 //
 // Each worker writes to its own slot, and nothing is merged here. That is what

@@ -185,4 +185,10 @@ type JobSpec struct {
 	Models   Models
 	Chunking Chunking
 	Review   review.Options
+	// Concurrency is how many model calls this job may have in flight. Zero is
+	// the extractor's own default. See CreateJobRequest.concurrency: the knob
+	// existed in the extractor from the start and nothing on the wire could
+	// reach it, so every job a service ran used the default whatever the
+	// caller's endpoint could take.
+	Concurrency int
 }

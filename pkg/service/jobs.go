@@ -106,6 +106,7 @@ func (s *Server) specOf(req *alchemyv1.CreateJobRequest) (JobSpec, error) {
 			Embedder: modelFromProto(req.GetModels().GetEmbedder()),
 			OCR:      modelFromProto(req.GetModels().GetOcr()),
 		},
+		Concurrency: int(req.GetConcurrency()),
 		Chunking: Chunking{
 			Strategy: req.GetChunking().GetStrategy(),
 			Size:     int(req.GetChunking().GetSize()),

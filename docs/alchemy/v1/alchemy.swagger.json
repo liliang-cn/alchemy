@@ -764,6 +764,11 @@
         "part": {
           "type": "string",
           "description": "Which part of the ontology this corpus is read under and checked against.\nThe ontology is partitioned by provenance (§2.1's third lesson): telling a\nprose extractor it may emit `function` and `calls` invites it to invent\ncode structure out of documentation, so a job names one part and gets one\nvocabulary.\n\nEmpty means \"prose\". That is a decision, not a placeholder: §5's first\nrelease is documents and entity extraction, a document is prose, and every\nrequest written before this field existed meant a prose job. A required\nfield would have invalidated all of them, and proto3 gives no way to tell\nan unset string from an empty one — so the default has to be the meaning\nthose callers already had rather than a refusal they never asked for."
+        },
+        "concurrency": {
+          "type": "integer",
+          "format": "int32",
+          "description": "How many model calls this job may have in flight at once.\n\nThe extractor has always taken this and the wire never carried it, so the\ncomment telling callers to set it according to their budget was addressed\nto nobody a service could hear: every job through this API ran at the\nbuilt-in default of four, whatever the caller's endpoint could take.\nSixty-seven documents of ordinary documentation took twenty-nine minutes\nthat way, against fourteen seconds for one call of the same corpus to the\nsame model.\n\nZero is the default, which stays four: too low costs wall-clock, which is\nvisible and adjustable, and too high costs a rate limit on somebody's\nfirst run, which looks like the service being broken. A caller who knows\nwhat their endpoint is sold with should say so."
         }
       }
     },
