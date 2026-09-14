@@ -2,9 +2,11 @@ package cortexdb
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	cdb "github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
 )
@@ -119,4 +121,128 @@ func (l *Loader) deleteRun(ctx context.Context, rep *Report) error {
 		}
 	}
 	return nil
+}
+
+// Run is one load this store holds, and enough about it to decide anything.
+type Run struct {
+	// ID is the run's name — Options.RunID, and what Drop takes.
+	ID string `json:"id"`
+	// Digest is the graph the run holds. Two runs with one digest hold the
+	// same graph; the same run with a second digest is the refusal Load makes
+	// unless the caller said replace.
+	Digest string `json:"digest"`
+	// Started is when the marker was written, Finished when the completion
+	// landed beside it. A zero Finished is the half-written run Incomplete
+	// reports, and the two fields are separate so a reader sees which.
+	Started  time.Time `json:"started"`
+	Finished time.Time `json:"finished,omitzero"`
+}
+
+// Runs names every load this store holds, newest first.
+//
+// Incomplete answers a narrower question and stays: "which runs died halfway"
+// is an operator's alarm, and this is the catalogue. They read the same two
+// documents — the marker written before the first batch and the completion
+// written after the last — because there is no third record of a load and
+// inventing one would be a second answer to drift from the first.
+//
+// A store that can be written to and not enumerated is one whose contents are
+// known only to whoever wrote them, which on a shared brain is nobody.
+func (l *Loader) Runs(ctx context.Context) ([]Run, error) {
+	docs, err := l.cortex.Vector().ListDocumentsWithFilter(ctx, author, listLimit)
+	if err != nil {
+		return nil, fmt.Errorf("cortexdb: list runs: %w", err)
+	}
+	byID := map[string]*Run{}
+	for _, d := range docs {
+		id, ok := strings.CutPrefix(d.ID, runNodeID(""))
+		if !ok {
+			continue
+		}
+		run, complete := strings.CutSuffix(id, ":complete")
+		r, seen := byID[run]
+		if !seen {
+			r = &Run{ID: run}
+			byID[run] = r
+		}
+		if complete {
+			// The completion reuses runMarker and stamps Started with the
+			// moment it was written, which is when the run finished. Read as
+			// the finish rather than renamed, because the document on disk is
+			// what it is and a second name for one field is a second thing to
+			// keep in step.
+			var fin runMarker
+			_ = json.Unmarshal([]byte(d.Content), &fin)
+			r.Finished = fin.Started
+			continue
+		}
+		var m runMarker
+		_ = json.Unmarshal([]byte(d.Content), &m)
+		r.Digest, r.Started = m.Digest, m.Started
+	}
+	out := make([]Run, 0, len(byID))
+	for _, r := range byID {
+		out = append(out, *r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Started.Equal(out[j].Started) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].Started.After(out[j].Started)
+	})
+	return out, nil
+}
+
+// Drop removes everything one run put in the store and reports what it took.
+//
+// This is the one verb in this package that destroys. Everything else adds,
+// upserts or refuses; even a replace only removes in order to write the same
+// name back. So it is deliberately separate from Load rather than a flag on
+// it: "overwrite this load with that one" and "this load should not be here"
+// are different sentences, and the second one has no result to hand over
+// afterwards.
+//
+// What it takes is what deleteRun takes, which is the run's documents, the
+// graph they assert, and the embeddings that cascade from them — entities
+// another document also names are detached rather than deleted, because a
+// shared brain's node does not belong to the last load that mentioned it. The
+// marker and the completion go too: a run whose graph is gone must not still
+// be in Runs, or Incomplete would start reporting a load nobody can finish.
+//
+// The report is the caller's record of a thing that cannot be undone. Nothing
+// here writes an audit entry — this package holds no ledger — and a product
+// that offers this verb owes its own.
+func (l *Loader) Drop(ctx context.Context) (Report, error) {
+	if strings.TrimSpace(l.opts.RunID) == "" {
+		return Report{}, ErrNoRunID
+	}
+	rep := Report{Run: l.opts.RunID}
+	before, err := l.Runs(ctx)
+	if err != nil {
+		return rep, err
+	}
+	var held bool
+	for _, r := range before {
+		if r.ID == l.opts.RunID {
+			held, rep.Digest = true, r.Digest
+		}
+	}
+	if !held {
+		return rep, fmt.Errorf("%w: no run named %q in this store", ErrNoRun, l.opts.RunID)
+	}
+	if err := l.deleteRun(ctx, &rep); err != nil {
+		return rep, err
+	}
+	// deleteRun keeps the marker, because it runs mid-write when a replace
+	// calls it. A drop is not mid-anything and the marker is the last thing
+	// saying this run is here.
+	store := l.cortex.Vector()
+	id := markerID(l.opts.RunID)
+	if doc, err := store.GetDocument(ctx, id); err == nil && doc != nil {
+		rep.Batches++
+		if err := store.DeleteDocument(ctx, id); err != nil {
+			return rep, fmt.Errorf("cortexdb: delete run marker %s: %w", id, err)
+		}
+	}
+	return rep, nil
 }

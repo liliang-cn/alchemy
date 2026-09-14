@@ -166,3 +166,77 @@ func TestAFailedReplaceLeavesTheOldGraphStanding(t *testing.T) {
 			"before the new one was written, and neither is there now", got, before)
 	}
 }
+
+// TestDropRemovesOneLoadAndSaysWhatItTook is the verb this package had no way
+// to say. Every other one adds, upserts or refuses; a replace only removes in
+// order to write the same name back. So a load written by mistake — a wrong
+// vocabulary, a document that should not have been read, a name typed twice —
+// stayed in the store for ever, and a product built on this had nothing to
+// offer but "load something else over it".
+func TestDropRemovesOneLoadAndSaysWhatItTook(t *testing.T) {
+	ctx := context.Background()
+	keep := openLocal(t, Options{RunID: "run-keep"})
+	if _, err := keep.Load(ctx, fixture()); err != nil {
+		t.Fatalf("first Load: %v", err)
+	}
+	// The same store, a second run: dropping one must not touch the other.
+	drop := New(keep.db(), Options{RunID: "run-drop"})
+	if _, err := drop.Load(ctx, fixture()); err != nil {
+		t.Fatalf("second Load: %v", err)
+	}
+
+	runs, err := keep.Runs(ctx)
+	if err != nil {
+		t.Fatalf("Runs: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("Runs found %d loads, want 2: %+v", len(runs), runs)
+	}
+	for _, r := range runs {
+		if r.Digest == "" {
+			t.Errorf("run %q has no digest, so nothing can tell which graph it holds", r.ID)
+		}
+		if r.Finished.IsZero() {
+			t.Errorf("run %q finished and says it did not", r.ID)
+		}
+	}
+
+	before := countNodes(t, keep)
+	rep, err := drop.Drop(ctx)
+	if err != nil {
+		t.Fatalf("Drop: %v", err)
+	}
+	if rep.Run != "run-drop" || rep.Digest == "" {
+		t.Errorf("the report does not name what it took: %+v", rep)
+	}
+	if got := countNodes(t, keep); got >= before {
+		t.Errorf("the store has %d nodes and had %d: the drop took nothing", got, before)
+	}
+
+	// The other load is untouched, and the dropped one is gone from the
+	// catalogue — otherwise Incomplete would start reporting a run whose graph
+	// is not there and which nobody can finish.
+	left, err := keep.Runs(ctx)
+	if err != nil {
+		t.Fatalf("Runs after: %v", err)
+	}
+	if len(left) != 1 || left[0].ID != "run-keep" {
+		t.Fatalf("after the drop the store holds %+v, want only run-keep", left)
+	}
+	open, err := keep.Incomplete(ctx)
+	if err != nil {
+		t.Fatalf("Incomplete: %v", err)
+	}
+	if len(open) != 0 {
+		t.Errorf("Incomplete reports %v after a drop; a removed run must not look half-written", open)
+	}
+}
+
+// Dropping a name the store does not hold is a refusal. "There was nothing to
+// remove" and "I removed it" are the same outcome and different answers.
+func TestDroppingARunThatIsNotThereIsRefused(t *testing.T) {
+	l := openLocal(t, Options{RunID: "run-nope"})
+	if _, err := l.Drop(context.Background()); !errors.Is(err, ErrNoRun) {
+		t.Fatalf("err = %v, want ErrNoRun", err)
+	}
+}

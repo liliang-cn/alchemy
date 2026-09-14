@@ -27,6 +27,11 @@ var (
 	// ErrRunExists is returned when the named run is already in the store and
 	// was loaded from a different result.
 	ErrRunExists = errors.New("cortexdb: run already loaded from a different result")
+	// ErrNoRun is returned by Drop for a run this store does not hold. It is a
+	// refusal and not a silent success: "there was nothing to remove" and "I
+	// removed it" are the same outcome and different answers, and a caller
+	// deleting by name deserves to know which one it got.
+	ErrNoRun = errors.New("cortexdb: no such run in this store")
 	// ErrParallelEdges is returned when two alchemy relations that the
 	// producer named as different edges would land on one CortexDB edge. See
 	// Options.FuseParallelEdges.
