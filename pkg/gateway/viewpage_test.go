@@ -157,3 +157,34 @@ func TestAHeldJobDrawsTheQueueItCanStillBeAskedAbout(t *testing.T) {
 		}
 	}
 }
+
+// TestAConflictPanelIsTitledByWhatAnAnswerActsOn is the defect a reviewer
+// would only find by destroying the wrong fact.
+//
+// A held job draws each conflict as two claim nodes, one per side. The queue
+// holds one item per conflict and that item names the subject, so
+// selectedRecord returns the subject whichever side was clicked — both sides'
+// buttons act on the same record. The panel, though, was titled with the
+// clicked side. Click the losing claim, read its statement at the top of the
+// panel, press Reject meaning "take this one out", and the record taken out is
+// the other one: the fact you meant to keep.
+//
+// Asserted against the page source because the bug is in which value reaches
+// the heading, and that is one line. The page is served whole, so the line is
+// in the body of every held job.
+func TestAConflictPanelIsTitledByWhatAnAnswerActsOn(t *testing.T) {
+	f := serve(t, harness{})
+	id := f.aDDLJob(t)
+	page := pageBody(t, f, gateway.ViewPrefix+"jobs/"+id)
+
+	// The claim branch has to exist at all: without it every node, conflict
+	// sides included, is titled by its own label again.
+	if !strings.Contains(page, `if (n.kind === "claim")`) {
+		t.Fatal("showDetail does not distinguish a conflict's claim node, so both sides are titled by the side clicked while the buttons act on the subject")
+	}
+	// And the side that was clicked must still be somewhere, or the panel
+	// stops saying which of the two the reader is looking at.
+	if !strings.Contains(page, `row("side you clicked", n.label)`) {
+		t.Error("the clicked side is not shown, so the panel cannot say which claim the reader opened")
+	}
+}

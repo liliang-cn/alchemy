@@ -204,6 +204,7 @@
     letter-spacing:.05em;text-transform:uppercase}
   .tag.read{background:color-mix(in srgb,var(--read) 18%,transparent);color:var(--read)}
   .tag.guess{background:color-mix(in srgb,var(--guess) 20%,transparent);color:var(--guess)}
+  .tag.bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
 
   button.btn{padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:transparent;
     color:var(--ink);font:inherit;font-size:11.5px;cursor:pointer}
@@ -1306,12 +1307,28 @@ function select(n) {
 function showDetail(n) {
   if (n.a && n.b) { showEdgeDetail(n); return; }
   var d = n.detail || {};
-  DOM("dtitle").textContent = n.label;
   var prov = n.prov || {};
   var read = isRead(prov);
-  DOM("dsub").innerHTML =
-    '<span class="tag ' + (read ? "read" : "guess") + '">' + esc(read ? "read" : "guessed") + "</span> " +
-    esc(n.type || "");
+
+  /* A claim node is one side of a conflict, and the two sides are not two
+     answerable records: the queue holds one item per conflict and it names the
+     subject, so selectedRecord returns that subject whichever side was
+     clicked. Titling this panel with the clicked side put a record at the top
+     that the buttons underneath do not act on — click the losing side, press
+     Reject, and the record taken out is the other one. The subject leads,
+     because the subject is what an answer does something to; which side was
+     clicked is kept, as a field, because it is how the reader got here. */
+  if (n.kind === "claim") {
+    DOM("dtitle").textContent = n.type || n.label;
+    DOM("dsub").innerHTML =
+      '<span class="tag bad">' + esc("conflict") + "</span> " +
+      esc("an answer here acts on the record above");
+  } else {
+    DOM("dtitle").textContent = n.label;
+    DOM("dsub").innerHTML =
+      '<span class="tag ' + (read ? "read" : "guess") + '">' + esc(read ? "read" : "guessed") + "</span> " +
+      esc(n.type || "");
+  }
 
   var rows = [];
   function row(k, v) { if (v !== undefined && v !== null && v !== "" && v !== 0) { rows.push([k, v]); } }
@@ -1325,6 +1342,7 @@ function showDetail(n) {
   row("reviewed by", prov.reviewed_by);
   row("rule set", prov.rule_set);
   row("ruled by", prov.ruled_by);
+  if (n.kind === "claim") { row("side you clicked", n.label); }
   if (n.finding) { row("finding", n.finding); }
   if (d.detail) { row("detail", d.detail); }
   if (d.kind) { row("kind", String(d.kind).replace(/^[A-Z_]*_KIND_/, "").toLowerCase()); }
