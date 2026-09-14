@@ -66,17 +66,41 @@ type slot struct {
 // thing everywhere: redundancy. Reporting each distinct value once is what
 // keeps the queue readable — a hundred records asserting the same wrong type
 // are one question, not a hundred.
+//
+// Compared folded, for the reason canonicalise gives about types one step
+// earlier in this package: "a conflict check run before folding would report
+// 'cluster vs Cluster' as two sources disagreeing, which is a person woken up
+// for a spelling". The same is true of a value, and the argument is stronger
+// here — these two values are being compared at all because they arrived
+// under one entity id, and ids are folded. The pipeline has already decided
+// these are one thing; asking a person which capitalisation is correct is its
+// two halves disagreeing with each other in front of the customer.
+//
+// It is not a small saving. Sixty-seven documents of ordinary documentation
+// produced twenty-eight conflicts and every one of them was a case difference
+// — MemoryFlow against memoryflow, GraphFlow against graphflow, CortexDB
+// against cortexdb — and a conflict holds a job regardless of review mode
+// (§7.3), so none of that corpus could reach a store until a person had
+// answered twenty-eight questions with no information in them. A queue that
+// is mostly noise is a queue that gets clicked through, which costs the real
+// conflict sitting in the middle of it.
+//
+// What survives is the first writer's spelling, which is canonicalise's rule
+// for the same situation one level up. What is deliberately NOT done is
+// rewriting anything: the values a source wrote stay as it wrote them, and
+// only the comparison folds.
 func (s *slot) disagrees(value string) bool {
-	if value == s.value {
-		return false // the same statement made twice is corroboration.
+	key := foldKey(value)
+	if key == foldKey(s.value) {
+		return false // the same statement made twice, or made in two hands.
 	}
-	if s.others[value] {
+	if s.others[key] {
 		return false // already asked; asking again is how a queue stops being read.
 	}
 	if s.others == nil {
 		s.others = map[string]bool{}
 	}
-	s.others[value] = true
+	s.others[key] = true
 	return true
 }
 

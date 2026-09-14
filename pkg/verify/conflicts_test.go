@@ -309,3 +309,60 @@ func TestDifferentRelationTypesBetweenOnePairAreNotAConflict(t *testing.T) {
 		t.Fatalf("conflicts = %+v, want none", got.Conflicts)
 	}
 }
+
+// Two spellings of one name are not two sources disagreeing.
+//
+// Sixty-seven documents of ordinary documentation produced twenty-eight
+// conflicts and every single one was a capitalisation difference: MemoryFlow
+// against memoryflow, GraphFlow against graphflow, CortexDB against cortexdb.
+// A conflict holds a job whatever the review mode (§7.3), so that corpus could
+// not reach a store until a person had answered twenty-eight questions with no
+// information in any of them — and a queue that is mostly noise is a queue
+// that gets clicked through, which costs whatever real conflict was sitting in
+// the middle of it.
+//
+// canonicalise already makes this argument about types, in this package, one
+// step earlier: folding happens before the conflict check so that nobody is
+// "woken up for a spelling". It is stronger for a value than for a type: these
+// two values are compared at all only because they arrived under one entity
+// id, and ids are folded — so the pipeline has already ruled that they are one
+// thing, and asking which capitalisation is right is its two halves
+// contradicting each other.
+func TestACapitalisationDifferenceIsNotAConflict(t *testing.T) {
+	rep := check(t, []alchemy.Entity{
+		{ID: "cluster:a", Type: "Cluster", Name: "a",
+			Attributes: map[string]any{"region": "MemoryFlow"}, Provenance: fromPDF},
+		{ID: "cluster:a", Type: "Cluster", Name: "a",
+			Attributes: map[string]any{"region": "memoryflow"}, Provenance: fromOtherPDF},
+		// Surrounding and repeated whitespace folds the same way, because it is
+		// the same fold an id is built with. What does NOT fold is a space
+		// between words where another spelling has none: foldKey keeps
+		// "memoryflow" and "memory flow" apart, so two sources writing those
+		// are two nodes, and this is not the place that decides otherwise.
+		{ID: "cluster:a", Type: "Cluster", Name: "a",
+			Attributes: map[string]any{"region": "  MEMORYFLOW  "}, Provenance: fromSchema},
+	}, nil)
+	for _, c := range rep.Conflicts {
+		t.Errorf("a person is being asked about a spelling: %s", c.Detail)
+	}
+}
+
+// And a real disagreement still is one. The fold is about how a value is
+// written, never about what it says.
+func TestTwoDifferentValuesAreStillAConflict(t *testing.T) {
+	rep := check(t, []alchemy.Entity{
+		{ID: "cluster:a", Type: "Cluster", Name: "a",
+			Attributes: map[string]any{"region": "eu"}, Provenance: fromPDF},
+		{ID: "cluster:a", Type: "Cluster", Name: "a",
+			Attributes: map[string]any{"region": "us"}, Provenance: fromOtherPDF},
+	}, nil)
+	n := 0
+	for _, c := range rep.Conflicts {
+		if c.Kind == alchemy.ConflictEntityAttributes {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d attribute conflicts, want the one real disagreement: %+v", n, rep.Conflicts)
+	}
+}
