@@ -246,7 +246,7 @@ func completionID(run string) string { return runNodeID(run) + ":complete" }
 //     different things about one import and there is nothing in the data to
 //     decide which is current.
 //   - A different run: a different graph. Nothing is merged across runs.
-func (l *Loader) claimRun(ctx context.Context, digest string, replace bool, rep *Report) (bool, error) {
+func (l *Loader) claimRun(ctx context.Context, digest string, replace bool, rep *Report) (done, stale bool, err error) {
 	store := l.cortex.Vector()
 	if doc, err := store.GetDocument(ctx, markerID(l.opts.RunID)); err == nil && doc != nil {
 		var prev runMarker
@@ -256,26 +256,38 @@ func (l *Loader) claimRun(ctx context.Context, digest string, replace bool, rep 
 				// Both sentinels: sink.ErrExists is what a caller asks when it
 				// does not care which store answered, and ErrRunExists is what
 				// a caller of this package has always matched on.
-				return false, fmt.Errorf("%w: %w: run %q holds a graph with digest %s, this result is %s; use a new RunID",
+				return false, false, fmt.Errorf("%w: %w: run %q holds a graph with digest %s, this result is %s; use a new RunID",
 					sink.ErrExists, ErrRunExists, l.opts.RunID, short(prev.Digest), short(digest))
 			}
-			if err := l.deleteRun(ctx, rep); err != nil {
-				return false, err
-			}
-			return false, l.writeMarker(ctx, digest, rep)
+			// Not deleted here. The old graph goes after the new one is
+			// written and complete (tx.Commit), because these are two phases
+			// with the whole stream between them: deleting first meant that
+			// anything failing in the second left the old graph gone and the
+			// new one absent, and there is no third place the facts were.
+			//
+			// The recovery this package argues for elsewhere — every write is
+			// an upsert, so a crashed load is finishable by running it again —
+			// does not cover that: running it again needs the result, and
+			// alchemy holds work in progress rather than a catalogue. An hour
+			// later the job is gone and the old graph is not coming back.
+			//
+			// Writing first leaves, at worst, the old records beside the new
+			// ones. That is a state a re-run converges out of. The one state
+			// nothing recovers from is the empty one.
+			return false, true, l.writeMarker(ctx, digest, rep)
 		}
 		// The marker is there with this digest. Whether the completion is there
 		// too decides whether anything is left to do: a finished run needs
 		// nothing rewritten, and an unfinished one is the crashed load
 		// Incomplete() reports and a re-Load finishes.
-		if done, err := store.GetDocument(ctx, completionID(l.opts.RunID)); err == nil && done != nil {
+		if fin, err := store.GetDocument(ctx, completionID(l.opts.RunID)); err == nil && fin != nil {
 			rep.Replay = true
-			return true, nil
+			return true, false, nil
 		}
 		rep.Replay = true
-		return false, nil
+		return false, false, nil
 	}
-	return false, l.writeMarker(ctx, digest, rep)
+	return false, false, l.writeMarker(ctx, digest, rep)
 }
 
 // writeMarker says a run is in progress, from before the first batch until the
@@ -286,10 +298,19 @@ func (l *Loader) writeMarker(ctx context.Context, digest string, rep *Report) er
 		return fmt.Errorf("cortexdb: render run marker: %w", err)
 	}
 	rep.Batches++
-	return l.cortex.Vector().CreateDocument(ctx, &core.Document{
+	doc := &core.Document{
 		ID: markerID(l.opts.RunID), Title: "alchemy run " + l.opts.RunID,
 		Content: string(body), Author: author, Version: 1,
-	})
+	}
+	// Written over the old one when there is one. A replace no longer deletes
+	// the run before writing it, so the marker of the graph being replaced is
+	// still standing here — and a create against it is a unique-constraint
+	// failure rather than a claim.
+	store := l.cortex.Vector()
+	if prev, err := store.GetDocument(ctx, doc.ID); err == nil && prev != nil {
+		return store.UpdateDocument(ctx, doc)
+	}
+	return store.CreateDocument(ctx, doc)
 }
 
 // completeRun writes the numbers §5 obliges a graph to carry: "every returned

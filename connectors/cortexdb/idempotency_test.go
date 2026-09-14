@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
+	"github.com/liliang-cn/alchemy/pkg/sink"
 )
 
 // Loading the same result twice must not double the graph. §5 defers
@@ -80,7 +83,7 @@ func TestAHalfLoadedRunSaysSo(t *testing.T) {
 		t.Fatalf("preflight: %v", err)
 	}
 	var rep Report
-	if _, err := l.claimRun(ctx, p.digest, false, &rep); err != nil {
+	if _, _, err := l.claimRun(ctx, p.digest, false, &rep); err != nil {
 		t.Fatalf("claimRun: %v", err)
 	}
 
@@ -113,5 +116,53 @@ func TestRunIDIsRequired(t *testing.T) {
 	l := openLocal(t, Options{})
 	if _, err := l.Load(context.Background(), fixture()); !errors.Is(err, ErrNoRunID) {
 		t.Fatalf("err = %v, want ErrNoRunID", err)
+	}
+}
+
+// TestAFailedReplaceLeavesTheOldGraphStanding is the data loss this had.
+//
+// Replace deleted the whole run in Begin and wrote the new graph in Commit,
+// which is two phases with the entire stream between them. Anything that failed
+// in the second — the model, the network, the process — left the old graph gone
+// and the new one absent, and there is no third place the facts were. Measured
+// on a deployed store: seven nodes and six edges became one node and none.
+//
+// Nor does the package's own recovery argument cover it. "Every write is an
+// upsert, so a crashed load is finishable by running it again" needs the result
+// to run again with, and alchemy holds work in progress rather than a
+// catalogue — an hour later the job is gone and the old graph is not coming
+// back either.
+//
+// So the delete moves after the write. A crash between them now leaves the old
+// records beside the new ones, which is a state a re-run converges out of; the
+// one state that cannot be recovered from is the one where nothing is there.
+func TestAFailedReplaceLeavesTheOldGraphStanding(t *testing.T) {
+	l := openLocal(t, Options{RunID: "run-R1"})
+	ctx := context.Background()
+	if _, err := l.Load(ctx, fixture()); err != nil {
+		t.Fatalf("first Load: %v", err)
+	}
+	before := countNodes(t, l)
+	if before == 0 {
+		t.Fatal("the fixture wrote nothing, so this test would pass vacuously")
+	}
+
+	// A replace whose write cannot finish. Two records CortexDB calls one edge,
+	// carrying two different producer keys — ErrParallelEdges, which a
+	// streaming caller reaches in Commit, which is after Begin and therefore
+	// after the delete this test is about.
+	broken := fixture()
+	broken.Entities[0].Name = "SuperAI Ltd"
+	broken.Relations = append(broken.Relations,
+		alchemy.Relation{From: "e1", To: "e2", Type: "USES", Key: "fk_left", Provenance: broken.Relations[0].Provenance},
+		alchemy.Relation{From: "e1", To: "e2", Type: "USES", Key: "fk_right", Provenance: broken.Relations[0].Provenance},
+	)
+	if _, err := sink.Load(ctx, l, broken, sink.Options{Load: "run-R1", Replace: true}); err == nil {
+		t.Fatal("the broken replace succeeded; this test needs a load that fails after Begin")
+	}
+
+	if got := countNodes(t, l); got < before {
+		t.Fatalf("a failed replace left %d nodes where there were %d: the old graph was deleted "+
+			"before the new one was written, and neither is there now", got, before)
 	}
 }

@@ -103,10 +103,16 @@ func (l *Loader) deleteRun(ctx context.Context, rep *Report) error {
 			return fmt.Errorf("cortexdb: delete document %s: %w", d.ID, err)
 		}
 	}
-	for _, id := range []string{completionID(l.opts.RunID), markerID(l.opts.RunID)} {
-		if doc, err := store.GetDocument(ctx, id); err != nil || doc == nil {
-			continue
-		}
+	// The completion goes and the marker stays.
+	//
+	// This runs from Commit, between the last refusal and the first write, and
+	// the marker standing with no completion beside it is exactly what
+	// Incomplete() reports: a run whose graph is being written right now looks
+	// the same as one that died mid-write, which is the honest reading of both.
+	// Removing the marker here would leave the store, for the length of the
+	// write, holding a graph that no run admits to.
+	id := completionID(l.opts.RunID)
+	if doc, err := store.GetDocument(ctx, id); err == nil && doc != nil {
 		rep.Batches++
 		if err := store.DeleteDocument(ctx, id); err != nil {
 			return fmt.Errorf("cortexdb: delete run document %s: %w", id, err)

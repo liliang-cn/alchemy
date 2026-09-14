@@ -47,11 +47,12 @@ func (l *Loader) Begin(ctx context.Context, id sink.Ident) (sink.Tx, error) {
 	if err := l.checkStore(ctx); err != nil {
 		return nil, err
 	}
-	done, err := l.claimRun(ctx, id.Digest, id.Replace, rep)
+	done, stale, err := l.claimRun(ctx, id.Digest, id.Replace, rep)
 	if err != nil {
 		return nil, err
 	}
 	t.converged = done
+	t.stale = stale
 	return t, nil
 }
 
@@ -83,6 +84,10 @@ type tx struct {
 	// wroteChunks is how far into plan.chunks the store has been written, so a
 	// batch writes only what arrived in it.
 	wroteChunks int
+	// stale says this run already holds a different graph and the caller asked
+	// to replace it, so the old one has to go. It is removed in Commit and not
+	// here; see the removal there for why the order is the whole point.
+	stale bool
 	// filed says the plan already holds every record, because Load built it.
 	// The batches still arrive — the envelope does not know the difference —
 	// and filing them again would double the graph.
@@ -191,6 +196,31 @@ func (t *tx) Commit(ctx context.Context, s sink.Summary) (sink.Report, error) {
 	// stay and each says which the other is (`_contradicts`, plan.disagree).
 	t.p.disagree(s.Conflicts)
 	t.rep.SkippedRelations, t.rep.FusedRelations = t.p.skipped, t.p.fused
+
+	// The old graph goes here and not in Begin.
+	//
+	// Replace used to delete the run as the load opened, which put the whole
+	// stream between the removal and the first write: anything that failed in
+	// between — the parallel-edge check two lines above, an attribute
+	// collision, the process — left the old graph gone and the new one absent,
+	// and there is no third place the facts were. Measured on a deployed
+	// store: seven nodes and six edges became one node and none.
+	//
+	// Nor does this package's recovery argument cover it. "Every write is an
+	// upsert, so a crashed load is finishable by running it again" needs the
+	// result to run again with, and alchemy holds work in progress rather than
+	// a catalogue; an hour later the job is gone and the old graph is not
+	// coming back either.
+	//
+	// Here, every refusal this connector can make has been made and every
+	// record has arrived. What remains between the delete and the write is the
+	// write itself — the same window a load that replaces nothing already has,
+	// and the one the run marker with no completion beside it exists to report.
+	if t.stale {
+		if err := t.l.deleteRun(ctx, t.rep); err != nil {
+			return sink.Report{}, err
+		}
+	}
 	if err := t.l.writeDocuments(ctx, t.p, t.rep); err != nil {
 		return sink.Report{}, err
 	}
