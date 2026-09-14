@@ -955,6 +955,35 @@ message ReviewItem {
   // took each away.
   ReviewRule suppressed_by = 10;
   Provenance provenance = 11;
+  // What somebody already said about this item, when somebody has.
+  //
+  // The queue is a list of questions and it was only ever a list of questions,
+  // which is wrong the moment a reviewer reloads the page: the answers they
+  // gave five minutes ago are recorded, the job knows them, and the list comes
+  // back looking untouched. A reviewer who cannot see what they have already
+  // answered either answers it again or stops trusting the screen, and one of
+  // those is worse than the other.
+  //
+  // Unset is unanswered. It is not the same as suppressed_by, which is an
+  // answer a rule gave to a class rather than one a person gave to this item —
+  // a reader wanting "who decided this, and when" has to be able to tell a
+  // standing policy from somebody's name.
+  ReviewAnswer answer = 12;
+}
+
+// ReviewAnswer is one recorded decision, as read back rather than as given.
+//
+// It carries no Edit. An edit is what the answer did to the record and the
+// record is downstream of here; what a queue has to show is that the question
+// was answered, by whom, and on what grounds — and an item whose text is the
+// edited text already shows the rest.
+message ReviewAnswer {
+  ReviewVerb verb = 1;
+  // Who decided. Never empty: a decision nobody signed is refused when it is
+  // made, so one that reached this message has a name on it.
+  string by = 2;
+  string note = 3;
+  google.protobuf.Timestamp at = 4;
 }
 
 message Edit {

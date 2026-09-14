@@ -2,6 +2,7 @@ package service
 
 import (
 	"sync"
+	"time"
 
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/review"
@@ -325,6 +326,18 @@ func (h *hub) queue() []review.Item {
 // would be the "whichever edge was written last" failure §7.3 exists to
 // prevent.
 func (h *hub) record(d review.Decision) error {
+	// A decision with no time on it is stamped with the one it arrived at.
+	//
+	// Decision.At is a field a client may set and almost none do — neither the
+	// stream's senders nor the batch's — so what was recorded was an answer,
+	// a name, and a zero timestamp. That is fine right up until somebody asks
+	// when a record was reviewed, which is the question a signed review exists
+	// to answer. Arrival is not when the reviewer decided, and it is the only
+	// honest thing this process knows; a client that does know says so and is
+	// left alone.
+	if d.At.IsZero() {
+		d.At = time.Now().UTC()
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	prior, seen := h.decided[d.ItemID]

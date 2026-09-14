@@ -343,3 +343,57 @@ func TestADecisionOnADeliveredJobIsRefusedRatherThanQuietlyIgnored(t *testing.T)
 		t.Errorf("the refusal does not name the route that does work: %v", err)
 	}
 }
+
+// A queue that forgets what was answered is a queue that asks twice.
+//
+// The hub records every decision and nothing read them back, so a reviewer who
+// reloaded the page got the questions they had just answered, unmarked and
+// indistinguishable from the ones they had not. There is no way for the screen
+// to know: the answer is on the server, and a browser that remembered its own
+// clicks would be one page's private opinion of what the store holds — exactly
+// the disagreement the product exists to prevent.
+func TestAnAnsweredFindingComesBackAnswered(t *testing.T) {
+	cli := dial(t, harness{run: staticResult(disputed())})
+	src := upload(t, cli, "deal.pdf", alchemyv1.SourceKind_SOURCE_KIND_DOCUMENT, []byte("text"))
+	j := create(t, cli, &alchemyv1.CreateJobRequest{SourceIds: []string{src}, Ontology: "crm"})
+	awaitState(t, cli, j.GetId(), alchemyv1.JobState_JOB_STATE_NEEDS_REVIEW)
+
+	before := findings(t, cli, j.GetId())
+	if a := before[0].GetAnswer(); a != nil {
+		t.Fatalf("an unanswered item arrived carrying an answer: %+v", a)
+	}
+
+	if _, err := cli.Decide(authed(context.Background()), &alchemyv1.DecideRequest{
+		JobId: j.GetId(),
+		Decisions: []*alchemyv1.ReviewDecision{{
+			ItemId: before[0].GetId(),
+			Verb:   alchemyv1.ReviewVerb_REVIEW_VERB_ACCEPT, By: "dana", Note: "the contract is newer",
+		}},
+	}); err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+
+	// The same call a reloaded page makes.
+	after := findings(t, cli, j.GetId())
+	var found *alchemyv1.ReviewAnswer
+	for _, it := range after {
+		if it.GetId() == before[0].GetId() {
+			found = it.GetAnswer()
+		}
+	}
+	if found == nil {
+		t.Fatal("the item comes back with no answer on it, so a reloaded queue cannot tell it was decided")
+	}
+	if found.GetVerb() != alchemyv1.ReviewVerb_REVIEW_VERB_ACCEPT {
+		t.Errorf("verb = %v, want the one that was given", found.GetVerb())
+	}
+	if found.GetBy() != "dana" {
+		t.Errorf("by = %q, want dana — an answer with no name on it is the thing the queue refuses to take", found.GetBy())
+	}
+	if found.GetNote() != "the contract is newer" {
+		t.Errorf("note = %q, want what the reviewer wrote", found.GetNote())
+	}
+	if !found.GetAt().IsValid() || found.GetAt().AsTime().IsZero() {
+		t.Error("the answer carries no time, so nothing can say when it was given")
+	}
+}

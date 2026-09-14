@@ -199,6 +199,14 @@ func TestDropRemovesOneLoadAndSaysWhatItTook(t *testing.T) {
 		if r.Finished.IsZero() {
 			t.Errorf("run %q finished and says it did not", r.ID)
 		}
+		// A catalogue of names and timestamps does not say what this store
+		// holds. The numbers are written on the completion document by §5's
+		// obligation to carry them; nothing read them back, so a caller
+		// listing loads saw a list of ids and a caller dropping one was told
+		// it had removed a run containing nothing.
+		if r.Counts.Entities == 0 || r.Counts.Relations == 0 {
+			t.Errorf("run %q holds a graph and its catalogue entry counts nothing: %+v", r.ID, r.Counts)
+		}
 	}
 
 	before := countNodes(t, keep)
@@ -208,6 +216,22 @@ func TestDropRemovesOneLoadAndSaysWhatItTook(t *testing.T) {
 	}
 	if rep.Run != "run-drop" || rep.Digest == "" {
 		t.Errorf("the report does not name what it took: %+v", rep)
+	}
+	// And says how much. "I dropped a load" is not a record of a thing that
+	// cannot be undone; "I dropped a load of 4 entities and 3 relations" is.
+	if rep.Entities == 0 || rep.Relations == 0 {
+		t.Errorf("the drop reports removing nothing from a run that held a graph: %+v", rep)
+	}
+	if dropped := (func() Run {
+		for _, r := range runs {
+			if r.ID == "run-drop" {
+				return r
+			}
+		}
+		return Run{}
+	})(); rep.Entities != dropped.Counts.Entities || rep.Relations != dropped.Counts.Relations {
+		t.Errorf("the drop reports %d/%d and the run held %d/%d",
+			rep.Entities, rep.Relations, dropped.Counts.Entities, dropped.Counts.Relations)
 	}
 	if got := countNodes(t, keep); got >= before {
 		t.Errorf("the store has %d nodes and had %d: the drop took nothing", got, before)

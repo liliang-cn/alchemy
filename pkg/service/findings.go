@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	"github.com/liliang-cn/alchemy/pkg/job"
+	"github.com/liliang-cn/alchemy/pkg/review"
 	"github.com/liliang-cn/alchemy/pkg/wire"
 	alchemyv1 "github.com/liliang-cn/alchemy/proto/alchemy/v1"
 )
@@ -42,6 +45,13 @@ func (s *Server) ListFindings(ctx context.Context, req *alchemyv1.ListFindingsRe
 	}
 
 	items := r.hub.queue()
+	// What has already been answered, by item. The hub holds it and nothing
+	// asked: a reviewer who reloaded this list got back the questions they had
+	// just answered, with no mark on any of them.
+	answers := map[string]review.Decision{}
+	for _, d := range r.hub.Decisions() {
+		answers[d.ItemID] = d
+	}
 	out := &alchemyv1.Findings{
 		JobId:   id,
 		State:   wire.JobStateToProto[j.State],
@@ -52,7 +62,16 @@ func (s *Server) ListFindings(ctx context.Context, req *alchemyv1.ListFindingsRe
 		// The same converter the stream sends, so an item a reviewer read here
 		// and an item they were sent there are the same item, down to the
 		// provenance they judge it on.
-		out.Items = append(out.Items, itemToProto(id, it))
+		msg := itemToProto(id, it)
+		if d, ok := answers[it.ID]; ok {
+			msg.Answer = &alchemyv1.ReviewAnswer{
+				Verb: wire.VerbToProto[d.Verb],
+				By:   d.By,
+				Note: d.Note,
+				At:   timestamppb.New(d.At),
+			}
+		}
+		out.Items = append(out.Items, msg)
 	}
 	return out, nil
 }

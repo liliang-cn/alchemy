@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liliang-cn/alchemy/pkg/alchemy"
 	cdb "github.com/liliang-cn/cortexdb/v2/pkg/cortexdb"
 )
 
@@ -136,6 +137,19 @@ type Run struct {
 	// reports, and the two fields are separate so a reader sees which.
 	Started  time.Time `json:"started"`
 	Finished time.Time `json:"finished,omitzero"`
+	// Counts is what the run wrote, read back off its completion document.
+	//
+	// It was missing, and the catalogue was the poorer for it in a way that
+	// only showed at the other end: a caller asking what this store holds got
+	// a list of names and two timestamps, and a caller dropping a load was
+	// told it had removed a run with nothing in it. The numbers were on disk
+	// the whole time — §5 obliges a graph to carry the numbers needed to
+	// distrust it, and completeRun writes them — and nothing read them.
+	//
+	// Zero for a run that never finished, which is the honest answer: a load
+	// that died mid-write has no completion and therefore no count of what it
+	// managed to put in. Incomplete() names those.
+	Counts alchemy.Counts `json:"counts,omitzero"`
 }
 
 // Runs names every load this store holds, newest first.
@@ -173,7 +187,7 @@ func (l *Loader) Runs(ctx context.Context) ([]Run, error) {
 			// keep in step.
 			var fin runMarker
 			_ = json.Unmarshal([]byte(d.Content), &fin)
-			r.Finished = fin.Started
+			r.Finished, r.Counts = fin.Started, fin.Counts
 			continue
 		}
 		var m runMarker
@@ -225,6 +239,15 @@ func (l *Loader) Drop(ctx context.Context) (Report, error) {
 	for _, r := range before {
 		if r.ID == l.opts.RunID {
 			held, rep.Digest = true, r.Digest
+			// What the run wrote, so the answer to "I dropped a load, what
+			// went?" is a number rather than a name. Read off the completion
+			// rather than counted during the delete, because the delete goes
+			// through DeleteDocumentGraph and that detaches a node another
+			// document also claims instead of removing it — so this is what
+			// the run put in, which is the upper bound on what left, and the
+			// two are the same number on a store holding one load.
+			rep.Entities, rep.Relations = r.Counts.Entities, r.Counts.Relations
+			rep.Chunks = r.Counts.Chunks
 		}
 	}
 	if !held {

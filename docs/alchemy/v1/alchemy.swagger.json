@@ -1575,6 +1575,26 @@
       },
       "description": "ResultPage is one page of a large result (§8.4). The summary rides on the\nfirst page rather than the last: an operator who wants the numbers needed to\ndistrust the graph should get them before deciding whether to read it, not\nafter paying for every entity."
     },
+    "v1ReviewAnswer": {
+      "type": "object",
+      "properties": {
+        "verb": {
+          "$ref": "#/definitions/v1ReviewVerb"
+        },
+        "by": {
+          "type": "string",
+          "description": "Who decided. Never empty: a decision nobody signed is refused when it is\nmade, so one that reached this message has a name on it."
+        },
+        "note": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "ReviewAnswer is one recorded decision, as read back rather than as given.\n\nIt carries no Edit. An edit is what the answer did to the record and the\nrecord is downstream of here; what a queue has to show is that the question\nwas answered, by whom, and on what grounds — and an item whose text is the\nedited text already shows the rest."
+    },
     "v1ReviewDecision": {
       "type": "object",
       "properties": {
@@ -1648,6 +1668,10 @@
         },
         "provenance": {
           "$ref": "#/definitions/v1Provenance"
+        },
+        "answer": {
+          "$ref": "#/definitions/v1ReviewAnswer",
+          "description": "What somebody already said about this item, when somebody has.\n\nThe queue is a list of questions and it was only ever a list of questions,\nwhich is wrong the moment a reviewer reloads the page: the answers they\ngave five minutes ago are recorded, the job knows them, and the list comes\nback looking untouched. A reviewer who cannot see what they have already\nanswered either answers it again or stops trusting the screen, and one of\nthose is worse than the other.\n\nUnset is unanswered. It is not the same as suppressed_by, which is an\nanswer a rule gave to a class rather than one a person gave to this item —\na reader wanting \"who decided this, and when\" has to be able to tell a\nstanding policy from somebody's name."
         }
       }
     },
